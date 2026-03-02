@@ -32,9 +32,9 @@ async def log_mood(
     body: MoodLogRequest,
     user: CurrentUser = Depends(get_current_user),
 ):
-    """Log a mood entry. Rate-limited to 4 entries per 6-hour window."""
+    """Log a mood entry. Rate-limited to 1 entry per 6-hour window."""
     async with get_session() as session:
-        # Enforce cooldown: max 4 entries in a 6-hour rolling window
+        # Enforce cooldown: max 1 entry per 6-hour rolling window
         window_start = datetime.now(timezone.utc) - timedelta(hours=6)
         count_result = await session.execute(
             select(func.count())
@@ -46,7 +46,7 @@ async def log_mood(
         )
         recent_count = count_result.scalar_one()
 
-        if recent_count >= 4:
+        if recent_count >= 1:
             # Find the oldest entry in the window to calculate next available
             oldest_result = await session.execute(
                 select(MoodEntry.created_at)
