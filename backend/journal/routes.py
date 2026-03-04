@@ -135,7 +135,12 @@ async def reflect_on_entry(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Generate an AI reflection on a journal entry. Costs credits."""
-    from core.ai.gateway import BudgetExhaustedError, PromptBlockedError, ai_call
+    try:
+        from core.ai.gateway import BudgetExhaustedError, PromptBlockedError, ai_call
+    except ImportError:
+        raise HTTPException(
+            status_code=503, detail="AI reflections not available in standalone mode",
+        )
 
     async with get_session() as session:
         result = await session.execute(

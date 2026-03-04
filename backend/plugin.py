@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter
 
-from plugins.interface import StudioPlugin
+from core.plugins.interface import StudioPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +94,8 @@ class ZugaLifePlugin(StudioPlugin):
         that already exist.
         """
         from core.database.base import Base
-        from core.database.session import engine
+        from core.database.session import get_engine
 
-        async with engine.begin() as conn:
+        async with get_engine().begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("ZugaLife tables initialized (mood + journal)")
