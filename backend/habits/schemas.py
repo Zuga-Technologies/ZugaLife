@@ -31,6 +31,7 @@ class HabitUpdateRequest(BaseModel):
     emoji: str | None = Field(None, min_length=1, max_length=4)
     is_active: bool | None = None
     sort_order: int | None = Field(None, ge=0)
+    weekly_target: int | None = Field(None, ge=1, le=7)
 
 
 class HabitLogRequest(BaseModel):
@@ -54,6 +55,7 @@ class HabitDefinitionResponse(BaseModel):
     is_preset: bool
     is_active: bool
     sort_order: int
+    weekly_target: int | None
     created_at: datetime
 
 
@@ -125,3 +127,20 @@ class HabitInsightResponse(BaseModel):
 class HabitInsightListResponse(BaseModel):
     insights: list[HabitInsightResponse]
     total: int
+
+
+# --- Weekly Targets ---
+
+
+class WeeklyTargetItem(BaseModel):
+    habit_id: int
+    habit_name: str
+    habit_emoji: str
+    weekly_target: int
+    this_week_count: int
+    progress_pct: float
+
+
+class WeeklyTargetsResponse(BaseModel):
+    habits: list[WeeklyTargetItem]
+    week_start: date

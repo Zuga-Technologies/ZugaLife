@@ -4,7 +4,7 @@ import { api, ApiError } from '@core/api/client'
 
 // --- Tabs ---
 
-type Tab = 'journal' | 'habits'
+type Tab = 'journal' | 'habits' | 'goals'
 const activeTab = ref<Tab>('journal')
 
 // ============================
@@ -253,6 +253,7 @@ interface HabitDefinition {
   is_preset: boolean
   is_active: boolean
   sort_order: number
+  weekly_target: number | null
   created_at: string
 }
 
@@ -529,6 +530,246 @@ const habitUnits = [
 ]
 
 // ============================
+// GOALS
+// ============================
+
+interface GoalMilestone {
+  id: number
+  goal_id: number
+  title: string
+  is_completed: boolean
+  sort_order: number
+  created_at: string
+  completed_at: string | null
+}
+
+interface Goal {
+  id: number
+  title: string
+  description: string | null
+  deadline: string | null
+  is_completed: boolean
+  sort_order: number
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+  milestones: GoalMilestone[]
+  milestone_count: number
+  milestone_done: number
+}
+
+interface GoalListResponse {
+  active: Goal[]
+  completed: Goal[]
+}
+
+interface WeeklyTargetItem {
+  habit_id: number
+  habit_name: string
+  habit_emoji: string
+  weekly_target: number
+  this_week_count: number
+  progress_pct: number
+}
+
+interface WeeklyTargetsResponse {
+  habits: WeeklyTargetItem[]
+  week_start: string
+}
+
+type GoalSubView = 'goals' | 'weekly'
+const goalSubView = ref<GoalSubView>('goals')
+
+const activeGoals = ref<Goal[]>([])
+const completedGoals = ref<Goal[]>([])
+const weeklyTargets = ref<WeeklyTargetItem[]>([])
+const loadingGoals = ref(true)
+const goalError = ref<string | null>(null)
+const goalSuccess = ref<string | null>(null)
+
+// Create goal form
+const showGoalForm = ref(false)
+const newGoalTitle = ref('')
+const newGoalDescription = ref('')
+const newGoalDeadline = ref('')
+const goalSubmitting = ref(false)
+
+// Expanded goals (to show milestones)
+const expandedGoals = ref<Set<number>>(new Set())
+
+// Add milestone form (per goal)
+const addingMilestoneTo = ref<number | null>(null)
+const newMilestoneTitle = ref('')
+
+// Editing weekly target
+const editingTargetFor = ref<number | null>(null)
+const editTargetValue = ref<number | null>(null)
+
+function toggleGoalExpand(id: number) {
+  if (expandedGoals.value.has(id)) {
+    expandedGoals.value.delete(id)
+  } else {
+    expandedGoals.value.add(id)
+  }
+}
+
+async function fetchGoals() {
+  try {
+    const res = await api.get<GoalListResponse>('/api/life/goals')
+    activeGoals.value = res.active
+    completedGoals.value = res.completed
+  } catch { /* silent */ }
+}
+
+async function fetchWeeklyTargets() {
+  try {
+    const res = await api.get<WeeklyTargetsResponse>('/api/life/habits/weekly')
+    weeklyTargets.value = res.habits
+  } catch { /* silent */ }
+}
+
+async function createGoal() {
+  if (!newGoalTitle.value.trim() || goalSubmitting.value) return
+  goalSubmitting.value = true
+  goalError.value = null
+
+  try {
+    await api.post('/api/life/goals', {
+      title: newGoalTitle.value.trim(),
+      description: newGoalDescription.value.trim() || null,
+      deadline: newGoalDeadline.value || null,
+    })
+    newGoalTitle.value = ''
+    newGoalDescription.value = ''
+    newGoalDeadline.value = ''
+    showGoalForm.value = false
+    goalSuccess.value = 'Goal created!'
+    setTimeout(() => { goalSuccess.value = null }, 2000)
+    await fetchGoals()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
+    } else {
+      goalError.value = 'Network error'
+    }
+  } finally {
+    goalSubmitting.value = false
+  }
+}
+
+async function toggleGoalComplete(goal: Goal) {
+  goalError.value = null
+  try {
+    await api.patch(`/api/life/goals/${goal.id}/complete`)
+    await fetchGoals()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
+    } else {
+      goalError.value = 'Network error'
+    }
+  }
+}
+
+async function deleteGoal(goal: Goal) {
+  goalError.value = null
+  try {
+    await api.delete(`/api/life/goals/${goal.id}`)
+    goalSuccess.value = 'Goal deleted.'
+    setTimeout(() => { goalSuccess.value = null }, 2000)
+    await fetchGoals()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
+    } else {
+      goalError.value = 'Network error'
+    }
+  }
+}
+
+async function addMilestone(goalId: number) {
+  if (!newMilestoneTitle.value.trim()) return
+  goalError.value = null
+  try {
+    await api.post(`/api/life/goals/${goalId}/milestones`, {
+      title: newMilestoneTitle.value.trim(),
+    })
+    newMilestoneTitle.value = ''
+    addingMilestoneTo.value = null
+    await fetchGoals()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
+    } else {
+      goalError.value = 'Network error'
+    }
+  }
+}
+
+async function toggleMilestone(goalId: number, milestone: GoalMilestone) {
+  goalError.value = null
+  try {
+    await api.patch(`/api/life/goals/${goalId}/milestones/${milestone.id}`, {
+      is_completed: !milestone.is_completed,
+    })
+    await fetchGoals()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
+    } else {
+      goalError.value = 'Network error'
+    }
+  }
+}
+
+async function deleteMilestone(goalId: number, milestoneId: number) {
+  goalError.value = null
+  try {
+    await api.delete(`/api/life/goals/${goalId}/milestones/${milestoneId}`)
+    await fetchGoals()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
+    } else {
+      goalError.value = 'Network error'
+    }
+  }
+}
+
+async function setWeeklyTarget(habitId: number) {
+  goalError.value = null
+  try {
+    await api.patch(`/api/life/habits/${habitId}`, {
+      weekly_target: editTargetValue.value || null,
+    })
+    editingTargetFor.value = null
+    editTargetValue.value = null
+    await fetchWeeklyTargets()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
+    } else {
+      goalError.value = 'Network error'
+    }
+  }
+}
+
+function startEditTarget(habit: HabitDefinition) {
+  editingTargetFor.value = habit.id
+  editTargetValue.value = habit.weekly_target ?? null
+}
+
+function goalMilestonePct(goal: Goal): number {
+  if (goal.milestone_count === 0) return 0
+  return Math.round((goal.milestone_done / goal.milestone_count) * 100)
+}
+
+function isOverdue(deadline: string | null): boolean {
+  if (!deadline) return false
+  return new Date(deadline + 'T23:59:59') < new Date()
+}
+
+// ============================
 // SHARED HELPERS
 // ============================
 
@@ -560,9 +801,11 @@ onMounted(async () => {
   await Promise.all([
     fetchJournalEntries(),
     fetchHabitCheckin(), fetchHabitStreaks(), fetchAllHabits(),
+    fetchGoals(), fetchWeeklyTargets(),
   ])
   loadingJournal.value = false
   loadingHabits.value = false
+  loadingGoals.value = false
 })
 </script>
 
@@ -572,10 +815,10 @@ onMounted(async () => {
     <!-- Success Toasts -->
     <transition name="fade">
       <div
-        v-if="journalSuccess || habitSuccess"
+        v-if="journalSuccess || habitSuccess || goalSuccess"
         class="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg bg-emerald-600 text-white font-medium text-sm shadow-lg"
       >
-        {{ journalSuccess || habitSuccess }}
+        {{ journalSuccess || habitSuccess || goalSuccess }}
       </div>
     </transition>
 
@@ -616,6 +859,15 @@ onMounted(async () => {
           : 'text-txt-muted border-transparent hover:text-txt-primary'"
       >
         Habits
+      </button>
+      <button
+        @click="activeTab = 'goals'"
+        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px"
+        :class="activeTab === 'goals'
+          ? 'text-accent border-accent'
+          : 'text-txt-muted border-transparent hover:text-txt-primary'"
+      >
+        Goals
       </button>
     </div>
 
@@ -873,6 +1125,326 @@ onMounted(async () => {
             >
               Delete
             </button>
+          </div>
+        </div>
+      </template>
+    </template>
+
+    <!-- ===== GOALS TAB ===== -->
+    <template v-if="activeTab === 'goals'">
+      <!-- Sub-nav -->
+      <div class="flex gap-3 mb-6">
+        <button
+          v-for="view in [
+            { key: 'goals', label: 'Life Goals' },
+            { key: 'weekly', label: 'Weekly Targets' },
+          ] as { key: GoalSubView; label: string }[]"
+          :key="view.key"
+          @click="goalSubView = view.key; if (view.key === 'weekly') fetchWeeklyTargets()"
+          class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+          :class="goalSubView === view.key ? 'bg-accent/15 text-accent' : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
+        >
+          {{ view.label }}
+        </button>
+      </div>
+
+      <p v-if="goalError" class="text-sm text-red-400 mb-4">{{ goalError }}</p>
+
+      <!-- ===== LIFE GOALS SUB-VIEW ===== -->
+      <template v-if="goalSubView === 'goals'">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-txt-primary">Life Goals</h2>
+          <button
+            @click="showGoalForm = !showGoalForm"
+            class="text-sm text-accent hover:text-accent/80 transition-colors"
+          >
+            {{ showGoalForm ? 'Cancel' : '+ New Goal' }}
+          </button>
+        </div>
+
+        <!-- New goal form -->
+        <div v-if="showGoalForm" class="glass-card p-4 mb-4 space-y-3 animate-fade-in">
+          <input
+            v-model="newGoalTitle"
+            type="text"
+            placeholder="What do you want to achieve?"
+            maxlength="200"
+            class="input-field"
+          />
+          <textarea
+            v-model="newGoalDescription"
+            placeholder="Description (optional)"
+            maxlength="2000"
+            rows="3"
+            class="input-field resize-none text-sm"
+          />
+          <div class="flex items-center gap-2">
+            <label class="text-xs text-txt-muted">Deadline:</label>
+            <input
+              v-model="newGoalDeadline"
+              type="date"
+              class="input-field flex-1 text-sm"
+            />
+          </div>
+          <button
+            @click="createGoal"
+            :disabled="!newGoalTitle.trim() || goalSubmitting"
+            class="btn-primary w-full text-sm"
+          >
+            {{ goalSubmitting ? 'Creating...' : 'Create Goal' }}
+          </button>
+        </div>
+
+        <!-- Loading -->
+        <div v-if="loadingGoals" class="text-sm text-txt-muted">Loading goals...</div>
+
+        <!-- Empty state -->
+        <div v-else-if="activeGoals.length === 0 && completedGoals.length === 0" class="glass-card p-8 text-center">
+          <p class="text-lg mb-2">No goals yet</p>
+          <p class="text-txt-muted text-sm">Set a goal to start working toward something meaningful.</p>
+        </div>
+
+        <!-- Active goals -->
+        <div v-else class="space-y-3">
+          <div
+            v-for="goal in activeGoals"
+            :key="goal.id"
+            class="glass-card overflow-hidden animate-slide-up"
+          >
+            <!-- Goal header -->
+            <div class="px-4 py-3 flex items-start gap-3">
+              <button
+                @click="toggleGoalComplete(goal)"
+                class="w-5 h-5 rounded-full border-2 border-bdr hover:border-accent flex-shrink-0 mt-0.5 transition-colors"
+              />
+              <div class="flex-1 min-w-0 cursor-pointer" @click="toggleGoalExpand(goal.id)">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium text-txt-primary">{{ goal.title }}</span>
+                  <span
+                    v-if="goal.deadline"
+                    class="text-xs px-1.5 py-0.5 rounded"
+                    :class="isOverdue(goal.deadline) ? 'bg-red-500/15 text-red-400' : 'bg-surface-3 text-txt-muted'"
+                  >
+                    {{ new Date(goal.deadline + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}
+                  </span>
+                </div>
+                <p v-if="goal.description" class="text-xs text-txt-muted mt-1 line-clamp-2">{{ goal.description }}</p>
+                <!-- Milestone progress bar -->
+                <div v-if="goal.milestone_count > 0" class="mt-2">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-xs text-txt-muted">{{ goal.milestone_done }}/{{ goal.milestone_count }} milestones</span>
+                    <span class="text-xs text-txt-muted">{{ goalMilestonePct(goal) }}%</span>
+                  </div>
+                  <div class="w-full bg-surface-3 rounded-full h-1.5">
+                    <div
+                      class="h-1.5 rounded-full transition-all duration-500"
+                      :class="goalMilestonePct(goal) === 100 ? 'bg-emerald-500' : 'bg-accent'"
+                      :style="{ width: goalMilestonePct(goal) + '%' }"
+                    />
+                  </div>
+                </div>
+              </div>
+              <button
+                @click="toggleGoalExpand(goal.id)"
+                class="text-txt-muted hover:text-txt-primary transition-colors text-xs px-1"
+              >
+                {{ expandedGoals.has(goal.id) ? '&#9650;' : '&#9660;' }}
+              </button>
+            </div>
+
+            <!-- Expanded: milestones + actions -->
+            <div v-if="expandedGoals.has(goal.id)" class="border-t border-bdr px-4 py-3 space-y-2 animate-fade-in">
+              <!-- Milestones list -->
+              <div v-for="ms in goal.milestones" :key="ms.id" class="flex items-center gap-2 group">
+                <button
+                  @click="toggleMilestone(goal.id, ms)"
+                  class="w-4 h-4 rounded border flex items-center justify-center transition-all flex-shrink-0"
+                  :class="ms.is_completed
+                    ? 'bg-emerald-500 border-emerald-500 text-white'
+                    : 'border-bdr hover:border-accent'"
+                >
+                  <span v-if="ms.is_completed" class="text-[10px]">&#10003;</span>
+                </button>
+                <span
+                  class="text-sm flex-1"
+                  :class="ms.is_completed ? 'text-txt-muted line-through' : 'text-txt-primary'"
+                >
+                  {{ ms.title }}
+                </span>
+                <button
+                  @click="deleteMilestone(goal.id, ms.id)"
+                  class="text-xs text-txt-muted hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 px-1"
+                >
+                  &times;
+                </button>
+              </div>
+
+              <!-- Add milestone -->
+              <div v-if="addingMilestoneTo === goal.id" class="flex gap-2 mt-2">
+                <input
+                  v-model="newMilestoneTitle"
+                  type="text"
+                  placeholder="Milestone title"
+                  maxlength="200"
+                  class="input-field flex-1 text-sm"
+                  @keyup.enter="addMilestone(goal.id)"
+                />
+                <button @click="addMilestone(goal.id)" class="text-sm text-accent hover:text-accent/80">Add</button>
+                <button @click="addingMilestoneTo = null; newMilestoneTitle = ''" class="text-sm text-txt-muted">Cancel</button>
+              </div>
+
+              <!-- Actions -->
+              <div class="flex items-center gap-3 pt-2 border-t border-bdr/50">
+                <button
+                  v-if="addingMilestoneTo !== goal.id"
+                  @click="addingMilestoneTo = goal.id; newMilestoneTitle = ''"
+                  class="text-xs text-accent hover:text-accent/80 transition-colors"
+                >
+                  + Add Milestone
+                </button>
+                <button
+                  @click="deleteGoal(goal)"
+                  class="text-xs text-txt-muted hover:text-red-400 transition-colors ml-auto"
+                >
+                  Delete Goal
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Completed goals -->
+          <div v-if="completedGoals.length > 0" class="mt-6">
+            <p class="text-xs font-semibold text-txt-muted uppercase tracking-wide mb-2">Completed</p>
+            <div class="space-y-2">
+              <div
+                v-for="goal in completedGoals"
+                :key="goal.id"
+                class="glass-card px-4 py-3 flex items-center gap-3 opacity-60"
+              >
+                <button
+                  @click="toggleGoalComplete(goal)"
+                  class="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0"
+                >
+                  <span class="text-white text-xs">&#10003;</span>
+                </button>
+                <span class="text-sm text-txt-muted line-through flex-1">{{ goal.title }}</span>
+                <span v-if="goal.completed_at" class="text-xs text-txt-muted">
+                  {{ parseUTC(goal.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}
+                </span>
+                <button
+                  @click="deleteGoal(goal)"
+                  class="text-xs text-txt-muted hover:text-red-400 transition-colors px-1"
+                >
+                  &times;
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ===== WEEKLY TARGETS SUB-VIEW ===== -->
+      <template v-if="goalSubView === 'weekly'">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-txt-primary">Weekly Targets</h2>
+          <span class="text-xs text-txt-muted">This week's progress</span>
+        </div>
+
+        <!-- Set targets prompt -->
+        <div v-if="weeklyTargets.length === 0" class="glass-card p-6 text-center">
+          <p class="text-sm text-txt-muted mb-2">No weekly targets set yet.</p>
+          <p class="text-xs text-txt-muted">
+            Go to Habits &rarr; Manage to set weekly frequency targets for your habits.
+          </p>
+          <!-- Quick-set targets from here -->
+          <div v-if="allHabits.filter(h => h.is_active).length > 0" class="mt-4 space-y-2">
+            <p class="text-xs text-txt-muted font-medium">Or set targets here:</p>
+            <div
+              v-for="habit in allHabits.filter(h => h.is_active)"
+              :key="habit.id"
+              class="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-2"
+            >
+              <span class="text-lg">{{ habit.emoji }}</span>
+              <span class="text-sm text-txt-primary flex-1">{{ habit.name }}</span>
+              <template v-if="editingTargetFor === habit.id">
+                <select
+                  v-model.number="editTargetValue"
+                  class="input-field w-20 text-sm"
+                >
+                  <option :value="null">None</option>
+                  <option v-for="n in 7" :key="n" :value="n">{{ n }}x/wk</option>
+                </select>
+                <button @click="setWeeklyTarget(habit.id)" class="text-xs text-accent">Save</button>
+              </template>
+              <button
+                v-else
+                @click="startEditTarget(habit)"
+                class="text-xs text-accent hover:text-accent/80"
+              >
+                {{ habit.weekly_target ? habit.weekly_target + 'x/wk' : 'Set target' }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Weekly targets with progress -->
+        <div v-else class="space-y-3">
+          <div
+            v-for="item in weeklyTargets"
+            :key="item.habit_id"
+            class="glass-card px-4 py-3"
+          >
+            <div class="flex items-center gap-3 mb-2">
+              <span class="text-xl">{{ item.habit_emoji }}</span>
+              <div class="flex-1 min-w-0">
+                <span class="text-sm font-medium text-txt-primary">{{ item.habit_name }}</span>
+              </div>
+              <span class="text-sm font-medium" :class="item.this_week_count >= item.weekly_target ? 'text-emerald-400' : 'text-txt-muted'">
+                {{ item.this_week_count }}/{{ item.weekly_target }}
+              </span>
+            </div>
+            <div class="w-full bg-surface-3 rounded-full h-2">
+              <div
+                class="h-2 rounded-full transition-all duration-500"
+                :class="item.progress_pct >= 100 ? 'bg-emerald-500' : 'bg-accent'"
+                :style="{ width: Math.min(item.progress_pct, 100) + '%' }"
+              />
+            </div>
+          </div>
+
+          <!-- Also show habits without targets for easy setup -->
+          <div
+            v-if="allHabits.filter(h => h.is_active && !h.weekly_target).length > 0"
+            class="mt-4"
+          >
+            <p class="text-xs text-txt-muted mb-2">Habits without targets:</p>
+            <div class="space-y-1">
+              <div
+                v-for="habit in allHabits.filter(h => h.is_active && !h.weekly_target)"
+                :key="habit.id"
+                class="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-2"
+              >
+                <span>{{ habit.emoji }}</span>
+                <span class="text-sm text-txt-muted flex-1">{{ habit.name }}</span>
+                <template v-if="editingTargetFor === habit.id">
+                  <select
+                    v-model.number="editTargetValue"
+                    class="input-field w-20 text-sm"
+                  >
+                    <option :value="null">None</option>
+                    <option v-for="n in 7" :key="n" :value="n">{{ n }}x/wk</option>
+                  </select>
+                  <button @click="setWeeklyTarget(habit.id)" class="text-xs text-accent">Save</button>
+                </template>
+                <button
+                  v-else
+                  @click="startEditTarget(habit)"
+                  class="text-xs text-accent hover:text-accent/80"
+                >
+                  Set target
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </template>

@@ -33,6 +33,7 @@ class HabitDefinition(Base, TimestampMixin):
     is_preset: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    weekly_target: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class HabitLog(Base, TimestampMixin):

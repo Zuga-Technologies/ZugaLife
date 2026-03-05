@@ -38,6 +38,8 @@ HabitHistoryResponse = _schemas.HabitHistoryResponse
 DayHistory = _schemas.DayHistory
 HabitInsightResponse = _schemas.HabitInsightResponse
 HabitInsightListResponse = _schemas.HabitInsightListResponse
+WeeklyTargetItem = _schemas.WeeklyTargetItem
+WeeklyTargetsResponse = _schemas.WeeklyTargetsResponse
 
 INSIGHT_COOLDOWN_DAYS = _prompts.INSIGHT_COOLDOWN_DAYS
 
@@ -158,6 +160,63 @@ async def create_habit(
     return HabitDefinitionResponse.model_validate(habit)
 
 
+@router.get("/weekly", response_model=WeeklyTargetsResponse)
+async def get_weekly_targets(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get weekly target progress for all habits that have a target set."""
+    today = date.today()
+    # ISO week: Monday=0. Get this week's Monday.
+    week_start = today - timedelta(days=today.weekday())
+
+    async with get_session() as session:
+        # Habits with a weekly_target set
+        result = await session.execute(
+            select(HabitDefinition)
+            .where(
+                HabitDefinition.user_id == user.id,
+                HabitDefinition.is_active == True,  # noqa: E712
+                HabitDefinition.weekly_target.isnot(None),
+            )
+            .order_by(HabitDefinition.sort_order)
+        )
+        habits = result.scalars().all()
+
+        if not habits:
+            return WeeklyTargetsResponse(habits=[], week_start=week_start)
+
+        # Count completed logs this week per habit
+        habit_ids = [h.id for h in habits]
+        logs_result = await session.execute(
+            select(HabitLog.habit_id, func.count())
+            .where(
+                HabitLog.user_id == user.id,
+                HabitLog.habit_id.in_(habit_ids),
+                HabitLog.log_date >= week_start,
+                HabitLog.log_date <= today,
+                HabitLog.completed == True,  # noqa: E712
+            )
+            .group_by(HabitLog.habit_id)
+        )
+        counts = dict(logs_result.all())
+
+        items = []
+        for habit in habits:
+            count = counts.get(habit.id, 0)
+            target = habit.weekly_target
+            pct = min(round(count / target * 100, 1), 100.0)
+            items.append(WeeklyTargetItem(
+                habit_id=habit.id,
+                habit_name=habit.name,
+                habit_emoji=habit.emoji,
+                weekly_target=target,
+                this_week_count=count,
+                progress_pct=pct,
+            ))
+
+    return WeeklyTargetsResponse(habits=items, week_start=week_start)
+
+
 @router.patch("/{habit_id}", response_model=HabitDefinitionResponse)
 async def update_habit(
     habit_id: int,
@@ -198,6 +257,10 @@ async def update_habit(
             habit.is_active = body.is_active
         if body.sort_order is not None:
             habit.sort_order = body.sort_order
+
+        # weekly_target: distinguish "not sent" vs "sent as null" (to clear)
+        if "weekly_target" in body.model_fields_set:
+            habit.weekly_target = body.weekly_target
 
         await session.flush()
         await session.refresh(habit)
