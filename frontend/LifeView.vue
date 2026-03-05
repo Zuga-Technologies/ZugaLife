@@ -745,6 +745,7 @@ async function setWeeklyTarget(habitId: number) {
     editingTargetFor.value = null
     editTargetValue.value = null
     await fetchWeeklyTargets()
+    await fetchAllHabits()
   } catch (e) {
     if (e instanceof ApiError) {
       goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
