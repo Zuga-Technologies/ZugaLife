@@ -62,3 +62,25 @@ Rules:
 </journal_entry>
 
 Respond with your reflection questions now."""
+
+
+def build_mood_inference_prompt(content: str) -> str:
+    """Build a short classification prompt to infer mood from journal text.
+
+    Returns a prompt that asks the AI to pick exactly one emoji from the
+    12-emoji set. XML tag isolation protects against prompt injection.
+    """
+    emoji_list = "  ".join(f"{e} {l}" for e, l in _EMOJI_LABELS.items())
+
+    return f"""You are a mood classifier. Read the journal entry below and pick the single best mood from these 12 options:
+
+{emoji_list}
+
+Rules:
+- Respond with ONLY the emoji character — nothing else
+- Pick the mood that best matches the overall emotional tone
+- If the entry is purely factual with no emotional tone, respond with 😐
+
+<journal_content>
+{content}
+</journal_content>"""

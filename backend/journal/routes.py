@@ -1,9 +1,10 @@
 """ZugaLife journal CRUD + AI reflection endpoints."""
 
+import logging
 import sys
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import desc, func, select
 
 from core.auth.middleware import get_current_user
@@ -28,12 +29,47 @@ JournalReflectResponse = _schemas.JournalReflectResponse
 _EMOJI_LABELS = _prompts._EMOJI_LABELS
 MAX_REFLECTIONS = _prompts.MAX_REFLECTIONS_PER_ENTRY
 
+log = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/life/journal", tags=["life-journal"])
+
+
+async def _infer_mood(entry_id: int, content: str) -> None:
+    """Background task: classify journal mood via AI and update the entry."""
+    try:
+        from core.ai.gateway import ai_call
+    except ImportError:
+        return  # Standalone mode — no AI available
+
+    prompt = _prompts.build_mood_inference_prompt(content)
+
+    try:
+        ai_response = await ai_call(prompt, task="chat", max_tokens=256)
+    except Exception:
+        log.warning("Mood inference failed for entry %d", entry_id)
+        return
+
+    # Parse: response should be a single emoji character
+    emoji = ai_response.content.strip()
+    label = _EMOJI_LABELS.get(emoji)
+    if not label:
+        log.warning("Mood inference returned invalid emoji %r for entry %d", emoji, entry_id)
+        return
+
+    async with get_session() as session:
+        result = await session.execute(
+            select(JournalEntry).where(JournalEntry.id == entry_id)
+        )
+        entry = result.scalar_one_or_none()
+        if entry and entry.mood_emoji is None:
+            entry.mood_emoji = emoji
+            entry.mood_label = label
 
 
 @router.post("", response_model=JournalEntryResponse, status_code=201)
 async def create_journal_entry(
     body: JournalCreateRequest,
+    background_tasks: BackgroundTasks,
     user: CurrentUser = Depends(get_current_user),
 ):
     """Create a new journal entry."""
@@ -54,7 +90,14 @@ async def create_journal_entry(
         session.add(entry)
         await session.flush()
         await session.refresh(entry)
-        return JournalEntryResponse.model_validate(entry)
+        response = JournalEntryResponse.model_validate(entry)
+        entry_id = entry.id
+
+    # Fire background mood inference if user didn't tag manually
+    if not body.mood_emoji:
+        background_tasks.add_task(_infer_mood, entry_id, body.content)
+
+    return response
 
 
 @router.get("", response_model=JournalListResponse)
