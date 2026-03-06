@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { api, ApiError } from '@core/api/client'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { api, ApiError, getToken } from '@core/api/client'
 
 // --- Tabs ---
 
-type Tab = 'journal' | 'habits' | 'goals'
+type Tab = 'journal' | 'habits' | 'goals' | 'meditate'
 const activeTab = ref<Tab>('journal')
 
 // ============================
@@ -771,6 +771,357 @@ function isOverdue(deadline: string | null): boolean {
 }
 
 // ============================
+// MEDITATION
+// ============================
+
+interface MeditationSession {
+  id: number
+  type: string
+  duration_minutes: number
+  ambience: string
+  voice: string
+  focus: string | null
+  title: string
+  transcript: string
+  audio_filename: string
+  model_used: string
+  tts_model: string
+  cost: number
+  mood_before: string | null
+  mood_after: string | null
+  is_favorite: boolean
+  created_at: string
+}
+
+interface MeditationBrief {
+  id: number
+  type: string
+  duration_minutes: number
+  title: string
+  is_favorite: boolean
+  mood_after: string | null
+  created_at: string
+}
+
+interface MeditationListResponse {
+  sessions: MeditationBrief[]
+  total: number
+}
+
+interface MeditationRemainingResponse {
+  used: number
+  limit: number
+  remaining: number
+}
+
+const meditationTypes = [
+  { key: 'breathing', emoji: '🌬️', label: 'Breathing', desc: 'Focus on your breath' },
+  { key: 'body_scan', emoji: '🧘', label: 'Body Scan', desc: 'Progressive body awareness' },
+  { key: 'loving_kindness', emoji: '💗', label: 'Loving Kindness', desc: 'Compassion for self & others' },
+  { key: 'visualization', emoji: '🏞️', label: 'Visualization', desc: 'Guided mental imagery' },
+  { key: 'gratitude', emoji: '🙏', label: 'Gratitude', desc: 'Appreciate what matters' },
+  { key: 'stress_relief', emoji: '🧊', label: 'Stress Relief', desc: 'Release tension mindfully' },
+]
+
+const ambienceOptions = [
+  { key: 'rain', emoji: '🌧️', label: 'Rain' },
+  { key: 'ocean', emoji: '🌊', label: 'Ocean' },
+  { key: 'forest', emoji: '🌲', label: 'Forest' },
+  { key: 'bowls', emoji: '🔔', label: 'Bowls' },
+  { key: 'silence', emoji: '🤫', label: 'Silence' },
+]
+
+const durationOptions = [3, 5, 10, 15]
+
+type MedView = 'new' | 'player' | 'history'
+const medView = ref<MedView>('new')
+
+// Config state
+const medType = ref('breathing')
+const medDuration = ref(5)
+const medAmbience = ref('rain')
+const medVoice = ref('shimmer')
+const medFocus = ref('')
+
+// Generation
+const medGenerating = ref(false)
+const medError = ref<string | null>(null)
+const medSuccess = ref<string | null>(null)
+
+// Active session / player
+const medSession = ref<MeditationSession | null>(null)
+let medAudioEl: HTMLAudioElement | null = null
+let medAmbientEl: HTMLAudioElement | null = null
+const medPlaying = ref(false)
+const medProgress = ref(0)
+const medCurrentTime = ref(0)
+const medDurationSec = ref(0)
+const medAmbientVolume = ref(0.3)
+
+// History
+const medSessions = ref<MeditationBrief[]>([])
+const medTotal = ref(0)
+const medRemaining = ref<MeditationRemainingResponse | null>(null)
+const loadingMeditation = ref(true)
+const medShowFavoritesOnly = ref(false)
+
+// Post-session mood
+const medMoodAfter = ref<string | null>(null)
+
+const filteredMedSessions = computed(() => {
+  if (!medShowFavoritesOnly.value) return medSessions.value
+  return medSessions.value.filter(s => s.is_favorite)
+})
+
+const transcriptParagraphs = computed(() => {
+  if (!medSession.value) return []
+  return medSession.value.transcript
+    .replace(/\[PAUSE\s*\d+s?\]/g, '')
+    .split('\n\n')
+    .map(p => p.trim())
+    .filter(p => p.length > 0)
+})
+
+const activeParagraphIndex = computed(() => {
+  if (!transcriptParagraphs.value.length) return 0
+  const idx = Math.floor((medProgress.value / 100) * transcriptParagraphs.value.length)
+  return Math.min(idx, transcriptParagraphs.value.length - 1)
+})
+
+async function fetchMedRemaining() {
+  try {
+    medRemaining.value = await api.get<MeditationRemainingResponse>('/api/life/meditation/remaining')
+  } catch { /* silent */ }
+}
+
+async function fetchMedSessions() {
+  try {
+    const res = await api.get<MeditationListResponse>('/api/life/meditation/sessions')
+    medSessions.value = res.sessions
+    medTotal.value = res.total
+  } catch { /* silent */ }
+}
+
+async function generateMeditation() {
+  if (medGenerating.value) return
+  medGenerating.value = true
+  medError.value = null
+
+  try {
+    const payload: Record<string, unknown> = {
+      type: medType.value,
+      duration_minutes: medDuration.value,
+      ambience: medAmbience.value,
+      voice: medVoice.value,
+    }
+    if (medFocus.value.trim()) {
+      payload.focus = medFocus.value.trim()
+    }
+
+    medSession.value = await api.post<MeditationSession>('/api/life/meditation/generate', payload)
+    medMoodAfter.value = null
+    medView.value = 'player'
+    medSuccess.value = 'Meditation generated!'
+    setTimeout(() => { medSuccess.value = null }, 2000)
+    await fetchMedRemaining()
+    await fetchMedSessions()
+    setTimeout(() => loadAndPlayAudio(), 300)
+  } catch (e) {
+    if (e instanceof ApiError) {
+      const detail = (e.body as Record<string, string>).detail
+      if (e.status === 402) {
+        medError.value = 'AI budget exhausted for today.'
+      } else if (e.status === 429) {
+        medError.value = detail ?? 'Daily meditation limit reached.'
+      } else if (e.status === 503) {
+        medError.value = 'Meditation generation not available.'
+      } else {
+        medError.value = detail ?? `Error (${e.status})`
+      }
+    } else {
+      medError.value = 'Network error'
+    }
+  } finally {
+    medGenerating.value = false
+  }
+}
+
+async function loadAndPlayAudio() {
+  if (!medSession.value) return
+  stopAudio()
+
+  try {
+    const token = getToken()
+    const res = await fetch(`/api/life/meditation/audio/${medSession.value.audio_filename}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) throw new Error('Audio fetch failed')
+
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const audio = new Audio(url)
+    medAudioEl = audio
+
+    audio.addEventListener('loadedmetadata', () => {
+      medDurationSec.value = audio.duration
+    })
+    audio.addEventListener('timeupdate', () => {
+      medCurrentTime.value = audio.currentTime
+      if (audio.duration > 0) {
+        medProgress.value = (audio.currentTime / audio.duration) * 100
+      }
+    })
+    audio.addEventListener('ended', () => {
+      medPlaying.value = false
+      medProgress.value = 100
+      stopAmbient()
+    })
+
+    await audio.play()
+    medPlaying.value = true
+
+    if (medSession.value.ambience !== 'silence') {
+      startAmbient(medSession.value.ambience)
+    }
+  } catch {
+    medError.value = 'Failed to load audio'
+  }
+}
+
+function togglePlayPause() {
+  if (!medAudioEl) return
+  if (medPlaying.value) {
+    medAudioEl.pause()
+    if (medAmbientEl) medAmbientEl.pause()
+    medPlaying.value = false
+  } else {
+    medAudioEl.play()
+    if (medAmbientEl) medAmbientEl.play()
+    medPlaying.value = true
+  }
+}
+
+function seekAudio(event: MouseEvent) {
+  if (!medAudioEl || !medDurationSec.value) return
+  const bar = event.currentTarget as HTMLElement
+  const rect = bar.getBoundingClientRect()
+  const pct = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
+  medAudioEl.currentTime = pct * medDurationSec.value
+}
+
+function startAmbient(ambience: string) {
+  stopAmbient()
+  const ambient = new Audio(`/ambience/${ambience}.mp3`)
+  ambient.loop = true
+  ambient.volume = medAmbientVolume.value
+  ambient.play().catch(() => { /* no ambient file — silent fallback */ })
+  medAmbientEl = ambient
+}
+
+function stopAmbient() {
+  if (medAmbientEl) {
+    medAmbientEl.pause()
+    medAmbientEl.src = ''
+    medAmbientEl = null
+  }
+}
+
+function stopAudio() {
+  if (medAudioEl) {
+    medAudioEl.pause()
+    if (medAudioEl.src.startsWith('blob:')) URL.revokeObjectURL(medAudioEl.src)
+    medAudioEl.src = ''
+    medAudioEl = null
+  }
+  stopAmbient()
+  medPlaying.value = false
+  medProgress.value = 0
+  medCurrentTime.value = 0
+  medDurationSec.value = 0
+}
+
+function updateAmbientVolume(val: number) {
+  medAmbientVolume.value = val
+  if (medAmbientEl) medAmbientEl.volume = val
+}
+
+function medFormatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+async function toggleMedFavorite() {
+  if (!medSession.value) return
+  medError.value = null
+  try {
+    medSession.value = await api.patch<MeditationSession>(
+      `/api/life/meditation/sessions/${medSession.value.id}/favorite`,
+    )
+    await fetchMedSessions()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      medError.value = (e.body as Record<string, string>).detail ?? 'Error'
+    }
+  }
+}
+
+async function setMedMoodAfter(emoji: string) {
+  if (!medSession.value) return
+  medMoodAfter.value = emoji
+  try {
+    medSession.value = await api.patch<MeditationSession>(
+      `/api/life/meditation/sessions/${medSession.value.id}/mood`,
+      { emoji },
+    )
+  } catch { /* silent */ }
+}
+
+async function openMedSession(sessionId: number) {
+  medError.value = null
+  try {
+    medSession.value = await api.get<MeditationSession>(
+      `/api/life/meditation/sessions/${sessionId}`,
+    )
+    medMoodAfter.value = medSession.value.mood_after
+    medView.value = 'player'
+  } catch (e) {
+    if (e instanceof ApiError) {
+      medError.value = (e.body as Record<string, string>).detail ?? 'Error'
+    }
+  }
+}
+
+async function deleteMedSession(sessionId: number) {
+  medError.value = null
+  try {
+    await api.delete(`/api/life/meditation/sessions/${sessionId}`)
+    medSuccess.value = 'Session deleted.'
+    setTimeout(() => { medSuccess.value = null }, 2000)
+    await fetchMedSessions()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      medError.value = (e.body as Record<string, string>).detail ?? 'Error'
+    }
+  }
+}
+
+function goToNewMeditation() {
+  stopAudio()
+  medSession.value = null
+  medError.value = null
+  medView.value = 'new'
+}
+
+function getMedTypeLabel(type: string): string {
+  return meditationTypes.find(t => t.key === type)?.label ?? type
+}
+
+function getMedTypeEmoji(type: string): string {
+  return meditationTypes.find(t => t.key === type)?.emoji ?? '🧘'
+}
+
+// ============================
 // SHARED HELPERS
 // ============================
 
@@ -803,10 +1154,16 @@ onMounted(async () => {
     fetchJournalEntries(),
     fetchHabitCheckin(), fetchHabitStreaks(), fetchAllHabits(),
     fetchGoals(), fetchWeeklyTargets(),
+    fetchMedRemaining(), fetchMedSessions(),
   ])
   loadingJournal.value = false
   loadingHabits.value = false
   loadingGoals.value = false
+  loadingMeditation.value = false
+})
+
+onUnmounted(() => {
+  stopAudio()
 })
 </script>
 
@@ -816,10 +1173,10 @@ onMounted(async () => {
     <!-- Success Toasts -->
     <transition name="fade">
       <div
-        v-if="journalSuccess || habitSuccess || goalSuccess"
+        v-if="journalSuccess || habitSuccess || goalSuccess || medSuccess"
         class="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg bg-emerald-600 text-white font-medium text-sm shadow-lg"
       >
-        {{ journalSuccess || habitSuccess || goalSuccess }}
+        {{ journalSuccess || habitSuccess || goalSuccess || medSuccess }}
       </div>
     </transition>
 
@@ -869,6 +1226,15 @@ onMounted(async () => {
           : 'text-txt-muted border-transparent hover:text-txt-primary'"
       >
         Goals
+      </button>
+      <button
+        @click="activeTab = 'meditate'"
+        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px"
+        :class="activeTab === 'meditate'
+          ? 'text-accent border-accent'
+          : 'text-txt-muted border-transparent hover:text-txt-primary'"
+      >
+        Meditate
       </button>
     </div>
 
@@ -1446,6 +1812,304 @@ onMounted(async () => {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      </template>
+    </template>
+
+    <!-- ===== MEDITATE TAB ===== -->
+    <template v-if="activeTab === 'meditate'">
+      <!-- Sub-nav -->
+      <div class="flex gap-3 mb-6">
+        <button
+          v-for="view in [
+            { key: 'new', label: 'New Session' },
+            { key: 'history', label: 'History' },
+          ] as { key: MedView; label: string }[]"
+          :key="view.key"
+          @click="medView = view.key; if (view.key === 'history') fetchMedSessions()"
+          class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+          :class="medView === view.key || (medView === 'player' && view.key === 'new')
+            ? 'bg-accent/15 text-accent'
+            : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
+        >
+          {{ view.label }}
+        </button>
+        <span v-if="medRemaining" class="ml-auto text-xs text-txt-muted self-center">
+          {{ medRemaining.remaining }}/{{ medRemaining.limit }} sessions left today
+        </span>
+      </div>
+
+      <p v-if="medError" class="text-sm text-red-400 mb-4">{{ medError }}</p>
+
+      <!-- ===== NEW SESSION VIEW ===== -->
+      <template v-if="medView === 'new'">
+        <!-- Type picker -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-txt-primary mb-3">Choose a meditation type</h3>
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              v-for="mt in meditationTypes"
+              :key="mt.key"
+              @click="medType = mt.key"
+              class="glass-card px-4 py-3 text-left transition-all duration-150"
+              :class="medType === mt.key ? 'ring-1 ring-accent bg-accent/5' : 'hover:bg-surface-2'"
+            >
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-xl">{{ mt.emoji }}</span>
+                <span class="text-sm font-medium text-txt-primary">{{ mt.label }}</span>
+              </div>
+              <p class="text-xs text-txt-muted">{{ mt.desc }}</p>
+            </button>
+          </div>
+        </div>
+
+        <!-- Duration -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-txt-primary mb-3">Duration</h3>
+          <div class="flex gap-2">
+            <button
+              v-for="d in durationOptions"
+              :key="d"
+              @click="medDuration = d"
+              class="flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+              :class="medDuration === d
+                ? 'bg-accent text-white'
+                : 'glass-card text-txt-muted hover:text-txt-primary'"
+            >
+              ~{{ d }} min
+            </button>
+          </div>
+        </div>
+
+        <!-- Ambience -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-txt-primary mb-3">Ambience</h3>
+          <div class="flex gap-2">
+            <button
+              v-for="a in ambienceOptions"
+              :key="a.key"
+              @click="medAmbience = a.key"
+              class="flex-1 py-2.5 rounded-lg text-center transition-all duration-150"
+              :class="medAmbience === a.key
+                ? 'bg-accent/15 ring-1 ring-accent/50 text-accent'
+                : 'glass-card text-txt-muted hover:text-txt-primary'"
+            >
+              <span class="text-lg block">{{ a.emoji }}</span>
+              <span class="text-xs">{{ a.label }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Voice -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-txt-primary mb-3">Voice</h3>
+          <div class="flex gap-2">
+            <button
+              @click="medVoice = 'shimmer'"
+              class="flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+              :class="medVoice === 'shimmer'
+                ? 'bg-accent/15 ring-1 ring-accent/50 text-accent'
+                : 'glass-card text-txt-muted hover:text-txt-primary'"
+            >
+              Shimmer
+              <span class="block text-xs opacity-70">Warm &amp; gentle</span>
+            </button>
+            <button
+              @click="medVoice = 'nova'"
+              class="flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+              :class="medVoice === 'nova'
+                ? 'bg-accent/15 ring-1 ring-accent/50 text-accent'
+                : 'glass-card text-txt-muted hover:text-txt-primary'"
+            >
+              Nova
+              <span class="block text-xs opacity-70">Clear &amp; bright</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Focus (optional) -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-txt-primary mb-2">Focus <span class="text-txt-muted font-normal">(optional)</span></h3>
+          <input
+            v-model="medFocus"
+            type="text"
+            placeholder="e.g. letting go of work stress, sleep preparation..."
+            maxlength="200"
+            class="input-field text-sm"
+          />
+        </div>
+
+        <!-- Generate button -->
+        <button
+          @click="generateMeditation"
+          :disabled="medGenerating || (medRemaining && medRemaining.remaining <= 0)"
+          class="btn-primary w-full py-3"
+        >
+          <span v-if="medGenerating" class="inline-flex items-center gap-2">
+            <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+            Generating your meditation...
+          </span>
+          <span v-else-if="medRemaining && medRemaining.remaining <= 0">
+            No sessions remaining today
+          </span>
+          <span v-else>Generate Meditation</span>
+        </button>
+        <p v-if="medGenerating" class="text-xs text-txt-muted text-center mt-2">This takes 15-30 seconds (AI script + voice synthesis)</p>
+      </template>
+
+      <!-- ===== PLAYER VIEW ===== -->
+      <template v-if="medView === 'player' && medSession">
+        <!-- Back button -->
+        <button @click="goToNewMeditation" class="text-txt-muted hover:text-txt-primary transition-colors text-sm mb-4">&larr; New session</button>
+
+        <!-- Session card -->
+        <div class="glass-card p-6 mb-4">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <h2 class="text-lg font-semibold text-txt-primary">{{ medSession.title }}</h2>
+              <div class="flex items-center gap-2 mt-1">
+                <span class="text-xs text-txt-muted">{{ getMedTypeLabel(medSession.type) }}</span>
+                <span class="text-xs text-txt-muted">~{{ medSession.duration_minutes }} min</span>
+                <span class="text-xs text-txt-muted">${{ medSession.cost.toFixed(4) }}</span>
+              </div>
+            </div>
+            <button
+              @click="toggleMedFavorite"
+              class="text-xl transition-colors"
+              :class="medSession.is_favorite ? 'text-amber-400' : 'text-txt-muted hover:text-amber-400'"
+            >
+              {{ medSession.is_favorite ? '&#9733;' : '&#9734;' }}
+            </button>
+          </div>
+
+          <!-- Audio controls -->
+          <div class="space-y-3">
+            <!-- Play/pause + progress -->
+            <div class="flex items-center gap-3">
+              <button
+                @click="medPlaying ? togglePlayPause() : loadAndPlayAudio()"
+                class="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center hover:bg-accent/80 transition-colors flex-shrink-0"
+              >
+                <span v-if="medPlaying" class="text-sm">&#9646;&#9646;</span>
+                <span v-else class="text-sm ml-0.5">&#9654;</span>
+              </button>
+              <div class="flex-1">
+                <div
+                  @click="seekAudio"
+                  class="w-full h-2 bg-surface-3 rounded-full cursor-pointer relative"
+                >
+                  <div
+                    class="h-2 rounded-full bg-accent transition-all duration-200"
+                    :style="{ width: medProgress + '%' }"
+                  />
+                </div>
+                <div class="flex justify-between mt-1">
+                  <span class="text-xs text-txt-muted">{{ medFormatTime(medCurrentTime) }}</span>
+                  <span class="text-xs text-txt-muted">{{ medDurationSec > 0 ? medFormatTime(medDurationSec) : '--:--' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Ambient volume (if not silence) -->
+            <div v-if="medSession.ambience !== 'silence'" class="flex items-center gap-3">
+              <span class="text-xs text-txt-muted w-20">Ambience</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                :value="medAmbientVolume"
+                @input="updateAmbientVolume(parseFloat(($event.target as HTMLInputElement).value))"
+                class="flex-1 accent-accent h-1"
+              />
+              <span class="text-xs text-txt-muted w-8 text-right">{{ Math.round(medAmbientVolume * 100) }}%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live transcript -->
+        <div class="glass-card p-5 mb-4 max-h-64 overflow-y-auto">
+          <h3 class="text-xs font-semibold text-txt-muted uppercase tracking-wide mb-3">Transcript</h3>
+          <div class="space-y-3">
+            <p
+              v-for="(para, i) in transcriptParagraphs"
+              :key="i"
+              class="text-sm leading-relaxed transition-all duration-500"
+              :class="i <= activeParagraphIndex
+                ? 'text-txt-secondary'
+                : 'text-txt-muted/40'"
+            >
+              {{ para }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Post-session mood (show when audio ends) -->
+        <div v-if="medProgress >= 100" class="glass-card p-5 animate-fade-in">
+          <h3 class="text-sm font-semibold text-txt-primary mb-2">How do you feel?</h3>
+          <p class="text-xs text-txt-muted mb-3">Optional post-session check-in</p>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              v-for="mood in moods"
+              :key="mood.emoji"
+              @click="setMedMoodAfter(mood.emoji)"
+              class="px-2 py-1 rounded-lg text-sm transition-all duration-150"
+              :class="medMoodAfter === mood.emoji ? 'bg-accent/15 ring-1 ring-accent/50' : 'hover:bg-surface-3'"
+            >
+              {{ mood.emoji }}
+            </button>
+          </div>
+          <p v-if="medMoodAfter" class="text-xs text-accent mt-2 animate-fade-in">
+            {{ moods.find(m => m.emoji === medMoodAfter)?.label ?? '' }}
+          </p>
+        </div>
+      </template>
+
+      <!-- ===== HISTORY VIEW ===== -->
+      <template v-if="medView === 'history'">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-txt-primary">Past Sessions</h2>
+          <button
+            @click="medShowFavoritesOnly = !medShowFavoritesOnly"
+            class="text-sm transition-colors"
+            :class="medShowFavoritesOnly ? 'text-amber-400' : 'text-txt-muted hover:text-txt-primary'"
+          >
+            {{ medShowFavoritesOnly ? '&#9733; Favorites' : '&#9734; All' }}
+          </button>
+        </div>
+
+        <div v-if="loadingMeditation" class="text-sm text-txt-muted">Loading...</div>
+        <div v-else-if="filteredMedSessions.length === 0" class="glass-card p-8 text-center">
+          <p class="text-lg mb-2">{{ medShowFavoritesOnly ? 'No favorites yet' : 'No sessions yet' }}</p>
+          <p class="text-txt-muted text-sm">{{ medShowFavoritesOnly ? 'Star a session to save it here.' : 'Generate your first meditation to get started.' }}</p>
+        </div>
+        <div v-else class="space-y-2">
+          <div
+            v-for="s in filteredMedSessions"
+            :key="s.id"
+            @click="openMedSession(s.id)"
+            class="glass-card px-4 py-3 w-full text-left flex items-start gap-3 transition-colors hover:bg-surface-2 cursor-pointer"
+          >
+            <span class="text-2xl flex-shrink-0">{{ getMedTypeEmoji(s.type) }}</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-medium text-txt-primary truncate">{{ s.title }}</span>
+                <span class="text-xs text-txt-muted flex-shrink-0">{{ timeAgo(s.created_at) }}</span>
+              </div>
+              <div class="flex items-center gap-2 mt-0.5">
+                <span class="text-xs text-txt-muted">{{ getMedTypeLabel(s.type) }}</span>
+                <span class="text-xs text-txt-muted">~{{ s.duration_minutes }} min</span>
+                <span v-if="s.mood_after" class="text-sm">{{ s.mood_after }}</span>
+                <span v-if="s.is_favorite" class="text-amber-400 text-xs">&#9733;</span>
+              </div>
+            </div>
+            <button
+              @click.stop="deleteMedSession(s.id)"
+              class="text-xs text-txt-muted hover:text-red-400 transition-colors px-1 self-center"
+            >
+              &times;
+            </button>
           </div>
         </div>
       </template>

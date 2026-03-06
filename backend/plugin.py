@@ -1,4 +1,4 @@
-"""ZugaLife studio plugin — mood logging, journaling, habit tracking, and life goals."""
+"""ZugaLife studio plugin — mood, journal, habits, goals, and meditation."""
 
 import importlib.util
 import logging
@@ -72,12 +72,19 @@ _g_models = _load_submodule("goals", "models")
 _g_schemas = _load_submodule("goals", "schemas")
 _g_routes = _load_submodule("goals", "routes")
 
+# Load meditation submodule: models → schemas → prompts → routes
+_m_models = _load_submodule("meditation", "models")
+_m_schemas = _load_submodule("meditation", "schemas")
+_m_prompts = _load_submodule("meditation", "prompts")
+_m_routes = _load_submodule("meditation", "routes")
+
 # Merge all routers into a single combined router
 _combined_router = APIRouter()
 _combined_router.include_router(_routes.router)
 _combined_router.include_router(_j_routes.router)
 _combined_router.include_router(_h_routes.router)
 _combined_router.include_router(_g_routes.router)
+_combined_router.include_router(_m_routes.router)
 
 
 class ZugaLifePlugin(StudioPlugin):
@@ -88,7 +95,7 @@ class ZugaLifePlugin(StudioPlugin):
 
     @property
     def version(self) -> str:
-        return "0.4.0"
+        return "0.5.0"
 
     @property
     def router(self) -> APIRouter:
@@ -101,6 +108,7 @@ class ZugaLifePlugin(StudioPlugin):
             _j_models.JournalEntry, _j_models.JournalReflection,
             _h_models.HabitDefinition, _h_models.HabitLog, _h_models.HabitInsight,
             _g_models.GoalDefinition, _g_models.GoalMilestone,
+            _m_models.MeditationSession,
         ]
 
     async def on_startup(self) -> None:
@@ -116,4 +124,4 @@ class ZugaLifePlugin(StudioPlugin):
 
         async with get_engine().begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("ZugaLife tables initialized (mood + journal + habits + goals)")
+        logger.info("ZugaLife tables initialized (mood + journal + habits + goals + meditation)")
