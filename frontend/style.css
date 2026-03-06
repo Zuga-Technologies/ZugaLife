@@ -1,4 +1,4 @@
-@import '../core/frontend/theme/base.css';
+@import '../../ZugaCore/frontend/theme/base.css';
 
 @tailwind base;
 @tailwind components;
