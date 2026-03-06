@@ -11,6 +11,7 @@ export default defineConfig({
     dedupe: ['vue', 'pinia', 'vue-router'],
   },
   server: {
+    host: true,
     port: 5174,
     fs: {
       allow: ['../..'],
