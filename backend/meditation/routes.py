@@ -165,8 +165,7 @@ async def generate_meditation(
         tts_result = await call_openai_tts(
             text=tts_text,
             voice=body.voice.value,
-            instruction=voice_instruction,
-            speed=0.85,
+            speed=0.9,
         )
     except Exception as e:
         logger.error("TTS generation failed: %s", e)
@@ -392,7 +391,7 @@ def _estimate_audio_duration(transcript: str) -> float:
     """Estimate how many minutes the transcript will produce as audio.
 
     Calibrated from real TTS output measurements:
-    - Spoken words at ~150 wpm (OpenAI TTS at speed 0.85)
+    - Spoken words at ~150 wpm (OpenAI TTS at speed 0.9)
     - Each pause marker produces ~0.6s of actual TTS silence regardless
       of the labeled duration. OpenAI TTS doesn't support real silence —
       we fake it with ellipsis/newlines which produce minimal gaps.

@@ -25,7 +25,7 @@ _EMOJI_LABELS: dict[str, str] = {
     "\U0001f914": "Thoughtful", "\U0001f60c": "Calm", "\U0001f4aa": "Motivated",
 }
 
-# Word targets for the LLM output. Based on ~136 wpm at TTS speed 0.85,
+# Word targets for the LLM output. Based on ~150 wpm at TTS speed 0.9,
 # with a slight buffer since pause markers also contribute to duration.
 # The evaluate→fix pipeline in routes.py handles under/overshoot.
 _WORD_TARGETS = {

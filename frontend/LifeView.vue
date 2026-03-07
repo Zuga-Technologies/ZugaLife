@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api, ApiError, getToken } from '@core/api/client'
+import { startAmbience, stopAmbience, pauseAmbience, resumeAmbience, setAmbienceVolume } from './ambience'
+import { moodIcons, meditationTypeIcons, ambienceIcons, habitIcons, habitIconPicker, getIcon, BrandIcon } from './icons'
+import { BookOpen } from 'lucide-vue-next'
 
 // --- Tabs ---
 
@@ -8,7 +11,7 @@ type Tab = 'journal' | 'habits' | 'goals' | 'meditate'
 const activeTab = ref<Tab>('journal')
 
 // ============================
-// MOOD EMOJI DEFINITIONS (shared by journal compose)
+// MOOD DEFINITIONS (shared by journal compose)
 // ============================
 
 const moods = [
@@ -329,7 +332,7 @@ const historyDays = ref(7)
 
 // New custom habit form
 const newHabitName = ref('')
-const newHabitEmoji = ref('')
+const newHabitIcon = ref('')  // Stores a Lucide icon name (e.g. 'dumbbell')
 const newHabitUnit = ref<string | null>(null)
 const newHabitTarget = ref<number | null>(null)
 const showNewHabitForm = ref(false)
@@ -428,20 +431,21 @@ async function updateHabitAmount(item: HabitCheckInItem) {
 }
 
 async function createCustomHabit() {
-  if (!newHabitName.value.trim() || !newHabitEmoji.value.trim() || habitSubmitting.value) return
+  if (!newHabitName.value.trim() || !newHabitIcon.value || habitSubmitting.value) return
 
   habitSubmitting.value = true
   habitError.value = null
 
   try {
+    // Store the icon name as the emoji field (backend treats it as a display string)
     await api.post('/api/life/habits', {
       name: newHabitName.value.trim(),
-      emoji: newHabitEmoji.value.trim(),
+      emoji: newHabitIcon.value,
       unit: newHabitUnit.value || null,
       default_target: newHabitTarget.value || null,
     })
     newHabitName.value = ''
-    newHabitEmoji.value = ''
+    newHabitIcon.value = ''
     newHabitUnit.value = null
     newHabitTarget.value = null
     showNewHabitForm.value = false
@@ -543,6 +547,14 @@ interface GoalMilestone {
   completed_at: string | null
 }
 
+interface LinkedHabit {
+  habit_id: number
+  habit_name: string
+  habit_emoji: string
+  days_completed: number
+  days_total: number
+}
+
 interface Goal {
   id: number
   title: string
@@ -553,14 +565,24 @@ interface Goal {
   completed_at: string | null
   created_at: string
   updated_at: string
+  template_key: string | null
   milestones: GoalMilestone[]
   milestone_count: number
   milestone_done: number
+  linked_habits: LinkedHabit[]
 }
 
 interface GoalListResponse {
   active: Goal[]
   completed: Goal[]
+}
+
+interface GoalTemplate {
+  key: string
+  title: string
+  description: string
+  suggested_habits: string[]
+  already_adopted: boolean
 }
 
 interface WeeklyTargetItem {
@@ -588,7 +610,10 @@ const goalError = ref<string | null>(null)
 const goalSuccess = ref<string | null>(null)
 
 // Create goal form
-const showGoalForm = ref(false)
+type GoalCreateMode = 'none' | 'templates' | 'custom'
+const goalCreateMode = ref<GoalCreateMode>('none')
+const goalTemplates = ref<GoalTemplate[]>([])
+const templateAdopting = ref<string | null>(null)
 const newGoalTitle = ref('')
 const newGoalDescription = ref('')
 const newGoalDeadline = ref('')
@@ -600,6 +625,9 @@ const expandedGoals = ref<Set<number>>(new Set())
 // Add milestone form (per goal)
 const addingMilestoneTo = ref<number | null>(null)
 const newMilestoneTitle = ref('')
+
+// Habit linking
+const linkingHabitTo = ref<number | null>(null)
 
 // Editing weekly target
 const editingTargetFor = ref<number | null>(null)
@@ -619,6 +647,67 @@ async function fetchGoals() {
     activeGoals.value = res.active
     completedGoals.value = res.completed
   } catch { /* silent */ }
+}
+
+async function fetchGoalTemplates() {
+  try {
+    goalTemplates.value = await api.get<GoalTemplate[]>('/api/life/goals/templates')
+  } catch { /* silent */ }
+}
+
+async function adoptTemplate(key: string) {
+  if (templateAdopting.value) return
+  templateAdopting.value = key
+  goalError.value = null
+  try {
+    await api.post('/api/life/goals/from-template', { template_key: key })
+    goalSuccess.value = 'Goal created from template!'
+    setTimeout(() => { goalSuccess.value = null }, 2000)
+    goalCreateMode.value = 'none'
+    await Promise.all([fetchGoals(), fetchGoalTemplates()])
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
+    } else {
+      goalError.value = 'Network error'
+    }
+  } finally {
+    templateAdopting.value = null
+  }
+}
+
+async function linkHabit(goalId: number, habitId: number) {
+  goalError.value = null
+  try {
+    await api.post(`/api/life/goals/${goalId}/habits`, { habit_id: habitId })
+    linkingHabitTo.value = null
+    await fetchGoals()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
+    } else {
+      goalError.value = 'Network error'
+    }
+  }
+}
+
+async function unlinkHabit(goalId: number, habitId: number) {
+  goalError.value = null
+  try {
+    await api.delete(`/api/life/goals/${goalId}/habits/${habitId}`)
+    await fetchGoals()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
+    } else {
+      goalError.value = 'Network error'
+    }
+  }
+}
+
+function availableHabitsForGoal(goal: Goal): HabitDefinition[] {
+  const linkedIds = new Set(goal.linked_habits.map(h => h.habit_id))
+  return allHabits.value.filter(h => h.is_active && !linkedIds.has(h.id))
 }
 
 async function fetchWeeklyTargets() {
@@ -642,7 +731,7 @@ async function createGoal() {
     newGoalTitle.value = ''
     newGoalDescription.value = ''
     newGoalDeadline.value = ''
-    showGoalForm.value = false
+    goalCreateMode.value = 'none'
     goalSuccess.value = 'Goal created!'
     setTimeout(() => { goalSuccess.value = null }, 2000)
     await fetchGoals()
@@ -815,20 +904,20 @@ interface MeditationRemainingResponse {
 }
 
 const meditationTypes = [
-  { key: 'breathing', emoji: '🌬️', label: 'Breathing', desc: 'Focus on your breath' },
-  { key: 'body_scan', emoji: '🧘', label: 'Body Scan', desc: 'Progressive body awareness' },
-  { key: 'loving_kindness', emoji: '💗', label: 'Loving Kindness', desc: 'Compassion for self & others' },
-  { key: 'visualization', emoji: '🏞️', label: 'Visualization', desc: 'Guided mental imagery' },
-  { key: 'gratitude', emoji: '🙏', label: 'Gratitude', desc: 'Appreciate what matters' },
-  { key: 'stress_relief', emoji: '🧊', label: 'Stress Relief', desc: 'Release tension mindfully' },
+  { key: 'breathing', label: 'Breathing', desc: 'Focus on your breath' },
+  { key: 'body_scan', label: 'Body Scan', desc: 'Progressive body awareness' },
+  { key: 'loving_kindness', label: 'Loving Kindness', desc: 'Compassion for self & others' },
+  { key: 'visualization', label: 'Visualization', desc: 'Guided mental imagery' },
+  { key: 'gratitude', label: 'Gratitude', desc: 'Appreciate what matters' },
+  { key: 'stress_relief', label: 'Stress Relief', desc: 'Release tension mindfully' },
 ]
 
 const ambienceOptions = [
-  { key: 'rain', emoji: '🌧️', label: 'Rain' },
-  { key: 'ocean', emoji: '🌊', label: 'Ocean' },
-  { key: 'forest', emoji: '🌲', label: 'Forest' },
-  { key: 'bowls', emoji: '🔔', label: 'Bowls' },
-  { key: 'silence', emoji: '🤫', label: 'Silence' },
+  { key: 'rain', label: 'Rain' },
+  { key: 'ocean', label: 'Ocean' },
+  { key: 'forest', label: 'Forest' },
+  { key: 'bowls', label: 'Bowls' },
+  { key: 'silence', label: 'Silence' },
 ]
 
 const durationOptions = [3, 5, 10, 15]
@@ -851,12 +940,11 @@ const medSuccess = ref<string | null>(null)
 // Active session / player
 const medSession = ref<MeditationSession | null>(null)
 let medAudioEl: HTMLAudioElement | null = null
-let medAmbientEl: HTMLAudioElement | null = null
 const medPlaying = ref(false)
 const medProgress = ref(0)
 const medCurrentTime = ref(0)
 const medDurationSec = ref(0)
-const medAmbientVolume = ref(0.3)
+const medAmbientVolume = ref(0.4)
 
 // History
 const medSessions = ref<MeditationBrief[]>([])
@@ -946,8 +1034,11 @@ async function generateMeditation() {
   }
 }
 
+let medAudioLoading = false
+
 async function loadAndPlayAudio() {
-  if (!medSession.value) return
+  if (!medSession.value || medAudioLoading) return
+  medAudioLoading = true
   stopAudio()
 
   try {
@@ -960,6 +1051,7 @@ async function loadAndPlayAudio() {
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const audio = new Audio(url)
+    audio.volume = 0.85
     medAudioEl = audio
 
     audio.addEventListener('loadedmetadata', () => {
@@ -977,26 +1069,31 @@ async function loadAndPlayAudio() {
       stopAmbient()
     })
 
+    // Start voice + ambience together
+    if (medSession.value.ambience !== 'silence') {
+      startAmbience(medSession.value.ambience as 'rain' | 'ocean' | 'forest' | 'bowls', medAmbientVolume.value)
+    }
     await audio.play()
     medPlaying.value = true
-
-    if (medSession.value.ambience !== 'silence') {
-      startAmbient(medSession.value.ambience)
-    }
   } catch {
     medError.value = 'Failed to load audio'
+  } finally {
+    medAudioLoading = false
   }
 }
 
 function togglePlayPause() {
-  if (!medAudioEl) return
+  if (!medAudioEl) {
+    loadAndPlayAudio()
+    return
+  }
   if (medPlaying.value) {
     medAudioEl.pause()
-    if (medAmbientEl) medAmbientEl.pause()
+    pauseAmbience()
     medPlaying.value = false
   } else {
     medAudioEl.play()
-    if (medAmbientEl) medAmbientEl.play()
+    resumeAmbience()
     medPlaying.value = true
   }
 }
@@ -1009,21 +1106,8 @@ function seekAudio(event: MouseEvent) {
   medAudioEl.currentTime = pct * medDurationSec.value
 }
 
-function startAmbient(ambience: string) {
-  stopAmbient()
-  const ambient = new Audio(`/ambience/${ambience}.mp3`)
-  ambient.loop = true
-  ambient.volume = medAmbientVolume.value
-  ambient.play().catch(() => { /* no ambient file — silent fallback */ })
-  medAmbientEl = ambient
-}
-
 function stopAmbient() {
-  if (medAmbientEl) {
-    medAmbientEl.pause()
-    medAmbientEl.src = ''
-    medAmbientEl = null
-  }
+  stopAmbience()
 }
 
 function stopAudio() {
@@ -1042,7 +1126,7 @@ function stopAudio() {
 
 function updateAmbientVolume(val: number) {
   medAmbientVolume.value = val
-  if (medAmbientEl) medAmbientEl.volume = val
+  setAmbienceVolume(val)
 }
 
 function medFormatTime(seconds: number): string {
@@ -1117,8 +1201,8 @@ function getMedTypeLabel(type: string): string {
   return meditationTypes.find(t => t.key === type)?.label ?? type
 }
 
-function getMedTypeEmoji(type: string): string {
-  return meditationTypes.find(t => t.key === type)?.emoji ?? '🧘'
+function getMedTypeIcon(type: string) {
+  return meditationTypeIcons[type] || meditationTypeIcons.breathing
 }
 
 // ============================
@@ -1153,7 +1237,7 @@ onMounted(async () => {
   await Promise.all([
     fetchJournalEntries(),
     fetchHabitCheckin(), fetchHabitStreaks(), fetchAllHabits(),
-    fetchGoals(), fetchWeeklyTargets(),
+    fetchGoals(), fetchGoalTemplates(), fetchWeeklyTargets(),
     fetchMedRemaining(), fetchMedSessions(),
   ])
   loadingJournal.value = false
@@ -1298,7 +1382,8 @@ onUnmounted(() => {
               >
                 <span v-if="item.logged" class="text-xs">&#10003;</span>
               </button>
-              <span class="text-xl flex-shrink-0">{{ item.habit.emoji }}</span>
+              <component :is="getIcon(item.habit.emoji)" :size="22" class="flex-shrink-0 text-accent" v-if="getIcon(item.habit.emoji)" />
+              <span v-else class="text-xl flex-shrink-0">{{ item.habit.emoji }}</span>
               <div class="flex-1 min-w-0">
                 <span class="text-sm font-medium text-txt-primary">{{ item.habit.name }}</span>
               </div>
@@ -1369,7 +1454,10 @@ onUnmounted(() => {
               />
             </div>
             <div v-if="day.habits_done.length > 0" class="flex gap-1 flex-wrap">
-              <span v-for="(emoji, i) in day.habits_done" :key="i" class="text-sm">{{ emoji }}</span>
+              <template v-for="(emoji, i) in day.habits_done" :key="i">
+                <component :is="getIcon(emoji)" :size="14" class="text-accent" v-if="getIcon(emoji)" />
+                <span v-else class="text-sm">{{ emoji }}</span>
+              </template>
             </div>
           </div>
         </div>
@@ -1420,21 +1508,28 @@ onUnmounted(() => {
 
         <!-- New habit form -->
         <div v-if="showNewHabitForm" class="glass-card p-4 mb-4 space-y-3 animate-fade-in">
-          <div class="flex gap-2">
-            <input
-              v-model="newHabitEmoji"
-              type="text"
-              placeholder="Emoji"
-              maxlength="4"
-              class="input-field w-16 text-center text-lg"
-            />
-            <input
-              v-model="newHabitName"
-              type="text"
-              placeholder="Habit name"
-              maxlength="50"
-              class="input-field flex-1"
-            />
+          <input
+            v-model="newHabitName"
+            type="text"
+            placeholder="Habit name"
+            maxlength="50"
+            class="input-field"
+          />
+          <!-- Icon picker grid -->
+          <div>
+            <p class="text-xs text-txt-muted mb-1.5">Choose an icon:</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="opt in habitIconPicker"
+                :key="opt.name"
+                @click="newHabitIcon = opt.name"
+                class="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150"
+                :class="newHabitIcon === opt.name ? 'bg-accent/15 ring-1 ring-accent/50 text-accent' : 'bg-surface-3 text-txt-muted hover:text-txt-primary'"
+                :title="opt.label"
+              >
+                <component :is="opt.icon" :size="18" />
+              </button>
+            </div>
           </div>
           <div class="flex gap-2">
             <select
@@ -1455,7 +1550,7 @@ onUnmounted(() => {
           </div>
           <button
             @click="createCustomHabit"
-            :disabled="!newHabitName.trim() || !newHabitEmoji.trim() || habitSubmitting"
+            :disabled="!newHabitName.trim() || !newHabitIcon || habitSubmitting"
             class="btn-primary w-full text-sm"
           >
             {{ habitSubmitting ? 'Creating...' : 'Create Habit' }}
@@ -1470,7 +1565,8 @@ onUnmounted(() => {
             class="glass-card px-4 py-3 flex items-center gap-3"
             :class="!habit.is_active ? 'opacity-50' : ''"
           >
-            <span class="text-xl">{{ habit.emoji }}</span>
+            <component :is="getIcon(habit.emoji)" :size="22" class="text-accent flex-shrink-0" v-if="getIcon(habit.emoji)" />
+            <span v-else class="text-xl">{{ habit.emoji }}</span>
             <div class="flex-1 min-w-0">
               <span class="text-sm font-medium text-txt-primary">{{ habit.name }}</span>
               <div class="flex items-center gap-2">
@@ -1522,15 +1618,47 @@ onUnmounted(() => {
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-lg font-semibold text-txt-primary">Life Goals</h2>
           <button
-            @click="showGoalForm = !showGoalForm"
+            @click="goalCreateMode = goalCreateMode === 'none' ? 'templates' : 'none'"
             class="text-sm text-accent hover:text-accent/80 transition-colors"
           >
-            {{ showGoalForm ? 'Cancel' : '+ New Goal' }}
+            {{ goalCreateMode !== 'none' ? 'Cancel' : '+ New Goal' }}
           </button>
         </div>
 
-        <!-- New goal form -->
-        <div v-if="showGoalForm" class="glass-card p-4 mb-4 space-y-3 animate-fade-in">
+        <!-- Template picker -->
+        <div v-if="goalCreateMode === 'templates'" class="mb-4 space-y-3 animate-fade-in">
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              v-for="tmpl in goalTemplates.filter(t => !t.already_adopted)"
+              :key="tmpl.key"
+              @click="adoptTemplate(tmpl.key)"
+              :disabled="templateAdopting !== null"
+              class="glass-card p-3 text-left hover:border-accent/50 transition-all cursor-pointer"
+            >
+              <span class="text-sm font-medium text-txt-primary block">{{ tmpl.title }}</span>
+              <span class="text-xs text-txt-muted mt-1 block line-clamp-2">{{ tmpl.description }}</span>
+              <div v-if="tmpl.suggested_habits.length > 0" class="mt-2 flex flex-wrap gap-1">
+                <span
+                  v-for="h in tmpl.suggested_habits"
+                  :key="h"
+                  class="text-[10px] bg-surface-3 text-txt-muted px-1.5 py-0.5 rounded"
+                >{{ h }}</span>
+              </div>
+              <span v-if="templateAdopting === tmpl.key" class="text-xs text-accent mt-1 block">Creating...</span>
+            </button>
+          </div>
+          <div class="text-center">
+            <button
+              @click="goalCreateMode = 'custom'"
+              class="text-xs text-txt-muted hover:text-accent transition-colors"
+            >
+              Or create a custom goal &rarr;
+            </button>
+          </div>
+        </div>
+
+        <!-- Custom goal form -->
+        <div v-if="goalCreateMode === 'custom'" class="glass-card p-4 mb-4 space-y-3 animate-fade-in">
           <input
             v-model="newGoalTitle"
             type="text"
@@ -1553,13 +1681,21 @@ onUnmounted(() => {
               class="input-field flex-1 text-sm"
             />
           </div>
-          <button
-            @click="createGoal"
-            :disabled="!newGoalTitle.trim() || goalSubmitting"
-            class="btn-primary w-full text-sm"
-          >
-            {{ goalSubmitting ? 'Creating...' : 'Create Goal' }}
-          </button>
+          <div class="flex gap-2">
+            <button
+              @click="createGoal"
+              :disabled="!newGoalTitle.trim() || goalSubmitting"
+              class="btn-primary flex-1 text-sm"
+            >
+              {{ goalSubmitting ? 'Creating...' : 'Create Goal' }}
+            </button>
+            <button
+              @click="goalCreateMode = 'templates'"
+              class="text-xs text-txt-muted hover:text-accent transition-colors px-3"
+            >
+              &larr; Templates
+            </button>
+          </div>
         </div>
 
         <!-- Loading -->
@@ -1568,7 +1704,7 @@ onUnmounted(() => {
         <!-- Empty state -->
         <div v-else-if="activeGoals.length === 0 && completedGoals.length === 0" class="glass-card p-8 text-center">
           <p class="text-lg mb-2">No goals yet</p>
-          <p class="text-txt-muted text-sm">Set a goal to start working toward something meaningful.</p>
+          <p class="text-txt-muted text-sm">Pick a template above or create a custom goal.</p>
         </div>
 
         <!-- Active goals -->
@@ -1619,31 +1755,74 @@ onUnmounted(() => {
               </button>
             </div>
 
-            <!-- Expanded: milestones + actions -->
-            <div v-if="expandedGoals.has(goal.id)" class="border-t border-bdr px-4 py-3 space-y-2 animate-fade-in">
-              <!-- Milestones list -->
-              <div v-for="ms in goal.milestones" :key="ms.id" class="flex items-center gap-2 group">
-                <button
-                  @click="toggleMilestone(goal.id, ms)"
-                  class="w-4 h-4 rounded border flex items-center justify-center transition-all flex-shrink-0"
-                  :class="ms.is_completed
-                    ? 'bg-emerald-500 border-emerald-500 text-white'
-                    : 'border-bdr hover:border-accent'"
-                >
-                  <span v-if="ms.is_completed" class="text-[10px]">&#10003;</span>
-                </button>
-                <span
-                  class="text-sm flex-1"
-                  :class="ms.is_completed ? 'text-txt-muted line-through' : 'text-txt-primary'"
-                >
-                  {{ ms.title }}
-                </span>
-                <button
-                  @click="deleteMilestone(goal.id, ms.id)"
-                  class="text-xs text-txt-muted hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 px-1"
-                >
-                  &times;
-                </button>
+            <!-- Expanded: linked habits + milestones + actions -->
+            <div v-if="expandedGoals.has(goal.id)" class="border-t border-bdr px-4 py-3 space-y-3 animate-fade-in">
+
+              <!-- Linked habits -->
+              <div v-if="goal.linked_habits.length > 0" class="space-y-1.5">
+                <p class="text-xs font-semibold text-txt-muted uppercase tracking-wide">Linked Habits</p>
+                <div v-for="lh in goal.linked_habits" :key="lh.habit_id" class="flex items-center gap-2 group">
+                  <component :is="getIcon(lh.habit_emoji)" :size="16" class="text-accent flex-shrink-0" v-if="getIcon(lh.habit_emoji)" />
+                  <span v-else class="text-sm">{{ lh.habit_emoji }}</span>
+                  <span class="text-sm text-txt-primary flex-1">{{ lh.habit_name }}</span>
+                  <div class="flex gap-0.5">
+                    <div
+                      v-for="d in lh.days_total"
+                      :key="d"
+                      class="w-3 h-3 rounded-sm"
+                      :class="d <= lh.days_completed ? 'bg-emerald-500' : 'bg-surface-3'"
+                    />
+                  </div>
+                  <span class="text-xs text-txt-muted w-8 text-right">{{ lh.days_completed }}/{{ lh.days_total }}</span>
+                  <button
+                    @click="unlinkHabit(goal.id, lh.habit_id)"
+                    class="text-xs text-txt-muted hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 px-1"
+                  >&times;</button>
+                </div>
+              </div>
+
+              <!-- Link habit picker -->
+              <div v-if="linkingHabitTo === goal.id" class="space-y-1.5">
+                <p class="text-xs text-txt-muted">Select a habit to link:</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <button
+                    v-for="h in availableHabitsForGoal(goal)"
+                    :key="h.id"
+                    @click="linkHabit(goal.id, h.id)"
+                    class="text-xs bg-surface-3 hover:bg-accent/15 text-txt-primary px-2 py-1 rounded transition-colors"
+                  >
+                    <component :is="getIcon(h.emoji)" :size="14" class="inline-block" v-if="getIcon(h.emoji)" /><span v-else>{{ h.emoji }}</span> {{ h.name }}
+                  </button>
+                  <span v-if="availableHabitsForGoal(goal).length === 0" class="text-xs text-txt-muted">No unlinked habits available</span>
+                </div>
+              </div>
+
+              <!-- Milestones -->
+              <div v-if="goal.milestones.length > 0" class="space-y-1.5">
+                <p class="text-xs font-semibold text-txt-muted uppercase tracking-wide">Milestones</p>
+                <div v-for="ms in goal.milestones" :key="ms.id" class="flex items-center gap-2 group">
+                  <button
+                    @click="toggleMilestone(goal.id, ms)"
+                    class="w-4 h-4 rounded border flex items-center justify-center transition-all flex-shrink-0"
+                    :class="ms.is_completed
+                      ? 'bg-emerald-500 border-emerald-500 text-white'
+                      : 'border-bdr hover:border-accent'"
+                  >
+                    <span v-if="ms.is_completed" class="text-[10px]">&#10003;</span>
+                  </button>
+                  <span
+                    class="text-sm flex-1"
+                    :class="ms.is_completed ? 'text-txt-muted line-through' : 'text-txt-primary'"
+                  >
+                    {{ ms.title }}
+                  </span>
+                  <button
+                    @click="deleteMilestone(goal.id, ms.id)"
+                    class="text-xs text-txt-muted hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 px-1"
+                  >
+                    &times;
+                  </button>
+                </div>
               </div>
 
               <!-- Add milestone -->
@@ -1662,6 +1841,20 @@ onUnmounted(() => {
 
               <!-- Actions -->
               <div class="flex items-center gap-3 pt-2 border-t border-bdr/50">
+                <button
+                  v-if="linkingHabitTo !== goal.id"
+                  @click="linkingHabitTo = goal.id"
+                  class="text-xs text-accent hover:text-accent/80 transition-colors"
+                >
+                  + Link Habit
+                </button>
+                <button
+                  v-else
+                  @click="linkingHabitTo = null"
+                  class="text-xs text-txt-muted"
+                >
+                  Done linking
+                </button>
                 <button
                   v-if="addingMilestoneTo !== goal.id"
                   @click="addingMilestoneTo = goal.id; newMilestoneTitle = ''"
@@ -1731,7 +1924,8 @@ onUnmounted(() => {
               :key="habit.id"
               class="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-2"
             >
-              <span class="text-lg">{{ habit.emoji }}</span>
+              <component :is="getIcon(habit.emoji)" :size="20" class="text-accent flex-shrink-0" v-if="getIcon(habit.emoji)" />
+              <span v-else class="text-lg">{{ habit.emoji }}</span>
               <span class="text-sm text-txt-primary flex-1">{{ habit.name }}</span>
               <template v-if="editingTargetFor === habit.id">
                 <select
@@ -1762,7 +1956,8 @@ onUnmounted(() => {
             class="glass-card px-4 py-3"
           >
             <div class="flex items-center gap-3 mb-2">
-              <span class="text-xl">{{ item.habit_emoji }}</span>
+              <component :is="getIcon(item.habit_emoji)" :size="22" class="text-accent flex-shrink-0" v-if="getIcon(item.habit_emoji)" />
+              <span v-else class="text-xl">{{ item.habit_emoji }}</span>
               <div class="flex-1 min-w-0">
                 <span class="text-sm font-medium text-txt-primary">{{ item.habit_name }}</span>
               </div>
@@ -1791,7 +1986,8 @@ onUnmounted(() => {
                 :key="habit.id"
                 class="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-2"
               >
-                <span>{{ habit.emoji }}</span>
+                <component :is="getIcon(habit.emoji)" :size="18" class="text-accent flex-shrink-0" v-if="getIcon(habit.emoji)" />
+                <span v-else>{{ habit.emoji }}</span>
                 <span class="text-sm text-txt-muted flex-1">{{ habit.name }}</span>
                 <template v-if="editingTargetFor === habit.id">
                   <select
@@ -1856,7 +2052,7 @@ onUnmounted(() => {
               :class="medType === mt.key ? 'ring-1 ring-accent bg-accent/5' : 'hover:bg-surface-2'"
             >
               <div class="flex items-center gap-2 mb-1">
-                <span class="text-xl">{{ mt.emoji }}</span>
+                <component :is="meditationTypeIcons[mt.key]" :size="20" v-if="meditationTypeIcons[mt.key]" />
                 <span class="text-sm font-medium text-txt-primary">{{ mt.label }}</span>
               </div>
               <p class="text-xs text-txt-muted">{{ mt.desc }}</p>
@@ -1895,8 +2091,8 @@ onUnmounted(() => {
                 ? 'bg-accent/15 ring-1 ring-accent/50 text-accent'
                 : 'glass-card text-txt-muted hover:text-txt-primary'"
             >
-              <span class="text-lg block">{{ a.emoji }}</span>
-              <span class="text-xs">{{ a.label }}</span>
+              <component :is="ambienceIcons[a.key]" :size="20" class="mx-auto" v-if="ambienceIcons[a.key]" />
+              <span class="text-xs block mt-1">{{ a.label }}</span>
             </button>
           </div>
         </div>
@@ -1988,7 +2184,7 @@ onUnmounted(() => {
             <!-- Play/pause + progress -->
             <div class="flex items-center gap-3">
               <button
-                @click="medPlaying ? togglePlayPause() : loadAndPlayAudio()"
+                @click="togglePlayPause()"
                 class="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center hover:bg-accent/80 transition-colors flex-shrink-0"
               >
                 <span v-if="medPlaying" class="text-sm">&#9646;&#9646;</span>
@@ -2054,10 +2250,11 @@ onUnmounted(() => {
               v-for="mood in moods"
               :key="mood.emoji"
               @click="setMedMoodAfter(mood.emoji)"
-              class="px-2 py-1 rounded-lg text-sm transition-all duration-150"
-              :class="medMoodAfter === mood.emoji ? 'bg-accent/15 ring-1 ring-accent/50' : 'hover:bg-surface-3'"
+              class="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150"
+              :class="medMoodAfter === mood.emoji ? 'bg-accent/15 ring-1 ring-accent/50 text-accent' : 'text-txt-muted hover:bg-surface-3 hover:text-txt-primary'"
+              :title="mood.label"
             >
-              {{ mood.emoji }}
+              <component :is="moodIcons[mood.emoji]" :size="20" v-if="moodIcons[mood.emoji]" />
             </button>
           </div>
           <p v-if="medMoodAfter" class="text-xs text-accent mt-2 animate-fade-in">
@@ -2137,8 +2334,9 @@ onUnmounted(() => {
                 @click="goToDetail(entry.id)"
                 class="glass-card px-4 py-3 w-full text-left flex items-start gap-3 animate-slide-up transition-colors hover:bg-surface-2"
               >
-                <span v-if="entry.mood_emoji" class="text-2xl flex-shrink-0">{{ entry.mood_emoji }}</span>
-                <span v-else class="text-2xl flex-shrink-0 text-txt-muted">📝</span>
+                <component :is="moodIcons[entry.mood_emoji]" v-if="entry.mood_emoji && moodIcons[entry.mood_emoji]" :size="24" class="text-accent flex-shrink-0" />
+                <span v-else-if="entry.mood_emoji" class="text-2xl flex-shrink-0">{{ entry.mood_emoji }}</span>
+                <BookOpen v-else :size="24" class="text-txt-muted flex-shrink-0" />
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
                     <span class="text-sm font-medium text-txt-primary truncate">{{ entry.title || entry.content_preview.slice(0, 60) }}</span>
@@ -2171,10 +2369,11 @@ onUnmounted(() => {
                 v-for="mood in moods"
                 :key="mood.emoji"
                 @click="composeMood = composeMood === mood.emoji ? null : mood.emoji"
-                class="px-2 py-1 rounded-lg text-sm transition-all duration-150"
-                :class="composeMood === mood.emoji ? 'bg-accent/15 ring-1 ring-accent/50' : 'hover:bg-surface-3'"
+                class="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150"
+                :class="composeMood === mood.emoji ? 'bg-accent/15 ring-1 ring-accent/50 text-accent' : 'text-txt-muted hover:bg-surface-3 hover:text-txt-primary'"
+                :title="mood.label"
               >
-                <span>{{ mood.emoji }}</span>
+                <component :is="moodIcons[mood.emoji]" :size="20" v-if="moodIcons[mood.emoji]" />
               </button>
             </div>
             <p v-if="composeMoodLabel" class="text-xs text-accent mt-1.5 animate-fade-in">{{ composeMoodLabel }}</p>
@@ -2204,7 +2403,8 @@ onUnmounted(() => {
                 <div class="flex items-center gap-2 text-xs text-txt-muted">
                   <span>{{ formatDate(currentEntry.created_at) }}</span>
                   <span v-if="currentEntry.mood_emoji" class="flex items-center gap-1">
-                    <span>{{ currentEntry.mood_emoji }}</span>
+                    <component :is="moodIcons[currentEntry.mood_emoji]" :size="14" class="text-accent" v-if="moodIcons[currentEntry.mood_emoji]" />
+                    <span v-else>{{ currentEntry.mood_emoji }}</span>
                     <span>{{ currentEntry.mood_label }}</span>
                   </span>
                 </div>

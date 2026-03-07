@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -32,12 +33,21 @@ class GoalDefinition(Base, TimestampMixin):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )
+    template_key: Mapped[str | None] = mapped_column(
+        String(50), nullable=True,
+    )
 
     milestones: Mapped[list["GoalMilestone"]] = relationship(
         back_populates="goal",
         cascade="all, delete-orphan",
         lazy="selectin",
         order_by="GoalMilestone.sort_order",
+    )
+
+    habit_links: Mapped[list["GoalHabitLink"]] = relationship(
+        back_populates="goal",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
 
@@ -61,3 +71,23 @@ class GoalMilestone(Base):
     )
 
     goal: Mapped["GoalDefinition"] = relationship(back_populates="milestones")
+
+
+class GoalHabitLink(Base):
+    """Many-to-many link between goals and habits."""
+
+    __tablename__ = "goal_habit_links"
+    __table_args__ = (
+        UniqueConstraint("goal_id", "habit_id", name="uq_goal_habit"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    goal_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("goal_definitions.id", ondelete="CASCADE"), index=True,
+    )
+    habit_id: Mapped[int] = mapped_column(Integer, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+    )
+
+    goal: Mapped["GoalDefinition"] = relationship(back_populates="habit_links")

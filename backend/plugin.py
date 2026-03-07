@@ -67,9 +67,10 @@ _h_schemas = _load_submodule("habits", "schemas")
 _h_prompts = _load_submodule("habits", "prompts")
 _h_routes = _load_submodule("habits", "routes")
 
-# Load goals submodule: models → schemas → routes (no prompts — no AI features in v1)
+# Load goals submodule: models → schemas → templates → routes
 _g_models = _load_submodule("goals", "models")
 _g_schemas = _load_submodule("goals", "schemas")
+_g_templates = _load_submodule("goals", "templates")
 _g_routes = _load_submodule("goals", "routes")
 
 # Load meditation submodule: models → schemas → prompts → routes
@@ -107,7 +108,7 @@ class ZugaLifePlugin(StudioPlugin):
             _models.MoodEntry,
             _j_models.JournalEntry, _j_models.JournalReflection,
             _h_models.HabitDefinition, _h_models.HabitLog, _h_models.HabitInsight,
-            _g_models.GoalDefinition, _g_models.GoalMilestone,
+            _g_models.GoalDefinition, _g_models.GoalMilestone, _g_models.GoalHabitLink,
             _m_models.MeditationSession,
         ]
 
