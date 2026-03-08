@@ -9,6 +9,7 @@ import {
   ChevronRight, Activity, Flame as FlameIcon, Brain as BrainIcon, Settings,
 } from 'lucide-vue-next'
 import SettingsPanel from './SettingsPanel.vue'
+import BackgroundTheme from './BackgroundTheme.vue'
 
 // --- Settings ---
 const showSettings = ref(false)
@@ -1655,12 +1656,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div
-    class="max-w-2xl mx-auto py-10 animate-fade-in"
-    :class="activeTab !== 'dashboard'
-      ? 'px-6 mx-4 sm:mx-auto rounded-2xl bg-surface-0/70 backdrop-blur-xl border border-white/[0.04]'
-      : 'px-6'"
-  >
+  <div class="relative">
+    <!-- Animated background layer -->
+    <BackgroundTheme />
+
+    <div
+      class="relative z-10 max-w-2xl mx-auto py-10 animate-fade-in"
+      :class="activeTab !== 'dashboard'
+        ? 'px-6 mx-4 sm:mx-auto rounded-2xl bg-surface-0/70 backdrop-blur-xl border border-white/[0.04]'
+        : 'px-6'"
+    >
 
     <!-- Success Toasts -->
     <transition name="fade">
@@ -3375,5 +3380,6 @@ onUnmounted(() => {
     <transition name="fade">
       <SettingsPanel v-if="showSettings" @close="showSettings = false" />
     </transition>
+    </div>
   </div>
 </template>
