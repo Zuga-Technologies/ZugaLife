@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@core/auth/store'
 import { getToken } from '@core/api/client'
-import { Settings } from 'lucide-vue-next'
+import { Settings, Leaf } from 'lucide-vue-next'
 import BackgroundTheme from './BackgroundTheme.vue'
 import SettingsPanel from './SettingsPanel.vue'
 
@@ -50,7 +50,7 @@ function goHome() {
           @click="goHome"
           class="flex items-center gap-2 mr-8 transition-opacity hover:opacity-80"
         >
-          <span class="text-xl font-bold text-accent">🌿</span>
+          <Leaf :size="20" class="text-accent" />
           <span class="text-sm font-semibold text-txt-primary tracking-wide">ZugaLife</span>
         </button>
         <div class="flex-1" />
@@ -86,7 +86,7 @@ function goHome() {
         <div class="relative glass-card w-full max-w-sm p-8 animate-slide-up">
           <div class="flex flex-col items-center mb-8">
             <div class="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center mb-4 animate-pulse-glow">
-              <span class="text-2xl">🌿</span>
+              <Leaf :size="24" class="text-accent" />
             </div>
             <h1 class="text-xl font-semibold text-txt-primary">ZugaLife</h1>
             <p class="text-sm text-txt-muted mt-1">Sign in to continue</p>

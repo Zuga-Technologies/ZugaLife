@@ -382,6 +382,71 @@ async def uncheck_habit(
         await session.delete(log)
 
 
+# --- Reset ---
+
+
+@router.delete("/reset/today", status_code=200)
+async def reset_today(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Delete all habit logs for today — uncheck everything."""
+    async with get_session() as session:
+        result = await session.execute(
+            delete(HabitLog)
+            .where(
+                HabitLog.user_id == user.id,
+                HabitLog.log_date == date.today(),
+            )
+            .returning(HabitLog.id)
+        )
+        count = len(result.all())
+    return {"deleted": count}
+
+
+@router.delete("/reset/history", status_code=200)
+async def reset_all_history(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Delete ALL habit logs for this user. Streaks reset to zero."""
+    async with get_session() as session:
+        result = await session.execute(
+            delete(HabitLog)
+            .where(HabitLog.user_id == user.id)
+            .returning(HabitLog.id)
+        )
+        count = len(result.all())
+    return {"deleted": count}
+
+
+@router.delete("/reset/{habit_id}", status_code=200)
+async def reset_single_habit(
+    habit_id: int,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Delete all logs for a single habit. Its streak resets to zero."""
+    async with get_session() as session:
+        # Verify ownership
+        habit = (await session.execute(
+            select(HabitDefinition).where(
+                HabitDefinition.id == habit_id,
+                HabitDefinition.user_id == user.id,
+            )
+        )).scalar_one_or_none()
+        if not habit:
+            raise HTTPException(404, "Habit not found")
+
+        result = await session.execute(
+            delete(HabitLog)
+            .where(
+                HabitLog.user_id == user.id,
+                HabitLog.habit_id == habit_id,
+            )
+            .returning(HabitLog.id)
+        )
+        count = len(result.all())
+    return {"deleted": count, "habit": habit.name}
+
+
 # --- Check-in & History ---
 
 

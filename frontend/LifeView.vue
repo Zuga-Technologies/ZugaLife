@@ -602,6 +602,44 @@ async function deleteCustomHabit(habit: HabitDefinition) {
   }
 }
 
+// --- Habit Resets ---
+
+const resetConfirm = ref<'today' | 'history' | null>(null)
+const resettingHabit = ref<number | null>(null)
+
+async function resetToday() {
+  habitError.value = null
+  try {
+    const res = await api.delete<{ deleted: number }>('/api/life/habits/reset/today')
+    habitSuccess.value = `Cleared ${res.deleted} check-ins for today.`
+    setTimeout(() => { habitSuccess.value = null }, 2500)
+    resetConfirm.value = null
+    await Promise.all([fetchHabitCheckin(), fetchHabitStreaks()])
+  } catch { habitError.value = 'Reset failed.' }
+}
+
+async function resetAllHistory() {
+  habitError.value = null
+  try {
+    const res = await api.delete<{ deleted: number }>('/api/life/habits/reset/history')
+    habitSuccess.value = `Cleared ${res.deleted} total logs. Fresh start!`
+    setTimeout(() => { habitSuccess.value = null }, 2500)
+    resetConfirm.value = null
+    await Promise.all([fetchHabitCheckin(), fetchHabitStreaks()])
+  } catch { habitError.value = 'Reset failed.' }
+}
+
+async function resetSingleHabit(habitId: number) {
+  habitError.value = null
+  try {
+    const res = await api.delete<{ deleted: number; habit: string }>(`/api/life/habits/reset/${habitId}`)
+    habitSuccess.value = `Reset "${res.habit}" — ${res.deleted} logs cleared.`
+    setTimeout(() => { habitSuccess.value = null }, 2500)
+    resettingHabit.value = null
+    await Promise.all([fetchHabitCheckin(), fetchHabitStreaks()])
+  } catch { habitError.value = 'Reset failed.' }
+}
+
 async function generateHabitInsight() {
   if (insightGenerating.value) return
   insightGenerating.value = true
@@ -1982,6 +2020,37 @@ onUnmounted(() => {
               <p class="text-xs text-txt-muted">Longest: {{ habitStreaks.overall_longest }} days</p>
             </div>
           </div>
+
+          <!-- Reset options -->
+          <div class="mt-6 flex flex-wrap gap-2">
+            <button
+              v-if="resetConfirm !== 'today'"
+              @click="resetConfirm = 'today'"
+              class="text-xs text-txt-muted hover:text-txt-secondary transition-colors"
+            >
+              Reset today
+            </button>
+            <div v-else class="flex items-center gap-2 text-xs animate-fade-in">
+              <span class="text-txt-muted">Uncheck all today?</span>
+              <button @click="resetToday" class="text-red-400 hover:text-red-300 font-medium">Yes, clear</button>
+              <button @click="resetConfirm = null" class="text-txt-muted hover:text-txt-primary">Cancel</button>
+            </div>
+
+            <span class="text-txt-muted/30">·</span>
+
+            <button
+              v-if="resetConfirm !== 'history'"
+              @click="resetConfirm = 'history'"
+              class="text-xs text-txt-muted hover:text-txt-secondary transition-colors"
+            >
+              Reset all history
+            </button>
+            <div v-else class="flex items-center gap-2 text-xs animate-fade-in">
+              <span class="text-red-400">Delete ALL logs &amp; streaks?</span>
+              <button @click="resetAllHistory" class="text-red-400 hover:text-red-300 font-medium">Yes, reset everything</button>
+              <button @click="resetConfirm = null" class="text-txt-muted hover:text-txt-primary">Cancel</button>
+            </div>
+          </div>
         </template>
         <div v-else class="glass-card p-8 text-center">
           <p class="text-txt-muted">No habits set up yet.</p>
@@ -2153,6 +2222,17 @@ onUnmounted(() => {
             >
               {{ habit.is_active ? 'Deactivate' : 'Activate' }}
             </button>
+            <button
+              v-if="resettingHabit !== habit.id"
+              @click="resettingHabit = habit.id"
+              class="text-xs text-txt-muted hover:text-red-400 transition-colors px-2 py-1"
+            >
+              Reset
+            </button>
+            <div v-else class="flex items-center gap-1 animate-fade-in">
+              <button @click="resetSingleHabit(habit.id)" class="text-xs text-red-400 hover:text-red-300 font-medium px-1">Clear logs</button>
+              <button @click="resettingHabit = null" class="text-xs text-txt-muted hover:text-txt-primary px-1">Cancel</button>
+            </div>
             <button
               v-if="!habit.is_preset"
               @click="deleteCustomHabit(habit)"
