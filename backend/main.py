@@ -9,8 +9,12 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Load .env into os.environ so shared modules (e.g. auth) can read app-level vars
+load_dotenv()
 
 # Ensure ZugaLife/backend is on sys.path so 'core' resolves via symlink
 sys.path.insert(0, str(Path(__file__).parent))
