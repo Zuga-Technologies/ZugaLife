@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { api, ApiError, getToken } from '@core/api/client'
 import { startAmbience, stopAmbience, pauseAmbience, resumeAmbience, setAmbienceVolume } from './ambience'
 import { moodIcons, meditationTypeIcons, ambienceIcons, habitIcons, habitIconPicker, getIcon, BrandIcon } from './icons'
-import { BookOpen } from 'lucide-vue-next'
+import { BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle } from 'lucide-vue-next'
 
 // --- Tabs ---
 
-type Tab = 'journal' | 'habits' | 'goals' | 'meditate'
+type Tab = 'journal' | 'habits' | 'goals' | 'meditate' | 'therapist'
 const activeTab = ref<Tab>('journal')
 
 // ============================
@@ -1231,6 +1231,235 @@ function formatDate(iso: string): string {
   })
 }
 
+// ============================
+// THERAPIST
+// ============================
+
+interface TherapistMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+interface TherapistSessionNote {
+  id: number
+  themes: string
+  patterns: string | null
+  follow_up: string | null
+  mood_snapshot: string | null
+  message_count: number
+  cost: number
+  provider: string
+  created_at: string
+  updated_at: string
+}
+
+interface TherapistStatus {
+  sessions_used: number
+  sessions_limit: number
+  sessions_remaining: number
+  is_first_session: boolean
+}
+
+type TherapistView = 'chat' | 'notes' | 'note-detail'
+const therapistView = ref<TherapistView>('chat')
+
+const therapistMessages = ref<TherapistMessage[]>([])
+const therapistInput = ref('')
+const therapistSending = ref(false)
+const therapistGreeting = ref('')
+const therapistDisclaimer = "I'm an AI companion, not a licensed therapist. I draw from psychology, philosophy, and contemplative traditions to help you reflect. I make mistakes \u2014 please push back when something doesn't feel right. For crisis support, call 988 or text HOME to 741741."
+const therapistStatus = ref<TherapistStatus | null>(null)
+const therapistError = ref<string | null>(null)
+const therapistSuccess = ref<string | null>(null)
+const therapistSessionActive = ref(false)
+const therapistEndingSession = ref(false)
+const loadingTherapist = ref(true)
+const therapistAvailable = ref(true)
+
+const therapistNotes = ref<TherapistSessionNote[]>([])
+const therapistCurrentNote = ref<TherapistSessionNote | null>(null)
+const therapistEditingNote = ref(false)
+const therapistEditThemes = ref('')
+const therapistEditPatterns = ref('')
+const therapistEditFollowUp = ref('')
+
+const therapistMessagesRemaining = ref(20)
+
+const chatContainer = ref<HTMLElement | null>(null)
+
+watch(therapistMessages, () => {
+  nextTick(() => {
+    if (chatContainer.value) {
+      chatContainer.value.scrollTop = chatContainer.value.scrollHeight
+    }
+  })
+}, { deep: true })
+
+async function fetchTherapistStatus() {
+  try {
+    therapistStatus.value = await api.get<TherapistStatus>('/api/life/therapist/status')
+    therapistAvailable.value = true
+  } catch {
+    therapistAvailable.value = false
+  }
+}
+
+async function fetchTherapistGreeting() {
+  try {
+    const res = await api.get<{ greeting: string; is_first_session: boolean; disclaimer: string }>('/api/life/therapist/greeting')
+    therapistGreeting.value = res.greeting
+    // disclaimer is hardcoded in frontend — no need to fetch
+  } catch {
+    therapistGreeting.value = ''
+  }
+}
+
+async function fetchTherapistNotes() {
+  try {
+    const res = await api.get<{ notes: TherapistSessionNote[]; total: number }>('/api/life/therapist/notes')
+    therapistNotes.value = res.notes
+  } catch { /* silent */ }
+}
+
+async function startTherapistSession() {
+  therapistMessages.value = []
+  therapistSessionActive.value = true
+  therapistError.value = null
+  therapistMessagesRemaining.value = 20
+  therapistSending.value = true
+
+  // Fetch greeting on demand if not already loaded
+  if (!therapistGreeting.value) {
+    await fetchTherapistGreeting()
+  }
+  if (therapistGreeting.value) {
+    therapistMessages.value.push({ role: 'assistant', content: therapistGreeting.value })
+  }
+  therapistSending.value = false
+}
+
+async function sendTherapistMessage() {
+  const text = therapistInput.value.trim()
+  if (!text || therapistSending.value) return
+
+  therapistInput.value = ''
+  therapistMessages.value.push({ role: 'user', content: text })
+  therapistSending.value = true
+  therapistError.value = null
+
+  try {
+    const apiMessages = therapistMessages.value.map(m => ({ role: m.role, content: m.content }))
+    const res = await api.post<{ content: string; message_index: number; session_messages_remaining: number; cost: number }>(
+      '/api/life/therapist/chat',
+      { messages: apiMessages },
+    )
+    therapistMessages.value.push({ role: 'assistant', content: res.content })
+    therapistMessagesRemaining.value = res.session_messages_remaining
+
+    // Auto-end session when limit reached (therapist already wrapped up naturally)
+    if (res.session_messages_remaining <= 0) {
+      therapistSending.value = false
+      await endTherapistSession()
+      return
+    }
+  } catch (e) {
+    if (e instanceof ApiError) {
+      const detail = (e.body as Record<string, string>).detail
+      if (e.status === 429) {
+        therapistError.value = detail ?? 'Session limit reached for today.'
+      } else if (e.status === 503) {
+        therapistError.value = 'Therapist unavailable — Venice may be down.'
+        therapistAvailable.value = false
+      } else {
+        therapistError.value = detail ?? `Error (${e.status})`
+      }
+    } else {
+      therapistError.value = 'Network error — is the backend running?'
+    }
+  } finally {
+    therapistSending.value = false
+  }
+}
+
+async function endTherapistSession() {
+  if (therapistMessages.value.length < 2) {
+    therapistSessionActive.value = false
+    therapistMessages.value = []
+    return
+  }
+  therapistEndingSession.value = true
+  therapistError.value = null
+
+  try {
+    const apiMessages = therapistMessages.value.map(m => ({ role: m.role, content: m.content }))
+    await api.post('/api/life/therapist/end-session', { messages: apiMessages })
+    therapistSuccess.value = 'Session saved!'
+    setTimeout(() => { therapistSuccess.value = null }, 3000)
+    therapistSessionActive.value = false
+    therapistMessages.value = []
+    await fetchTherapistStatus()
+    await fetchTherapistGreeting()
+    await fetchTherapistNotes()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      therapistError.value = (e.body as Record<string, string>).detail ?? 'Failed to save session.'
+    } else {
+      therapistError.value = 'Network error'
+    }
+  } finally {
+    therapistEndingSession.value = false
+  }
+}
+
+async function viewTherapistNote(note: TherapistSessionNote) {
+  therapistCurrentNote.value = note
+  therapistEditingNote.value = false
+  therapistView.value = 'note-detail'
+}
+
+function startEditingNote() {
+  if (!therapistCurrentNote.value) return
+  therapistEditThemes.value = therapistCurrentNote.value.themes
+  therapistEditPatterns.value = therapistCurrentNote.value.patterns ?? ''
+  therapistEditFollowUp.value = therapistCurrentNote.value.follow_up ?? ''
+  therapistEditingNote.value = true
+}
+
+async function saveNoteEdit() {
+  if (!therapistCurrentNote.value) return
+  try {
+    therapistCurrentNote.value = await api.patch<TherapistSessionNote>(
+      `/api/life/therapist/notes/${therapistCurrentNote.value.id}`,
+      {
+        themes: therapistEditThemes.value || undefined,
+        patterns: therapistEditPatterns.value || undefined,
+        follow_up: therapistEditFollowUp.value || undefined,
+      },
+    )
+    therapistEditingNote.value = false
+    therapistSuccess.value = 'Note updated!'
+    setTimeout(() => { therapistSuccess.value = null }, 2000)
+    await fetchTherapistNotes()
+  } catch {
+    therapistError.value = 'Failed to update note.'
+  }
+}
+
+async function deleteTherapistNote(id: number) {
+  try {
+    await api.delete(`/api/life/therapist/notes/${id}`)
+    therapistNotes.value = therapistNotes.value.filter(n => n.id !== id)
+    if (therapistCurrentNote.value?.id === id) {
+      therapistCurrentNote.value = null
+      therapistView.value = 'notes'
+    }
+    therapistSuccess.value = 'Note deleted.'
+    setTimeout(() => { therapistSuccess.value = null }, 2000)
+  } catch {
+    therapistError.value = 'Failed to delete note.'
+  }
+}
+
 // --- Init ---
 
 onMounted(async () => {
@@ -1239,11 +1468,14 @@ onMounted(async () => {
     fetchHabitCheckin(), fetchHabitStreaks(), fetchAllHabits(),
     fetchGoals(), fetchGoalTemplates(), fetchWeeklyTargets(),
     fetchMedRemaining(), fetchMedSessions(),
+    fetchTherapistStatus(), fetchTherapistNotes(),
   ])
   loadingJournal.value = false
   loadingHabits.value = false
   loadingGoals.value = false
   loadingMeditation.value = false
+  loadingTherapist.value = false
+  // Greeting fetched on-demand in startTherapistSession() — don't block page load
 })
 
 onUnmounted(() => {
@@ -1257,10 +1489,10 @@ onUnmounted(() => {
     <!-- Success Toasts -->
     <transition name="fade">
       <div
-        v-if="journalSuccess || habitSuccess || goalSuccess || medSuccess"
+        v-if="journalSuccess || habitSuccess || goalSuccess || medSuccess || therapistSuccess"
         class="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg bg-emerald-600 text-white font-medium text-sm shadow-lg"
       >
-        {{ journalSuccess || habitSuccess || goalSuccess || medSuccess }}
+        {{ journalSuccess || habitSuccess || goalSuccess || medSuccess || therapistSuccess }}
       </div>
     </transition>
 
@@ -1319,6 +1551,17 @@ onUnmounted(() => {
           : 'text-txt-muted border-transparent hover:text-txt-primary'"
       >
         Meditate
+      </button>
+      <button
+        @click="activeTab = 'therapist'"
+        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5"
+        :class="activeTab === 'therapist'
+          ? 'text-accent border-accent'
+          : 'text-txt-muted border-transparent hover:text-txt-primary'"
+      >
+        <MessageCircleHeart :size="14" />
+        Therapist
+        <span v-if="!therapistAvailable" class="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" title="Unavailable"></span>
       </button>
     </div>
 
@@ -2309,6 +2552,262 @@ onUnmounted(() => {
             </button>
           </div>
         </div>
+      </template>
+    </template>
+
+    <!-- ===== THERAPIST TAB ===== -->
+    <template v-if="activeTab === 'therapist'">
+      <!-- Unavailable state -->
+      <div v-if="!therapistAvailable" class="glass-card p-8 text-center">
+        <AlertTriangle :size="32" class="mx-auto mb-3 text-amber-400" />
+        <h3 class="text-lg font-semibold text-txt-primary mb-2">Therapist Unavailable</h3>
+        <p class="text-sm text-txt-muted">Venice AI is currently unreachable. Please try again later.</p>
+        <button @click="fetchTherapistStatus()" class="mt-4 px-4 py-2 text-sm rounded-lg bg-accent/15 text-accent hover:bg-accent/25 transition-colors">
+          Retry Connection
+        </button>
+      </div>
+
+      <template v-else>
+        <!-- Sub-nav -->
+        <div class="flex gap-3 mb-6">
+          <button
+            v-for="view in [
+              { key: 'chat', label: 'Chat' },
+              { key: 'notes', label: 'Session Notes' },
+            ] as { key: TherapistView; label: string }[]"
+            :key="view.key"
+            @click="therapistView = view.key as TherapistView; if (view.key === 'notes') fetchTherapistNotes()"
+            class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+            :class="therapistView === view.key || (therapistView === 'note-detail' && view.key === 'notes')
+              ? 'bg-accent/15 text-accent'
+              : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
+          >
+            {{ view.label }}
+          </button>
+          <span v-if="therapistStatus" class="ml-auto text-xs text-txt-muted self-center">
+            {{ therapistStatus.sessions_remaining }}/{{ therapistStatus.sessions_limit }} sessions left today
+          </span>
+        </div>
+
+        <p v-if="therapistError" class="text-sm text-red-400 mb-4">{{ therapistError }}</p>
+
+        <!-- ===== CHAT VIEW ===== -->
+        <template v-if="therapistView === 'chat'">
+          <!-- Pre-session: start button -->
+          <div v-if="!therapistSessionActive" class="space-y-4">
+            <!-- Disclaimer -->
+            <div v-if="therapistDisclaimer" class="glass-card p-4 border border-amber-500/20">
+              <div class="flex items-start gap-2">
+                <AlertTriangle :size="16" class="text-amber-400 mt-0.5 shrink-0" />
+                <p class="text-xs text-txt-muted leading-relaxed">{{ therapistDisclaimer }}</p>
+              </div>
+            </div>
+
+            <div class="glass-card p-8 text-center">
+              <MessageCircleHeart :size="40" class="mx-auto mb-4 text-accent" />
+              <h3 class="text-lg font-semibold text-txt-primary mb-2">Ready to talk?</h3>
+              <p class="text-sm text-txt-muted mb-6 max-w-md mx-auto">
+                A private space to reflect, process, and explore what's on your mind.
+                Powered by Venice AI — your data stays private.
+              </p>
+              <button
+                @click="startTherapistSession()"
+                :disabled="therapistStatus?.sessions_remaining === 0"
+                class="px-6 py-3 rounded-lg bg-accent text-white font-medium text-sm hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {{ therapistStatus?.sessions_remaining === 0 ? 'No sessions left today' : 'Start Session' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Active session: chat -->
+          <div v-else class="flex flex-col" style="height: calc(100vh - 300px); min-height: 400px;">
+            <!-- Messages -->
+            <div class="flex-1 overflow-y-auto space-y-4 mb-4 pr-1" ref="chatContainer">
+              <div
+                v-for="(msg, i) in therapistMessages"
+                :key="i"
+                class="flex"
+                :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+              >
+                <div
+                  class="max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed"
+                  :class="msg.role === 'user'
+                    ? 'bg-accent text-white rounded-br-md'
+                    : 'glass-card text-txt-primary rounded-bl-md'"
+                >
+                  <p v-for="(para, j) in msg.content.split('\n\n')" :key="j" :class="j > 0 ? 'mt-2' : ''">
+                    {{ para }}
+                  </p>
+                </div>
+              </div>
+
+              <!-- Typing indicator -->
+              <div v-if="therapistSending" class="flex justify-start">
+                <div class="glass-card rounded-2xl rounded-bl-md px-4 py-3">
+                  <div class="flex gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-txt-muted animate-bounce" style="animation-delay: 0ms"></span>
+                    <span class="w-2 h-2 rounded-full bg-txt-muted animate-bounce" style="animation-delay: 150ms"></span>
+                    <span class="w-2 h-2 rounded-full bg-txt-muted animate-bounce" style="animation-delay: 300ms"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Input area -->
+            <div class="border-t border-bdr pt-3">
+              <div class="flex items-center gap-2 mb-2">
+                <button
+                  @click="endTherapistSession()"
+                  :disabled="therapistEndingSession"
+                  class="ml-auto px-3 py-1.5 text-xs rounded-lg border border-bdr text-txt-muted hover:text-txt-primary hover:bg-surface-2 transition-colors disabled:opacity-40"
+                >
+                  {{ therapistEndingSession ? 'Saving...' : 'End Session' }}
+                </button>
+              </div>
+              <div class="flex gap-2">
+                <textarea
+                  v-model="therapistInput"
+                  @keydown.enter.exact.prevent="sendTherapistMessage()"
+                  placeholder="What's on your mind..."
+                  rows="2"
+                  class="flex-1 bg-surface-2 border border-bdr rounded-xl px-4 py-3 text-sm text-txt-primary placeholder-txt-muted resize-none focus:outline-none focus:ring-1 focus:ring-accent/50"
+                  :disabled="therapistSending || therapistMessagesRemaining <= 0"
+                ></textarea>
+                <button
+                  @click="sendTherapistMessage()"
+                  :disabled="!therapistInput.trim() || therapistSending || therapistMessagesRemaining <= 0"
+                  class="self-end px-4 py-3 rounded-xl bg-accent text-white hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Send :size="18" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ===== NOTES LIST VIEW ===== -->
+        <template v-if="therapistView === 'notes'">
+          <div v-if="therapistNotes.length === 0" class="glass-card p-8 text-center">
+            <ScrollText :size="32" class="mx-auto mb-3 text-txt-muted" />
+            <p class="text-sm text-txt-muted">No session notes yet. Complete a session to see notes here.</p>
+          </div>
+
+          <div v-else class="space-y-3">
+            <div
+              v-for="note in therapistNotes"
+              :key="note.id"
+              @click="viewTherapistNote(note)"
+              class="glass-card p-4 cursor-pointer hover:bg-surface-2 transition-colors group"
+            >
+              <div class="flex items-start justify-between mb-2">
+                <div>
+                  <p class="text-sm font-medium text-txt-primary">{{ note.themes.split('\n')[0] }}</p>
+                  <p class="text-xs text-txt-muted mt-0.5">{{ formatDate(note.created_at) }}</p>
+                </div>
+                <button
+                  @click.stop="deleteTherapistNote(note.id)"
+                  class="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-txt-muted hover:text-red-400 hover:bg-red-400/10 transition-all"
+                  title="Delete note"
+                >
+                  <Trash2 :size="14" />
+                </button>
+              </div>
+              <div v-if="note.mood_snapshot" class="flex items-center gap-1.5 mb-2">
+                <span class="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent">{{ note.mood_snapshot }}</span>
+              </div>
+              <p v-if="note.follow_up" class="text-xs text-txt-muted line-clamp-2">{{ note.follow_up }}</p>
+              <div class="flex items-center gap-3 mt-2 text-xs text-txt-muted">
+                <span>{{ note.message_count }} messages</span>
+                <span>${{ note.cost.toFixed(4) }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ===== NOTE DETAIL VIEW ===== -->
+        <template v-if="therapistView === 'note-detail' && therapistCurrentNote">
+          <button
+            @click="therapistView = 'notes'; therapistEditingNote = false"
+            class="text-sm text-accent hover:underline mb-4 inline-block"
+          >
+            &larr; Back to notes
+          </button>
+
+          <div class="glass-card p-6 space-y-5">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs text-txt-muted">{{ formatDate(therapistCurrentNote.created_at) }}</p>
+                <div v-if="therapistCurrentNote.mood_snapshot" class="mt-1">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent">{{ therapistCurrentNote.mood_snapshot }}</span>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  v-if="!therapistEditingNote"
+                  @click="startEditingNote()"
+                  class="p-1.5 rounded-lg text-txt-muted hover:text-accent hover:bg-accent/10 transition-colors"
+                  title="Edit note"
+                >
+                  <Pencil :size="16" />
+                </button>
+                <button
+                  @click="deleteTherapistNote(therapistCurrentNote.id)"
+                  class="p-1.5 rounded-lg text-txt-muted hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                  title="Delete note"
+                >
+                  <Trash2 :size="16" />
+                </button>
+              </div>
+            </div>
+
+            <!-- View mode -->
+            <template v-if="!therapistEditingNote">
+              <div>
+                <h4 class="text-xs font-semibold text-txt-muted uppercase tracking-wider mb-1.5">Themes</h4>
+                <p class="text-sm text-txt-primary whitespace-pre-line">{{ therapistCurrentNote.themes }}</p>
+              </div>
+              <div v-if="therapistCurrentNote.patterns">
+                <h4 class="text-xs font-semibold text-txt-muted uppercase tracking-wider mb-1.5">Patterns</h4>
+                <p class="text-sm text-txt-primary whitespace-pre-line">{{ therapistCurrentNote.patterns }}</p>
+              </div>
+              <div v-if="therapistCurrentNote.follow_up">
+                <h4 class="text-xs font-semibold text-txt-muted uppercase tracking-wider mb-1.5">Follow-up</h4>
+                <p class="text-sm text-txt-primary whitespace-pre-line">{{ therapistCurrentNote.follow_up }}</p>
+              </div>
+            </template>
+
+            <!-- Edit mode -->
+            <template v-else>
+              <div>
+                <label class="text-xs font-semibold text-txt-muted uppercase tracking-wider mb-1.5 block">Themes</label>
+                <textarea v-model="therapistEditThemes" rows="3" class="w-full bg-surface-2 border border-bdr rounded-lg px-3 py-2 text-sm text-txt-primary resize-none focus:outline-none focus:ring-1 focus:ring-accent/50"></textarea>
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-txt-muted uppercase tracking-wider mb-1.5 block">Patterns</label>
+                <textarea v-model="therapistEditPatterns" rows="3" class="w-full bg-surface-2 border border-bdr rounded-lg px-3 py-2 text-sm text-txt-primary resize-none focus:outline-none focus:ring-1 focus:ring-accent/50"></textarea>
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-txt-muted uppercase tracking-wider mb-1.5 block">Follow-up</label>
+                <textarea v-model="therapistEditFollowUp" rows="3" class="w-full bg-surface-2 border border-bdr rounded-lg px-3 py-2 text-sm text-txt-primary resize-none focus:outline-none focus:ring-1 focus:ring-accent/50"></textarea>
+              </div>
+              <div class="flex gap-2 justify-end">
+                <button @click="therapistEditingNote = false" class="px-3 py-1.5 text-sm rounded-lg text-txt-muted hover:text-txt-primary transition-colors">
+                  Cancel
+                </button>
+                <button @click="saveNoteEdit()" class="px-4 py-1.5 text-sm rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors">
+                  Save
+                </button>
+              </div>
+            </template>
+
+            <div class="flex items-center gap-3 pt-3 border-t border-bdr text-xs text-txt-muted">
+              <span>{{ therapistCurrentNote.message_count }} messages</span>
+              <span>{{ therapistCurrentNote.provider }}</span>
+              <span>${{ therapistCurrentNote.cost.toFixed(4) }}</span>
+            </div>
+          </div>
+        </template>
       </template>
     </template>
 

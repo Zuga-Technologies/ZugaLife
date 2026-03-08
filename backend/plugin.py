@@ -1,4 +1,4 @@
-"""ZugaLife studio plugin — mood, journal, habits, goals, and meditation."""
+"""ZugaLife studio plugin — mood, journal, habits, goals, meditation, and therapist."""
 
 import importlib.util
 import logging
@@ -79,6 +79,16 @@ _m_schemas = _load_submodule("meditation", "schemas")
 _m_prompts = _load_submodule("meditation", "prompts")
 _m_routes = _load_submodule("meditation", "routes")
 
+# Load therapist submodule: models → schemas → safety → prompts → context → routes
+# SECURITY: therapist data flows ONE WAY — other modules read INTO therapist context,
+# but therapist notes NEVER flow out to other modules.
+_t_models = _load_submodule("therapist", "models")
+_t_schemas = _load_submodule("therapist", "schemas")
+_t_safety = _load_submodule("therapist", "safety")
+_t_prompts = _load_submodule("therapist", "prompts")
+_t_context = _load_submodule("therapist", "context")
+_t_routes = _load_submodule("therapist", "routes")
+
 # Merge all routers into a single combined router
 _combined_router = APIRouter()
 _combined_router.include_router(_routes.router)
@@ -86,6 +96,7 @@ _combined_router.include_router(_j_routes.router)
 _combined_router.include_router(_h_routes.router)
 _combined_router.include_router(_g_routes.router)
 _combined_router.include_router(_m_routes.router)
+_combined_router.include_router(_t_routes.router)
 
 
 class ZugaLifePlugin(StudioPlugin):
@@ -96,7 +107,7 @@ class ZugaLifePlugin(StudioPlugin):
 
     @property
     def version(self) -> str:
-        return "0.5.0"
+        return "0.7.0"
 
     @property
     def router(self) -> APIRouter:
@@ -110,6 +121,7 @@ class ZugaLifePlugin(StudioPlugin):
             _h_models.HabitDefinition, _h_models.HabitLog, _h_models.HabitInsight,
             _g_models.GoalDefinition, _g_models.GoalMilestone, _g_models.GoalHabitLink,
             _m_models.MeditationSession,
+            _t_models.TherapistSessionNote,
         ]
 
     async def on_startup(self) -> None:
@@ -125,4 +137,4 @@ class ZugaLifePlugin(StudioPlugin):
 
         async with get_engine().begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("ZugaLife tables initialized (mood + journal + habits + goals + meditation)")
+        logger.info("ZugaLife tables initialized (mood + journal + habits + goals + meditation + therapist)")

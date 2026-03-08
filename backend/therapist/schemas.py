@@ -1,0 +1,59 @@
+"""ZugaLife therapist request/response schemas."""
+
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+
+# --- Requests ---
+
+
+class TherapistChatRequest(BaseModel):
+    messages: list[dict] = Field(..., min_length=1)
+
+
+class TherapistEndSessionRequest(BaseModel):
+    messages: list[dict] = Field(..., min_length=1)
+
+
+class SessionNoteUpdateRequest(BaseModel):
+    themes: str | None = Field(None, min_length=1, max_length=5000)
+    patterns: str | None = Field(None, max_length=5000)
+    follow_up: str | None = Field(None, max_length=5000)
+
+
+# --- Responses ---
+
+
+class TherapistChatResponse(BaseModel):
+    content: str
+    message_index: int
+    session_messages_remaining: int
+    cost: float
+
+
+class SessionNoteResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    themes: str
+    patterns: str | None
+    follow_up: str | None
+    mood_snapshot: str | None
+    message_count: int
+    cost: float
+    provider: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SessionNoteListResponse(BaseModel):
+    notes: list[SessionNoteResponse]
+    total: int
+
+
+class TherapistStatusResponse(BaseModel):
+    sessions_used: int
+    sessions_limit: int
+    sessions_remaining: int
+    is_first_session: bool
