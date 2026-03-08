@@ -6,8 +6,12 @@ import { moodIcons, meditationTypeIcons, ambienceIcons, habitIcons, habitIconPic
 import {
   BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle,
   LayoutDashboard, TrendingUp, Target, Clock, CalendarDays, ArrowRight, ArrowLeft,
-  ChevronRight, Activity, Flame as FlameIcon, Brain as BrainIcon,
+  ChevronRight, Activity, Flame as FlameIcon, Brain as BrainIcon, Settings,
 } from 'lucide-vue-next'
+import SettingsPanel from './SettingsPanel.vue'
+
+// --- Settings ---
+const showSettings = ref(false)
 
 // --- Tabs ---
 
@@ -1695,11 +1699,20 @@ onUnmounted(() => {
       </div>
 
       <template v-else-if="dashboardData">
-        <!-- Greeting -->
-        <div class="mb-8 animate-fade-in inline-block px-5 py-3 rounded-2xl bg-surface-0/60 backdrop-blur-md">
-          <p class="text-sm text-txt-muted mb-1">{{ formatDashboardDate(dashboardData.date) }}</p>
-          <h2 class="text-2xl font-bold text-txt-primary tracking-tight">{{ dashboardData.greeting }}</h2>
-          <p class="text-sm text-txt-secondary mt-1.5">Here's your week at a glance.</p>
+        <!-- Greeting + settings gear -->
+        <div class="flex items-start justify-between mb-8 animate-fade-in">
+          <div class="inline-block px-5 py-3 rounded-2xl bg-surface-0/60 backdrop-blur-md">
+            <p class="text-sm text-txt-muted mb-1">{{ formatDashboardDate(dashboardData.date) }}</p>
+            <h2 class="text-2xl font-bold text-txt-primary tracking-tight">{{ dashboardData.greeting }}</h2>
+            <p class="text-sm text-txt-secondary mt-1.5">Here's your week at a glance.</p>
+          </div>
+          <button
+            @click="showSettings = true"
+            class="p-2 rounded-lg text-txt-muted transition-colors hover:text-txt-primary hover:bg-surface-3/50"
+            title="Settings"
+          >
+            <Settings :size="18" />
+          </button>
         </div>
 
         <!-- Metric Cards Grid -->
@@ -3358,5 +3371,9 @@ onUnmounted(() => {
       </template>
     </template>
 
+    <!-- Settings panel overlay -->
+    <transition name="fade">
+      <SettingsPanel v-if="showSettings" @close="showSettings = false" />
+    </transition>
   </div>
 </template>
