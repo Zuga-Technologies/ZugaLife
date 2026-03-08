@@ -1613,7 +1613,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-2xl mx-auto px-6 py-10 animate-fade-in">
+  <div
+    class="max-w-2xl mx-auto py-10 animate-fade-in"
+    :class="activeTab !== 'dashboard'
+      ? 'px-6 mx-4 sm:mx-auto rounded-2xl bg-surface-0/70 backdrop-blur-xl border border-white/[0.04]'
+      : 'px-6'"
+  >
 
     <!-- Success Toasts -->
     <transition name="fade">
