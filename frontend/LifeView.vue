@@ -1687,47 +1687,11 @@ onUnmounted(() => {
         <!-- Metric Cards Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
 
-          <!-- MOOD CARD -->
-          <button
-            @click="navigateTo('journal')"
-            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
-            style="animation-delay: 50ms"
-          >
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center gap-2.5">
-                <div class="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                  <Activity :size="18" class="text-amber-400" />
-                </div>
-                <span class="text-sm font-semibold text-txt-primary">Mood</span>
-              </div>
-              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <template v-if="dashboardData.mood.has_data">
-              <div class="flex items-center gap-1.5 mb-3">
-                <template v-for="(entry, i) in dashboardData.mood.recent.slice(0, 7)" :key="i">
-                  <div
-                    class="w-8 h-8 rounded-lg bg-surface-3 flex items-center justify-center transition-transform hover:scale-110"
-                    :title="entry.label + ' — ' + timeAgo(entry.date)"
-                  >
-                    <component :is="moodIcons[entry.emoji]" :size="16" class="text-amber-400" v-if="moodIcons[entry.emoji]" />
-                    <span v-else class="text-sm">{{ entry.emoji }}</span>
-                  </div>
-                </template>
-                <div v-if="dashboardData.mood.recent.length === 0" class="text-xs text-txt-muted">No entries this week</div>
-              </div>
-              <p class="text-xs text-txt-muted">{{ dashboardData.mood.total }} total entries</p>
-            </template>
-            <template v-else>
-              <p class="text-sm text-txt-muted">Track how you're feeling</p>
-              <p class="text-xs text-txt-muted mt-1">Log your first mood in Journal</p>
-            </template>
-          </button>
-
           <!-- HABITS CARD -->
           <button
             @click="navigateTo('habits')"
             class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
-            style="animation-delay: 100ms"
+            style="animation-delay: 50ms"
           >
             <div class="flex items-center justify-between mb-4">
               <div class="flex items-center gap-2.5">
@@ -1776,7 +1740,7 @@ onUnmounted(() => {
           <button
             @click="navigateTo('goals')"
             class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
-            style="animation-delay: 150ms"
+            style="animation-delay: 100ms"
           >
             <div class="flex items-center justify-between mb-4">
               <div class="flex items-center gap-2.5">
@@ -1827,7 +1791,7 @@ onUnmounted(() => {
           <button
             @click="navigateTo('meditate')"
             class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
-            style="animation-delay: 200ms"
+            style="animation-delay: 150ms"
           >
             <div class="flex items-center justify-between mb-4">
               <div class="flex items-center gap-2.5">
@@ -1860,32 +1824,28 @@ onUnmounted(() => {
               <p class="text-xs text-txt-muted mt-1">Breathing, body scan, gratitude & more</p>
             </template>
           </button>
-        </div>
 
-        <!-- Bottom row: Journal + Therapist (full width cards, more subtle) -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-          <!-- JOURNAL CARD -->
+          <!-- JOURNAL & MOOD CARD -->
           <button
             @click="navigateTo('journal')"
             class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
-            style="animation-delay: 250ms"
+            style="animation-delay: 200ms"
           >
             <div class="flex items-center justify-between mb-3">
               <div class="flex items-center gap-2.5">
                 <div class="w-9 h-9 rounded-xl bg-rose-500/10 flex items-center justify-center">
                   <BookOpen :size="18" class="text-rose-400" />
                 </div>
-                <span class="text-sm font-semibold text-txt-primary">Journal</span>
+                <span class="text-sm font-semibold text-txt-primary">Journal & Mood</span>
               </div>
               <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
             <template v-if="dashboardData.journal.has_data">
-              <div class="flex items-baseline gap-1 mb-2">
+              <div class="flex items-baseline gap-1 mb-1">
                 <span class="text-2xl font-bold text-txt-primary">{{ dashboardData.journal.entries_this_week }}</span>
                 <span class="text-xs text-txt-muted">entries this week</span>
               </div>
-              <p v-if="dashboardData.journal.latest_title" class="text-xs text-txt-muted truncate">
+              <p v-if="dashboardData.journal.latest_title" class="text-xs text-txt-muted truncate mb-2">
                 Latest: {{ dashboardData.journal.latest_title }}
               </p>
               <p class="text-xs text-txt-muted">{{ dashboardData.journal.total }} total entries</p>
@@ -1894,37 +1854,49 @@ onUnmounted(() => {
               <p class="text-sm text-txt-muted">Write, reflect, understand</p>
               <p class="text-xs text-txt-muted mt-1">Start your first journal entry</p>
             </template>
-          </button>
-
-          <!-- THERAPIST CARD -->
-          <button
-            @click="navigateTo('therapist')"
-            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
-            style="animation-delay: 300ms"
-          >
-            <div class="flex items-center justify-between mb-3">
-              <div class="flex items-center gap-2.5">
-                <div class="w-9 h-9 rounded-xl bg-teal-500/10 flex items-center justify-center">
-                  <MessageCircleHeart :size="18" class="text-teal-400" />
+            <!-- Mood sparkline -->
+            <div v-if="dashboardData.mood.has_data && dashboardData.mood.recent.length > 0" class="flex items-center gap-1.5 mt-3 pt-3 border-t border-bdr">
+              <template v-for="(entry, i) in dashboardData.mood.recent.slice(0, 5)" :key="i">
+                <div
+                  class="w-7 h-7 rounded-lg bg-surface-3 flex items-center justify-center transition-transform hover:scale-110"
+                  :title="entry.label + ' — ' + timeAgo(entry.date)"
+                >
+                  <component :is="moodIcons[entry.emoji]" :size="14" class="text-amber-400" v-if="moodIcons[entry.emoji]" />
+                  <span v-else class="text-xs">{{ entry.emoji }}</span>
                 </div>
-                <span class="text-sm font-semibold text-txt-primary">Therapist</span>
-              </div>
-              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+              </template>
+              <span class="text-xs text-txt-muted ml-1">recent moods</span>
             </div>
-            <template v-if="dashboardData.therapist.has_data">
-              <p class="text-sm text-txt-secondary mb-2 line-clamp-1">{{ dashboardData.therapist.last_themes }}</p>
-              <div class="flex items-center gap-2 text-xs text-txt-muted">
-                <span v-if="dashboardData.therapist.last_mood" class="px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400">{{ dashboardData.therapist.last_mood }}</span>
-                <span>{{ dashboardData.therapist.total_sessions }} sessions</span>
-                <span v-if="dashboardData.therapist.last_date">· {{ timeAgo(dashboardData.therapist.last_date) }}</span>
-              </div>
-            </template>
-            <template v-else>
-              <p class="text-sm text-txt-muted">AI companion for reflection</p>
-              <p class="text-xs text-txt-muted mt-1">Talk through what's on your mind</p>
-            </template>
           </button>
         </div>
+
+        <!-- Therapist card — full width hero CTA -->
+        <button
+          @click="navigateTo('therapist')"
+          class="dash-card glass-card p-5 w-full text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
+          style="animation-delay: 250ms"
+        >
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 rounded-xl bg-teal-500/10 flex items-center justify-center">
+                <MessageCircleHeart :size="18" class="text-teal-400" />
+              </div>
+              <span class="text-sm font-semibold text-txt-primary">Therapist</span>
+            </div>
+            <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+          <template v-if="dashboardData.therapist.has_data">
+            <p class="text-sm text-txt-secondary mb-2 line-clamp-1">{{ dashboardData.therapist.last_themes }}</p>
+            <div class="flex items-center gap-2 text-xs text-txt-muted">
+              <span v-if="dashboardData.therapist.last_mood" class="px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400">{{ dashboardData.therapist.last_mood }}</span>
+              <span>{{ dashboardData.therapist.total_sessions }} sessions</span>
+              <span v-if="dashboardData.therapist.last_date">· {{ timeAgo(dashboardData.therapist.last_date) }}</span>
+            </div>
+          </template>
+          <template v-else>
+            <p class="text-sm text-txt-muted">AI companion for reflection — talk through what's on your mind</p>
+          </template>
+        </button>
 
         <!-- Streak banner (if exists) -->
         <div
