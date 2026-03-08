@@ -16,7 +16,7 @@ const plugin: StudioFrontendPlugin = {
   basePath: '/life',
   routes,
   nav: {
-    icon: '\uD83C\uDF3F',
+    icon: 'heart',
     order: 1,
   },
 }
