@@ -1656,8 +1656,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative">
-    <!-- Animated background layer -->
+  <div>
+    <!-- Animated background layer (fixed position, -z-10 renders behind content) -->
     <BackgroundTheme />
 
     <div
@@ -1713,7 +1713,7 @@ onUnmounted(() => {
           </div>
           <button
             @click="showSettings = true"
-            class="p-2 rounded-lg text-txt-muted transition-colors hover:text-txt-primary hover:bg-surface-3/50"
+            class="p-2.5 rounded-xl bg-surface-0/60 backdrop-blur-md border border-bdr text-txt-secondary transition-colors hover:text-txt-primary hover:bg-surface-3/70"
             title="Settings"
           >
             <Settings :size="18" />
@@ -1726,7 +1726,7 @@ onUnmounted(() => {
           <!-- HABITS CARD -->
           <button
             @click="navigateTo('habits')"
-            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
+            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
             style="animation-delay: 50ms"
           >
             <div class="flex items-center justify-between mb-4">
@@ -1775,7 +1775,7 @@ onUnmounted(() => {
           <!-- GOALS CARD -->
           <button
             @click="navigateTo('goals')"
-            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
+            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
             style="animation-delay: 100ms"
           >
             <div class="flex items-center justify-between mb-4">
@@ -1788,38 +1788,47 @@ onUnmounted(() => {
               <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
             <template v-if="dashboardData.goals.has_data">
-              <div class="flex items-baseline gap-4 mb-3">
-                <div>
-                  <span class="text-2xl font-bold text-txt-primary">{{ dashboardData.goals.active }}</span>
-                  <span class="text-xs text-txt-muted ml-1">active</span>
+              <div class="flex-1 flex flex-col">
+                <div class="flex items-baseline gap-4 mb-3">
+                  <div>
+                    <span class="text-2xl font-bold text-txt-primary">{{ dashboardData.goals.active }}</span>
+                    <span class="text-xs text-txt-muted ml-1">active</span>
+                  </div>
+                  <div v-if="dashboardData.goals.completed > 0">
+                    <span class="text-lg font-semibold text-emerald-400">{{ dashboardData.goals.completed }}</span>
+                    <span class="text-xs text-txt-muted ml-1">done</span>
+                  </div>
                 </div>
-                <div v-if="dashboardData.goals.completed > 0">
-                  <span class="text-lg font-semibold text-emerald-400">{{ dashboardData.goals.completed }}</span>
-                  <span class="text-xs text-txt-muted ml-1">done</span>
+                <div v-if="dashboardData.goals.milestones_total > 0" class="mb-2">
+                  <div class="flex items-center justify-between text-xs text-txt-muted mb-1">
+                    <span>Milestones</span>
+                    <span>{{ dashboardData.goals.milestones_done }}/{{ dashboardData.goals.milestones_total }}</span>
+                  </div>
+                  <div class="w-full bg-surface-3 rounded-full h-2">
+                    <div
+                      class="h-2 rounded-full bg-sky-500 transition-all duration-500"
+                      :style="{ width: Math.round((dashboardData.goals.milestones_done / dashboardData.goals.milestones_total) * 100) + '%' }"
+                    ></div>
+                  </div>
                 </div>
-              </div>
-              <div v-if="dashboardData.goals.milestones_total > 0" class="mb-2">
-                <div class="flex items-center justify-between text-xs text-txt-muted mb-1">
-                  <span>Milestones</span>
-                  <span>{{ dashboardData.goals.milestones_done }}/{{ dashboardData.goals.milestones_total }}</span>
+                <div v-if="dashboardData.goals.nearest_deadline" class="flex items-center gap-1.5 text-xs text-txt-muted mt-auto">
+                  <CalendarDays :size="12" />
+                  <span>{{ dashboardData.goals.nearest_deadline.title }}</span>
+                  <span class="text-txt-muted">·</span>
+                  <span>{{ formatDeadline(dashboardData.goals.nearest_deadline.date) }}</span>
                 </div>
-                <div class="w-full bg-surface-3 rounded-full h-1.5">
-                  <div
-                    class="h-1.5 rounded-full bg-sky-500 transition-all duration-500"
-                    :style="{ width: Math.round((dashboardData.goals.milestones_done / dashboardData.goals.milestones_total) * 100) + '%' }"
-                  ></div>
-                </div>
-              </div>
-              <div v-if="dashboardData.goals.nearest_deadline" class="flex items-center gap-1.5 text-xs text-txt-muted">
-                <CalendarDays :size="12" />
-                <span>{{ dashboardData.goals.nearest_deadline.title }}</span>
-                <span class="text-txt-muted">·</span>
-                <span>{{ formatDeadline(dashboardData.goals.nearest_deadline.date) }}</span>
               </div>
             </template>
             <template v-else>
-              <p class="text-sm text-txt-muted">Set meaningful goals</p>
-              <p class="text-xs text-txt-muted mt-1">Choose from templates or create your own</p>
+              <div class="flex-1 flex flex-col justify-center">
+                <p class="text-sm text-txt-muted mb-2">Set meaningful goals</p>
+                <p class="text-xs text-txt-muted mb-3">Choose from templates or create your own</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-muted">Fitness</span>
+                  <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-muted">Learning</span>
+                  <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-muted">Career</span>
+                </div>
+              </div>
             </template>
           </button>
 

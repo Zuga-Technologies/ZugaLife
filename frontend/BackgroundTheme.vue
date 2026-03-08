@@ -75,11 +75,13 @@ function loadVideo(src: string) {
     if (videoA.value) {
       videoA.value.src = src
       videoA.value.load()
+      videoA.value.playbackRate = theme.value.speed ?? DEFAULT_SPEED
       videoA.value.play().catch(() => {})
     }
     if (videoB.value) {
       videoB.value.src = src
       videoB.value.load()
+      videoB.value.playbackRate = theme.value.speed ?? DEFAULT_SPEED
     }
   })
 }
@@ -117,11 +119,18 @@ watch(currentTheme, (id) => {
   }
 }, { immediate: false })
 
-// Initial load
+// Initial load — watch videoA ref to ensure the element exists in DOM before loading
+// (v-if="hasVideo" means the <video> may not be rendered on first onMounted tick)
+watch(videoA, (el) => {
+  if (el && theme.value.video && !prefersReducedMotion.value && !videoLoaded.value) {
+    loadVideo(theme.value.video)
+  }
+})
+
 onMounted(() => {
   if (currentTheme.value === 'custom') {
     loadCustomVideo()
-  } else if (theme.value.video && !prefersReducedMotion.value) {
+  } else if (theme.value.video && !prefersReducedMotion.value && videoA.value) {
     loadVideo(theme.value.video)
   }
 })
@@ -135,7 +144,7 @@ onUnmounted(() => document.removeEventListener('zugalife-theme-change', handleTh
 </script>
 
 <template>
-  <div class="fixed inset-0 -z-10 overflow-hidden">
+  <div class="fixed inset-0 z-0 overflow-hidden">
     <!-- Base layer: fallback gradient or solid dark -->
     <div
       class="absolute inset-0 transition-[background] duration-1000"

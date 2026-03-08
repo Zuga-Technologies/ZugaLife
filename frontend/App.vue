@@ -55,13 +55,6 @@ function goHome() {
         </button>
         <div class="flex-1" />
         <div class="flex items-center gap-3">
-          <button
-            @click="showSettings = true"
-            class="p-2 rounded-lg text-txt-muted transition-colors hover:text-txt-primary hover:bg-surface-3/50"
-            title="Settings"
-          >
-            <Settings :size="16" />
-          </button>
           <span class="text-sm text-txt-secondary">{{ auth.user?.email }}</span>
           <button
             @click="handleLogout"

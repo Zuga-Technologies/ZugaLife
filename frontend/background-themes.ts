@@ -43,17 +43,17 @@ export const THEMES: ThemeDefinition[] = [
     preview: 'linear-gradient(135deg, #0f172a, #2dd4bf, #8b5cf6)',
     video: '/backgrounds/northern-lights.mp4',
     overlay: 0.15,
-    speed: 0.3,   // timelapse — needs heavy slowdown
+    speed: 0.7,   // timelapse — below 0.6 causes visible frame chop
     fallbackBg: 'linear-gradient(135deg, #0f172a, #1a3a4a)',
   },
   {
     id: 'still-water',
-    name: 'Still Water',
-    description: 'Gentle ocean surface, soft reflections',
+    name: 'Beach',
+    description: 'Calm ocean waves on a warm day',
     preview: 'linear-gradient(135deg, #0c4a6e, #0ea5e9, #164e63)',
-    video: '/backgrounds/still-water.mp4',
+    video: '/backgrounds/still-water-a.mp4',
     overlay: 0.3,
-    speed: 0.5,   // real-time water — gentle slowdown
+    speed: 0.7,   // real-time water — below 0.6 causes visible frame chop
     fallbackBg: 'linear-gradient(135deg, #0a1929, #0c4a6e)',
   },
   {
@@ -63,7 +63,7 @@ export const THEMES: ThemeDefinition[] = [
     preview: 'radial-gradient(ellipse at 30% 40%, #1a1a2e 0%, #090909 100%)',
     video: '/backgrounds/cosmic-drift.mp4',
     overlay: 0,
-    speed: 0.4,   // slow star drift
+    speed: 0.7,   // slow star drift — below 0.6 causes visible frame chop
     fallbackBg: 'radial-gradient(ellipse at 30% 40%, #12121e, #060610)',
   },
   {
@@ -83,7 +83,7 @@ export const THEMES: ThemeDefinition[] = [
     preview: 'linear-gradient(135deg, #14532d, #166534, #1a3a1a)',
     video: '/backgrounds/forest-stream.mp4',
     overlay: 0.45,
-    speed: 0.5,   // drone footage — moderate slowdown
+    speed: 0.8,   // drone footage — faster for smoother motion
     fallbackBg: 'linear-gradient(135deg, #0a1a0a, #14532d)',
   },
   {

@@ -16,7 +16,12 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8001
     database_url: str = "sqlite+aiosqlite:///data/zugalife.db"
-    allowed_origins: list[str] = ["http://localhost:5174"]
+    allowed_origins: list[str] = [
+        "http://localhost:5174",
+        "http://localhost:5176",
+        "http://192.168.1.200:5174",
+        "http://192.168.1.200:5176",
+    ]
 
 
 settings = Settings()
