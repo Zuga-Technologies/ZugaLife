@@ -1,11 +1,14 @@
 """ZugaLife journal CRUD + AI reflection endpoints."""
 
+import io
 import logging
 import sys
+import zipfile
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy import desc, func, select
+from fastapi.responses import StreamingResponse
+from sqlalchemy import asc, desc, func, select
 
 from core.auth.middleware import get_current_user
 from core.auth.models import CurrentUser
@@ -149,6 +152,164 @@ async def list_journal_entries(
         ]
 
     return JournalListResponse(entries=briefs, total=total)
+
+
+# ---------------------------------------------------------------------------
+# Export (MUST be before /{entry_id} to avoid route shadowing)
+# ---------------------------------------------------------------------------
+
+def _entry_to_markdown(entry: "JournalEntry") -> str:
+    """Convert a JournalEntry to a markdown string with YAML frontmatter."""
+    created = entry.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+    updated = entry.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Build frontmatter
+    lines = ["---"]
+    if entry.title:
+        safe_title = entry.title.replace('"', '\\"')
+        lines.append(f'title: "{safe_title}"')
+    lines.append(f"date: {created}")
+    lines.append(f"updated: {updated}")
+    if entry.mood_emoji:
+        lines.append(f'mood: "{entry.mood_emoji}"')
+    if entry.mood_label:
+        lines.append(f'mood_label: "{entry.mood_label}"')
+    lines.append("tags: [journal, zugalife]")
+    lines.append("source: zugalife")
+    lines.append(f"entry_id: {entry.id}")
+    lines.append("---")
+    lines.append("")
+
+    if entry.title:
+        lines.append(f"# {entry.title}")
+        lines.append("")
+
+    lines.append(entry.content)
+
+    if entry.reflections:
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+        lines.append("## AI Reflections")
+        lines.append("")
+        for i, ref in enumerate(entry.reflections, 1):
+            if len(entry.reflections) > 1:
+                lines.append(f"### Reflection {i}")
+                lines.append("")
+            lines.append(ref.content)
+            ref_date = ref.created_at.strftime("%Y-%m-%d %H:%M")
+            lines.append("")
+            lines.append(f"*Generated {ref_date} · {ref.model_used}*")
+            lines.append("")
+
+    return "\n".join(lines)
+
+
+def _safe_filename(title: str | None, date: datetime, entry_id: int) -> str:
+    """Generate a filesystem-safe filename for an entry."""
+    date_str = date.strftime("%Y-%m-%d")
+    if title:
+        safe = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
+        safe = safe.strip()[:60]
+        if safe:
+            return f"{date_str} - {safe}.md"
+    return f"{date_str} - entry-{entry_id}.md"
+
+
+@router.get("/export")
+async def export_journal(
+    format: str = Query("markdown", pattern="^(markdown|json)$"),
+    start: str | None = Query(None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(None, description="End date YYYY-MM-DD"),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Export journal entries as a ZIP of markdown files or JSON."""
+    since = None
+    until = None
+    if start:
+        try:
+            since = datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise HTTPException(400, "Invalid start date — use YYYY-MM-DD")
+    if end:
+        try:
+            until = datetime.strptime(end, "%Y-%m-%d").replace(
+                hour=23, minute=59, second=59, tzinfo=timezone.utc,
+            )
+        except ValueError:
+            raise HTTPException(400, "Invalid end date — use YYYY-MM-DD")
+
+    async with get_session() as session:
+        stmt = (
+            select(JournalEntry)
+            .where(JournalEntry.user_id == user.id)
+            .order_by(asc(JournalEntry.created_at))
+        )
+        if since:
+            stmt = stmt.where(JournalEntry.created_at >= since)
+        if until:
+            stmt = stmt.where(JournalEntry.created_at <= until)
+
+        result = await session.execute(stmt)
+        entries = result.scalars().all()
+
+    if not entries:
+        raise HTTPException(404, "No journal entries found for the given range")
+
+    if format == "json":
+        import json as json_lib
+
+        data = []
+        for e in entries:
+            data.append({
+                "id": e.id,
+                "title": e.title,
+                "content": e.content,
+                "mood_emoji": e.mood_emoji,
+                "mood_label": e.mood_label,
+                "created_at": e.created_at.isoformat(),
+                "updated_at": e.updated_at.isoformat(),
+                "reflections": [
+                    {
+                        "content": r.content,
+                        "model_used": r.model_used,
+                        "created_at": r.created_at.isoformat(),
+                    }
+                    for r in e.reflections
+                ],
+            })
+
+        json_bytes = json_lib.dumps(data, indent=2, ensure_ascii=False).encode()
+        return StreamingResponse(
+            io.BytesIO(json_bytes),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": "attachment; filename=zugalife-journal.json",
+            },
+        )
+
+    buf = io.BytesIO()
+    seen_filenames: set[str] = set()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for entry in entries:
+            md_content = _entry_to_markdown(entry)
+            filename = _safe_filename(entry.title, entry.created_at, entry.id)
+
+            if filename in seen_filenames:
+                base = filename.rsplit(".md", 1)[0]
+                filename = f"{base} ({entry.id}).md"
+            seen_filenames.add(filename)
+
+            zf.writestr(f"zugalife-journal/{filename}", md_content)
+
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": "attachment; filename=zugalife-journal.zip",
+        },
+    )
 
 
 @router.get("/{entry_id}", response_model=JournalEntryResponse)

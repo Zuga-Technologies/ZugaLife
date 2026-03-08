@@ -2,10 +2,14 @@
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@core/auth/store'
 import { getToken } from '@core/api/client'
+import { Settings } from 'lucide-vue-next'
+import BackgroundTheme from './BackgroundTheme.vue'
+import SettingsPanel from './SettingsPanel.vue'
 
 const auth = useAuthStore()
 const email = ref('')
 const submitting = ref(false)
+const showSettings = ref(false)
 
 onMounted(async () => {
   if (getToken()) {
@@ -28,29 +32,46 @@ async function handleLogin() {
 async function handleLogout() {
   await auth.logout()
 }
+
+function goHome() {
+  document.dispatchEvent(new Event('zugalife-go-home'))
+}
 </script>
 
 <template>
-  <div class="min-h-screen bg-surface-0">
+  <div class="min-h-screen">
+    <!-- Animated background layer (includes base color) -->
+    <BackgroundTheme />
+
     <!-- Authenticated: nav + router-view -->
     <template v-if="auth.isAuthenticated">
-      <nav class="fixed top-0 left-0 right-0 z-50 h-14 glass-card border-t-0 border-x-0 rounded-none flex items-center px-6">
-        <div class="flex items-center gap-2 mr-8">
+      <nav class="fixed top-0 left-0 right-0 z-50 h-14 bg-surface-0/80 backdrop-blur-md border-b border-bdr flex items-center px-6">
+        <button
+          @click="goHome"
+          class="flex items-center gap-2 mr-8 transition-opacity hover:opacity-80"
+        >
           <span class="text-xl font-bold text-accent">🌿</span>
           <span class="text-sm font-semibold text-txt-primary tracking-wide">ZugaLife</span>
-        </div>
+        </button>
         <div class="flex-1" />
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3">
+          <button
+            @click="showSettings = true"
+            class="p-2 rounded-lg text-txt-muted transition-colors hover:text-txt-primary hover:bg-surface-3/50"
+            title="Settings"
+          >
+            <Settings :size="16" />
+          </button>
           <span class="text-sm text-txt-secondary">{{ auth.user?.email }}</span>
           <button
             @click="handleLogout"
-            class="px-3 py-1.5 text-sm text-txt-muted rounded-md transition-colors hover:text-txt-primary hover:bg-surface-3"
+            class="px-3 py-1.5 text-sm text-txt-muted rounded-md transition-colors hover:text-txt-primary hover:bg-surface-3/50"
           >
             Logout
           </button>
         </div>
       </nav>
-      <main class="pt-16">
+      <main class="pt-16 relative z-10">
         <router-view />
       </main>
     </template>
@@ -113,5 +134,10 @@ async function handleLogout() {
         </div>
       </div>
     </template>
+
+    <!-- Settings panel overlay -->
+    <transition name="fade">
+      <SettingsPanel v-if="showSettings" @close="showSettings = false" />
+    </transition>
   </div>
 </template>

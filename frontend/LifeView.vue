@@ -5,7 +5,7 @@ import { startAmbience, stopAmbience, pauseAmbience, resumeAmbience, setAmbience
 import { moodIcons, meditationTypeIcons, ambienceIcons, habitIcons, habitIconPicker, getIcon, BrandIcon } from './icons'
 import {
   BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle,
-  LayoutDashboard, TrendingUp, Target, Clock, CalendarDays, ArrowRight,
+  LayoutDashboard, TrendingUp, Target, Clock, CalendarDays, ArrowRight, ArrowLeft,
   ChevronRight, Activity, Flame as FlameIcon, Brain as BrainIcon,
 } from 'lucide-vue-next'
 
@@ -103,6 +103,20 @@ watch(activeTab, (tab) => {
   goalError.value = null
   medError.value = null
 })
+
+// Listen for logo click → return to dashboard
+function handleLogoHome() { activeTab.value = 'dashboard' }
+onMounted(() => document.addEventListener('zugalife-go-home', handleLogoHome))
+onUnmounted(() => document.removeEventListener('zugalife-go-home', handleLogoHome))
+
+// Module labels for back-nav header
+const moduleLabels: Record<Exclude<Tab, 'dashboard'>, string> = {
+  journal: 'Journal',
+  habits: 'Habits',
+  goals: 'Goals',
+  meditate: 'Meditate',
+  therapist: 'Therapist',
+}
 
 // ============================
 // MOOD DEFINITIONS (shared by journal compose)
@@ -1611,74 +1625,24 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Streak badge (compact, shown on non-dashboard tabs) -->
-    <div
-      v-if="habitStreaks && habitStreaks.overall_current > 0 && activeTab !== 'dashboard'"
-      class="flex items-center gap-1.5 mb-4 text-sm text-txt-secondary"
-    >
-      <FlameIcon :size="14" class="text-amber-400" />
-      <span class="font-medium">{{ habitStreaks.overall_current }}-day streak</span>
-    </div>
-
-    <!-- Tabs -->
-    <div class="flex gap-1 mb-6 border-b border-bdr overflow-x-auto scrollbar-hide">
+    <!-- Back nav + module label (shown on non-dashboard tabs) -->
+    <div v-if="activeTab !== 'dashboard'" class="flex items-center gap-3 mb-6">
       <button
         @click="activeTab = 'dashboard'"
-        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 whitespace-nowrap"
-        :class="activeTab === 'dashboard'
-          ? 'text-accent border-accent'
-          : 'text-txt-muted border-transparent hover:text-txt-primary'"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-txt-muted transition-colors hover:text-txt-primary hover:bg-surface-3/50"
       >
-        <LayoutDashboard :size="14" />
-        Overview
+        <ArrowLeft :size="16" />
+        <span>Back</span>
       </button>
-      <button
-        @click="activeTab = 'journal'"
-        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap"
-        :class="activeTab === 'journal'
-          ? 'text-accent border-accent'
-          : 'text-txt-muted border-transparent hover:text-txt-primary'"
+      <span class="text-sm font-semibold text-txt-primary">{{ moduleLabels[activeTab] }}</span>
+      <div class="flex-1" />
+      <div
+        v-if="habitStreaks && habitStreaks.overall_current > 0"
+        class="flex items-center gap-1.5 text-sm text-txt-secondary"
       >
-        Journal
-      </button>
-      <button
-        @click="activeTab = 'habits'"
-        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px"
-        :class="activeTab === 'habits'
-          ? 'text-accent border-accent'
-          : 'text-txt-muted border-transparent hover:text-txt-primary'"
-      >
-        Habits
-      </button>
-      <button
-        @click="activeTab = 'goals'"
-        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px"
-        :class="activeTab === 'goals'
-          ? 'text-accent border-accent'
-          : 'text-txt-muted border-transparent hover:text-txt-primary'"
-      >
-        Goals
-      </button>
-      <button
-        @click="activeTab = 'meditate'"
-        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px"
-        :class="activeTab === 'meditate'
-          ? 'text-accent border-accent'
-          : 'text-txt-muted border-transparent hover:text-txt-primary'"
-      >
-        Meditate
-      </button>
-      <button
-        @click="activeTab = 'therapist'"
-        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5"
-        :class="activeTab === 'therapist'
-          ? 'text-accent border-accent'
-          : 'text-txt-muted border-transparent hover:text-txt-primary'"
-      >
-        <MessageCircleHeart :size="14" />
-        Therapist
-        <span v-if="!therapistAvailable" class="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" title="Unavailable"></span>
-      </button>
+        <FlameIcon :size="14" class="text-amber-400" />
+        <span class="font-medium">{{ habitStreaks.overall_current }}-day streak</span>
+      </div>
     </div>
 
     <!-- ===== DASHBOARD TAB ===== -->
@@ -1689,7 +1653,7 @@ onUnmounted(() => {
 
       <template v-else-if="dashboardData">
         <!-- Greeting -->
-        <div class="mb-8 animate-fade-in">
+        <div class="mb-8 animate-fade-in inline-block px-5 py-3 rounded-2xl bg-surface-0/60 backdrop-blur-md">
           <p class="text-sm text-txt-muted mb-1">{{ formatDashboardDate(dashboardData.date) }}</p>
           <h2 class="text-2xl font-bold text-txt-primary tracking-tight">{{ dashboardData.greeting }}</h2>
           <p class="text-sm text-txt-secondary mt-1.5">Here's your week at a glance.</p>
