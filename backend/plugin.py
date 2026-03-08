@@ -55,6 +55,7 @@ _models = _load_sibling("models")
 _schemas = _load_sibling("schemas")
 _routes = _load_sibling("routes")
 
+
 # Load journal submodule: models → schemas → prompts → routes
 _j_models = _load_submodule("journal", "models")
 _j_schemas = _load_submodule("journal", "schemas")
@@ -89,6 +90,9 @@ _t_prompts = _load_submodule("therapist", "prompts")
 _t_context = _load_submodule("therapist", "context")
 _t_routes = _load_submodule("therapist", "routes")
 
+# Load dashboard AFTER all modules — it reads from sys.modules at request time
+_dashboard = _load_sibling("dashboard")
+
 # Merge all routers into a single combined router
 _combined_router = APIRouter()
 _combined_router.include_router(_routes.router)
@@ -97,6 +101,7 @@ _combined_router.include_router(_h_routes.router)
 _combined_router.include_router(_g_routes.router)
 _combined_router.include_router(_m_routes.router)
 _combined_router.include_router(_t_routes.router)
+_combined_router.include_router(_dashboard.router)
 
 
 class ZugaLifePlugin(StudioPlugin):

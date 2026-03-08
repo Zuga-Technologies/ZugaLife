@@ -3,12 +3,96 @@ import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { api, ApiError, getToken } from '@core/api/client'
 import { startAmbience, stopAmbience, pauseAmbience, resumeAmbience, setAmbienceVolume } from './ambience'
 import { moodIcons, meditationTypeIcons, ambienceIcons, habitIcons, habitIconPicker, getIcon, BrandIcon } from './icons'
-import { BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle } from 'lucide-vue-next'
+import {
+  BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle,
+  LayoutDashboard, TrendingUp, Target, Clock, CalendarDays, ArrowRight,
+  ChevronRight, Activity, Flame as FlameIcon, Brain as BrainIcon,
+} from 'lucide-vue-next'
 
 // --- Tabs ---
 
-type Tab = 'journal' | 'habits' | 'goals' | 'meditate' | 'therapist'
-const activeTab = ref<Tab>('journal')
+type Tab = 'dashboard' | 'journal' | 'habits' | 'goals' | 'meditate' | 'therapist'
+const activeTab = ref<Tab>('dashboard')
+
+// ============================
+// DASHBOARD
+// ============================
+
+interface DashboardMoodEntry {
+  emoji: string
+  label: string
+  date: string
+}
+
+interface DashboardHabitStat {
+  name: string
+  emoji: string
+  completed: number
+  total: number
+}
+
+interface DashboardData {
+  greeting: string
+  date: string
+  mood: {
+    recent: DashboardMoodEntry[]
+    total: number
+    has_data: boolean
+  }
+  habits: {
+    has_data: boolean
+    active_count: number
+    completed: number
+    total_possible: number
+    completion_rate: number
+    top_habits: DashboardHabitStat[]
+  }
+  goals: {
+    has_data: boolean
+    active: number
+    completed: number
+    nearest_deadline: { title: string; date: string } | null
+    milestones_done: number
+    milestones_total: number
+  }
+  meditation: {
+    has_data: boolean
+    sessions_this_week: number
+    total_minutes: number
+    avg_minutes: number
+    total_sessions: number
+  }
+  journal: {
+    has_data: boolean
+    entries_this_week: number
+    total: number
+    latest_title: string | null
+    latest_date: string | null
+  }
+  therapist: {
+    has_data: boolean
+    total_sessions: number
+    last_date: string | null
+    last_themes: string | null
+    last_mood: string | null
+  }
+}
+
+const dashboardData = ref<DashboardData | null>(null)
+const loadingDashboard = ref(true)
+
+async function fetchDashboard() {
+  try {
+    const res = await api.get<DashboardData>('/api/life/dashboard')
+    dashboardData.value = res
+  } catch (e) {
+    console.error('Dashboard fetch failed:', e)
+  }
+}
+
+function navigateTo(tab: Tab) {
+  activeTab.value = tab
+}
 
 // ============================
 // MOOD DEFINITIONS (shared by journal compose)
@@ -1231,6 +1315,24 @@ function formatDate(iso: string): string {
   })
 }
 
+function formatDashboardDate(iso: string): string {
+  const d = new Date(iso + 'T00:00:00')
+  return d.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  })
+}
+
+function formatDeadline(iso: string): string {
+  const d = new Date(iso + 'T00:00:00')
+  const now = new Date()
+  const diff = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  if (diff < 0) return 'overdue'
+  if (diff === 0) return 'today'
+  if (diff === 1) return 'tomorrow'
+  if (diff <= 7) return `${diff} days`
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 // ============================
 // THERAPIST
 // ============================
@@ -1464,12 +1566,14 @@ async function deleteTherapistNote(id: number) {
 
 onMounted(async () => {
   await Promise.all([
+    fetchDashboard(),
     fetchJournalEntries(),
     fetchHabitCheckin(), fetchHabitStreaks(), fetchAllHabits(),
     fetchGoals(), fetchGoalTemplates(), fetchWeeklyTargets(),
     fetchMedRemaining(), fetchMedSessions(),
     fetchTherapistStatus(), fetchTherapistNotes(),
   ])
+  loadingDashboard.value = false
   loadingJournal.value = false
   loadingHabits.value = false
   loadingGoals.value = false
@@ -1496,29 +1600,30 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Header + Streak -->
-    <div class="flex items-center justify-between mb-6">
-      <div>
-        <h1 class="text-2xl font-bold text-txt-primary">ZugaLife</h1>
-        <p class="text-sm text-txt-secondary mt-1">Track, reflect, understand.</p>
-      </div>
-      <div
-        v-if="habitStreaks && habitStreaks.overall_current > 0"
-        class="glass-card px-4 py-2 flex items-center gap-2"
-      >
-        <span class="text-lg">🔥</span>
-        <div>
-          <p class="text-sm font-semibold text-txt-primary">{{ habitStreaks.overall_current }}-day streak</p>
-          <p class="text-xs text-txt-muted">Best: {{ habitStreaks.overall_longest }} days</p>
-        </div>
-      </div>
+    <!-- Streak badge (compact, shown on non-dashboard tabs) -->
+    <div
+      v-if="habitStreaks && habitStreaks.overall_current > 0 && activeTab !== 'dashboard'"
+      class="flex items-center gap-1.5 mb-4 text-sm text-txt-secondary"
+    >
+      <FlameIcon :size="14" class="text-amber-400" />
+      <span class="font-medium">{{ habitStreaks.overall_current }}-day streak</span>
     </div>
 
     <!-- Tabs -->
-    <div class="flex gap-1 mb-6 border-b border-bdr">
+    <div class="flex gap-1 mb-6 border-b border-bdr overflow-x-auto scrollbar-hide">
+      <button
+        @click="activeTab = 'dashboard'"
+        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 whitespace-nowrap"
+        :class="activeTab === 'dashboard'
+          ? 'text-accent border-accent'
+          : 'text-txt-muted border-transparent hover:text-txt-primary'"
+      >
+        <LayoutDashboard :size="14" />
+        Overview
+      </button>
       <button
         @click="activeTab = 'journal'"
-        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px"
+        class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap"
         :class="activeTab === 'journal'
           ? 'text-accent border-accent'
           : 'text-txt-muted border-transparent hover:text-txt-primary'"
@@ -1564,6 +1669,278 @@ onUnmounted(() => {
         <span v-if="!therapistAvailable" class="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" title="Unavailable"></span>
       </button>
     </div>
+
+    <!-- ===== DASHBOARD TAB ===== -->
+    <template v-if="activeTab === 'dashboard'">
+      <div v-if="loadingDashboard" class="flex items-center justify-center py-20">
+        <div class="w-8 h-8 border-2 border-accent/30 border-t-accent rounded-full animate-spin"></div>
+      </div>
+
+      <template v-else-if="dashboardData">
+        <!-- Greeting -->
+        <div class="mb-8 animate-fade-in">
+          <p class="text-sm text-txt-muted mb-1">{{ formatDashboardDate(dashboardData.date) }}</p>
+          <h2 class="text-2xl font-bold text-txt-primary tracking-tight">{{ dashboardData.greeting }}</h2>
+          <p class="text-sm text-txt-secondary mt-1.5">Here's your week at a glance.</p>
+        </div>
+
+        <!-- Metric Cards Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+
+          <!-- MOOD CARD -->
+          <button
+            @click="navigateTo('journal')"
+            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
+            style="animation-delay: 50ms"
+          >
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                  <Activity :size="18" class="text-amber-400" />
+                </div>
+                <span class="text-sm font-semibold text-txt-primary">Mood</span>
+              </div>
+              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <template v-if="dashboardData.mood.has_data">
+              <div class="flex items-center gap-1.5 mb-3">
+                <template v-for="(entry, i) in dashboardData.mood.recent.slice(0, 7)" :key="i">
+                  <div
+                    class="w-8 h-8 rounded-lg bg-surface-3 flex items-center justify-center transition-transform hover:scale-110"
+                    :title="entry.label + ' — ' + timeAgo(entry.date)"
+                  >
+                    <component :is="moodIcons[entry.emoji]" :size="16" class="text-amber-400" v-if="moodIcons[entry.emoji]" />
+                    <span v-else class="text-sm">{{ entry.emoji }}</span>
+                  </div>
+                </template>
+                <div v-if="dashboardData.mood.recent.length === 0" class="text-xs text-txt-muted">No entries this week</div>
+              </div>
+              <p class="text-xs text-txt-muted">{{ dashboardData.mood.total }} total entries</p>
+            </template>
+            <template v-else>
+              <p class="text-sm text-txt-muted">Track how you're feeling</p>
+              <p class="text-xs text-txt-muted mt-1">Log your first mood in Journal</p>
+            </template>
+          </button>
+
+          <!-- HABITS CARD -->
+          <button
+            @click="navigateTo('habits')"
+            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
+            style="animation-delay: 100ms"
+          >
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                  <TrendingUp :size="18" class="text-emerald-400" />
+                </div>
+                <span class="text-sm font-semibold text-txt-primary">Habits</span>
+              </div>
+              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <template v-if="dashboardData.habits.has_data">
+              <!-- Progress bar -->
+              <div class="mb-3">
+                <div class="flex items-baseline justify-between mb-1.5">
+                  <span class="text-2xl font-bold text-txt-primary">{{ Math.round(dashboardData.habits.completion_rate * 100) }}<span class="text-sm font-normal text-txt-muted">%</span></span>
+                  <span class="text-xs text-txt-muted">{{ dashboardData.habits.completed }}/{{ dashboardData.habits.total_possible }}</span>
+                </div>
+                <div class="w-full bg-surface-3 rounded-full h-2">
+                  <div
+                    class="h-2 rounded-full transition-all duration-700 ease-out"
+                    :class="dashboardData.habits.completion_rate >= 0.8 ? 'bg-emerald-500' : dashboardData.habits.completion_rate >= 0.5 ? 'bg-amber-500' : 'bg-surface-4'"
+                    :style="{ width: Math.round(dashboardData.habits.completion_rate * 100) + '%' }"
+                  ></div>
+                </div>
+              </div>
+              <!-- Top habits preview -->
+              <div class="flex flex-wrap gap-1.5">
+                <span
+                  v-for="h in dashboardData.habits.top_habits.slice(0, 3)"
+                  :key="h.name"
+                  class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-secondary"
+                >
+                  <component :is="getIcon(h.emoji)" :size="11" v-if="getIcon(h.emoji)" />
+                  {{ h.name }}
+                  <span class="text-txt-muted">{{ h.completed }}/{{ h.total }}</span>
+                </span>
+              </div>
+            </template>
+            <template v-else>
+              <p class="text-sm text-txt-muted">Build consistent routines</p>
+              <p class="text-xs text-txt-muted mt-1">Set up your first habits</p>
+            </template>
+          </button>
+
+          <!-- GOALS CARD -->
+          <button
+            @click="navigateTo('goals')"
+            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
+            style="animation-delay: 150ms"
+          >
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-sky-500/10 flex items-center justify-center">
+                  <Target :size="18" class="text-sky-400" />
+                </div>
+                <span class="text-sm font-semibold text-txt-primary">Goals</span>
+              </div>
+              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <template v-if="dashboardData.goals.has_data">
+              <div class="flex items-baseline gap-4 mb-3">
+                <div>
+                  <span class="text-2xl font-bold text-txt-primary">{{ dashboardData.goals.active }}</span>
+                  <span class="text-xs text-txt-muted ml-1">active</span>
+                </div>
+                <div v-if="dashboardData.goals.completed > 0">
+                  <span class="text-lg font-semibold text-emerald-400">{{ dashboardData.goals.completed }}</span>
+                  <span class="text-xs text-txt-muted ml-1">done</span>
+                </div>
+              </div>
+              <div v-if="dashboardData.goals.milestones_total > 0" class="mb-2">
+                <div class="flex items-center justify-between text-xs text-txt-muted mb-1">
+                  <span>Milestones</span>
+                  <span>{{ dashboardData.goals.milestones_done }}/{{ dashboardData.goals.milestones_total }}</span>
+                </div>
+                <div class="w-full bg-surface-3 rounded-full h-1.5">
+                  <div
+                    class="h-1.5 rounded-full bg-sky-500 transition-all duration-500"
+                    :style="{ width: Math.round((dashboardData.goals.milestones_done / dashboardData.goals.milestones_total) * 100) + '%' }"
+                  ></div>
+                </div>
+              </div>
+              <div v-if="dashboardData.goals.nearest_deadline" class="flex items-center gap-1.5 text-xs text-txt-muted">
+                <CalendarDays :size="12" />
+                <span>{{ dashboardData.goals.nearest_deadline.title }}</span>
+                <span class="text-txt-muted">·</span>
+                <span>{{ formatDeadline(dashboardData.goals.nearest_deadline.date) }}</span>
+              </div>
+            </template>
+            <template v-else>
+              <p class="text-sm text-txt-muted">Set meaningful goals</p>
+              <p class="text-xs text-txt-muted mt-1">Choose from templates or create your own</p>
+            </template>
+          </button>
+
+          <!-- MEDITATION CARD -->
+          <button
+            @click="navigateTo('meditate')"
+            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
+            style="animation-delay: 200ms"
+          >
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center">
+                  <BrainIcon :size="18" class="text-violet-400" />
+                </div>
+                <span class="text-sm font-semibold text-txt-primary">Meditation</span>
+              </div>
+              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <template v-if="dashboardData.meditation.has_data && dashboardData.meditation.sessions_this_week > 0">
+              <div class="flex items-baseline gap-4 mb-2">
+                <div>
+                  <span class="text-2xl font-bold text-txt-primary">{{ dashboardData.meditation.sessions_this_week }}</span>
+                  <span class="text-xs text-txt-muted ml-1">this week</span>
+                </div>
+                <div>
+                  <span class="text-lg font-semibold text-txt-secondary">{{ dashboardData.meditation.total_minutes }}</span>
+                  <span class="text-xs text-txt-muted ml-1">min</span>
+                </div>
+              </div>
+              <p class="text-xs text-txt-muted">{{ dashboardData.meditation.total_sessions }} total sessions · avg {{ dashboardData.meditation.avg_minutes }} min</p>
+            </template>
+            <template v-else-if="dashboardData.meditation.has_data">
+              <p class="text-sm text-txt-secondary">No sessions this week</p>
+              <p class="text-xs text-txt-muted mt-1">{{ dashboardData.meditation.total_sessions }} total sessions</p>
+            </template>
+            <template v-else>
+              <p class="text-sm text-txt-muted">AI-guided meditation</p>
+              <p class="text-xs text-txt-muted mt-1">Breathing, body scan, gratitude & more</p>
+            </template>
+          </button>
+        </div>
+
+        <!-- Bottom row: Journal + Therapist (full width cards, more subtle) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+          <!-- JOURNAL CARD -->
+          <button
+            @click="navigateTo('journal')"
+            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
+            style="animation-delay: 250ms"
+          >
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-rose-500/10 flex items-center justify-center">
+                  <BookOpen :size="18" class="text-rose-400" />
+                </div>
+                <span class="text-sm font-semibold text-txt-primary">Journal</span>
+              </div>
+              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <template v-if="dashboardData.journal.has_data">
+              <div class="flex items-baseline gap-1 mb-2">
+                <span class="text-2xl font-bold text-txt-primary">{{ dashboardData.journal.entries_this_week }}</span>
+                <span class="text-xs text-txt-muted">entries this week</span>
+              </div>
+              <p v-if="dashboardData.journal.latest_title" class="text-xs text-txt-muted truncate">
+                Latest: {{ dashboardData.journal.latest_title }}
+              </p>
+              <p class="text-xs text-txt-muted">{{ dashboardData.journal.total }} total entries</p>
+            </template>
+            <template v-else>
+              <p class="text-sm text-txt-muted">Write, reflect, understand</p>
+              <p class="text-xs text-txt-muted mt-1">Start your first journal entry</p>
+            </template>
+          </button>
+
+          <!-- THERAPIST CARD -->
+          <button
+            @click="navigateTo('therapist')"
+            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
+            style="animation-delay: 300ms"
+          >
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-teal-500/10 flex items-center justify-center">
+                  <MessageCircleHeart :size="18" class="text-teal-400" />
+                </div>
+                <span class="text-sm font-semibold text-txt-primary">Therapist</span>
+              </div>
+              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <template v-if="dashboardData.therapist.has_data">
+              <p class="text-sm text-txt-secondary mb-2 line-clamp-1">{{ dashboardData.therapist.last_themes }}</p>
+              <div class="flex items-center gap-2 text-xs text-txt-muted">
+                <span v-if="dashboardData.therapist.last_mood" class="px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400">{{ dashboardData.therapist.last_mood }}</span>
+                <span>{{ dashboardData.therapist.total_sessions }} sessions</span>
+                <span v-if="dashboardData.therapist.last_date">· {{ timeAgo(dashboardData.therapist.last_date) }}</span>
+              </div>
+            </template>
+            <template v-else>
+              <p class="text-sm text-txt-muted">AI companion for reflection</p>
+              <p class="text-xs text-txt-muted mt-1">Talk through what's on your mind</p>
+            </template>
+          </button>
+        </div>
+
+        <!-- Streak banner (if exists) -->
+        <div
+          v-if="habitStreaks && habitStreaks.overall_current > 0"
+          class="mt-6 glass-card p-4 flex items-center gap-3 border-amber-500/20"
+        >
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+            <FlameIcon :size="20" class="text-amber-400" />
+          </div>
+          <div class="flex-1">
+            <p class="text-sm font-semibold text-txt-primary">{{ habitStreaks.overall_current }}-day streak</p>
+            <p class="text-xs text-txt-muted">Keep it going! Best: {{ habitStreaks.overall_longest }} days</p>
+          </div>
+        </div>
+      </template>
+    </template>
 
     <!-- ===== HABITS TAB ===== -->
     <template v-if="activeTab === 'habits'">
