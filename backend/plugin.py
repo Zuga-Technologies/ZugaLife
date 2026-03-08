@@ -112,7 +112,7 @@ class ZugaLifePlugin(StudioPlugin):
 
     @property
     def version(self) -> str:
-        return "0.7.0"
+        return "0.8.0"
 
     @property
     def router(self) -> APIRouter:

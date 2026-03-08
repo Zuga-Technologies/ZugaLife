@@ -94,6 +94,16 @@ function navigateTo(tab: Tab) {
   activeTab.value = tab
 }
 
+// Re-fetch dashboard when switching back to overview
+watch(activeTab, (tab) => {
+  if (tab === 'dashboard') fetchDashboard()
+  // Clear stale errors when switching tabs
+  journalError.value = null
+  habitError.value = null
+  goalError.value = null
+  medError.value = null
+})
+
 // ============================
 // MOOD DEFINITIONS (shared by journal compose)
 // ============================
@@ -472,8 +482,9 @@ async function toggleHabit(item: HabitCheckInItem) {
   habitError.value = null
   try {
     if (item.logged) {
-      // Uncheck
-      const today = new Date().toISOString().split('T')[0]
+      // Uncheck — use local date to match server's date.today()
+      const d = new Date()
+      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       await api.delete(`/api/life/habits/log/${item.habit.id}/${today}`)
     } else {
       // Check

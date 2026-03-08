@@ -539,13 +539,15 @@ async def get_streaks(
         all_logs = logs_result.scalars().all()
 
         # Group logs by habit_id
+        active_ids = {h.id for h in habits}
         logs_by_habit: dict[int, list[date]] = {}
-        all_dates: set[date] = set()
+        active_dates: set[date] = set()
         for log in all_logs:
             logs_by_habit.setdefault(log.habit_id, []).append(log.log_date)
-            all_dates.add(log.log_date)
+            if log.habit_id in active_ids:
+                active_dates.add(log.log_date)
 
-        # Calculate per-habit streaks
+        # Calculate per-habit streaks (active habits only)
         streak_infos = []
         for habit in habits:
             dates = sorted(set(logs_by_habit.get(habit.id, [])), reverse=True)
@@ -558,8 +560,8 @@ async def get_streaks(
                 longest_streak=longest,
             ))
 
-        # Overall streak: consecutive days with at least 1 habit logged
-        overall_dates = sorted(all_dates, reverse=True)
+        # Overall streak: consecutive days with at least 1 ACTIVE habit logged
+        overall_dates = sorted(active_dates, reverse=True)
         overall_current, overall_longest = _calculate_streaks(overall_dates)
 
     return AllStreaksResponse(
