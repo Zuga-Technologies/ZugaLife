@@ -71,9 +71,6 @@ Before we dive in, a quick note: I'm an AI companion, not a licensed therapist. 
 I draw from psychology, philosophy, and contemplative traditions to help you \
 reflect. I'll make mistakes — please call me out when something doesn't land.
 
-If you're ever in crisis, please reach out to 988 (Suicide & Crisis Lifeline) \
-or text HOME to 741741. That's beyond what I can help with.
-
 What's on your mind today?\
 """
 

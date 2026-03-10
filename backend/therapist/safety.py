@@ -35,8 +35,7 @@ CRISIS_RESPONSE = (
 DISCLAIMER = (
     "I'm an AI companion, not a licensed therapist. I draw from psychology, "
     "philosophy, and contemplative traditions to help you reflect. "
-    "I make mistakes — please push back when something doesn't feel right. "
-    "For crisis support, call 988 or text HOME to 741741."
+    "I make mistakes — please push back when something doesn't feel right."
 )
 
 

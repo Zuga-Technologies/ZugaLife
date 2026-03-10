@@ -1437,7 +1437,7 @@ const therapistMessages = ref<TherapistMessage[]>([])
 const therapistInput = ref('')
 const therapistSending = ref(false)
 const therapistGreeting = ref('')
-const therapistDisclaimer = "I'm an AI companion, not a licensed therapist. I draw from psychology, philosophy, and contemplative traditions to help you reflect. I make mistakes \u2014 please push back when something doesn't feel right. For crisis support, call 988 or text HOME to 741741."
+const therapistDisclaimer = "I'm an AI companion, not a licensed therapist. I draw from psychology, philosophy, and contemplative traditions to help you reflect. I make mistakes \u2014 please push back when something doesn't feel right."
 const therapistStatus = ref<TherapistStatus | null>(null)
 const therapistError = ref<string | null>(null)
 const therapistSuccess = ref<string | null>(null)
@@ -2032,9 +2032,9 @@ onUnmounted(() => {
                   @blur="updateHabitAmount(item)"
                   @keyup.enter="updateHabitAmount(item)"
                   :placeholder="item.habit.default_target ? String(item.habit.default_target) : '0'"
-                  class="w-16 px-2 py-1 text-sm text-right rounded-md bg-surface-3 text-txt-primary border border-bdr focus:border-accent focus:outline-none"
+                  class="w-14 px-1.5 py-1 text-sm text-center rounded-md bg-surface-3 text-txt-primary border border-bdr focus:border-accent focus:outline-none"
                 />
-                <span class="text-xs text-txt-muted">{{ item.habit.unit }}</span>
+                <span class="text-xs text-txt-muted w-12">{{ item.habit.unit }}</span>
               </div>
             </div>
           </div>
