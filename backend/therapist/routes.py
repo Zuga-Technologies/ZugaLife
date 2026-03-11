@@ -396,7 +396,8 @@ def _parse_summary(text: str) -> tuple[str, str | None, str | None, str | None]:
 
     # Fallback: if parsing fails, use the whole text as themes
     if not themes:
-        themes = text[:2000]
+        cleaned = text.strip()
+        themes = cleaned[:2000] if cleaned else "Session completed (no summary generated)"
 
     return themes, patterns, follow_up, mood
 

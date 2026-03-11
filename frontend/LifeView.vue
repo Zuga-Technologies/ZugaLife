@@ -1562,14 +1562,19 @@ async function endTherapistSession() {
 
   try {
     const apiMessages = therapistMessages.value.map(m => ({ role: m.role, content: m.content }))
-    await api.post('/api/life/therapist/end-session', { messages: apiMessages })
-    therapistSuccess.value = 'Session saved!'
-    setTimeout(() => { therapistSuccess.value = null }, 3000)
+    const savedNote = await api.post<TherapistSessionNote>('/api/life/therapist/end-session', { messages: apiMessages })
     therapistSessionActive.value = false
     therapistMessages.value = []
     await fetchTherapistStatus()
     await fetchTherapistGreeting()
     await fetchTherapistNotes()
+
+    // Navigate to the saved note so the user can review it
+    therapistCurrentNote.value = savedNote
+    therapistEditingNote.value = false
+    therapistView.value = 'note-detail'
+    therapistSuccess.value = 'Session saved!'
+    setTimeout(() => { therapistSuccess.value = null }, 3000)
   } catch (e) {
     if (e instanceof ApiError) {
       therapistError.value = (e.body as Record<string, string>).detail ?? 'Failed to save session.'
