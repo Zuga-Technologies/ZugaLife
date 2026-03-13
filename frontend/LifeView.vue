@@ -7,6 +7,7 @@ import {
   BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle,
   LayoutDashboard, TrendingUp, Target, Clock, CalendarDays, ArrowRight, ArrowLeft,
   ChevronRight, Activity, Flame as FlameIcon, Brain as BrainIcon, Settings,
+  Download,
 } from 'lucide-vue-next'
 import SettingsPanel from './SettingsPanel.vue'
 import BackgroundTheme from './BackgroundTheme.vue'
@@ -340,7 +341,7 @@ async function requestReflection() {
 
 async function deleteEntry() {
   if (!currentEntry.value) return
-
+  journalError.value = null
   try {
     await api.delete(`/api/life/journal/${currentEntry.value.id}`)
     journalSuccess.value = 'Entry deleted.'
@@ -353,6 +354,34 @@ async function deleteEntry() {
     } else {
       journalError.value = 'Network error'
     }
+  }
+}
+
+// --- Single entry export ---
+const showExportMenu = ref(false)
+
+async function exportEntry(format: 'markdown' | 'json') {
+  if (!currentEntry.value) return
+  showExportMenu.value = false
+  try {
+    const resp = await fetch(`/api/life/journal/${currentEntry.value.id}/export?format=${format}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+    if (!resp.ok) throw new Error(`Export failed (${resp.status})`)
+    const blob = await resp.blob()
+    const disposition = resp.headers.get('Content-Disposition') ?? ''
+    const match = disposition.match(/filename=(.+)/)
+    const filename = match ? match[1] : `entry-${currentEntry.value.id}.${format === 'json' ? 'json' : 'md'}`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch {
+    journalError.value = 'Export failed'
   }
 }
 
@@ -1191,6 +1220,7 @@ let medAudioLoading = false
 async function loadAndPlayAudio() {
   if (!medSession.value || medAudioLoading) return
   medAudioLoading = true
+  medError.value = null
   stopAudio()
 
   try {
@@ -1602,6 +1632,7 @@ function startEditingNote() {
 
 async function saveNoteEdit() {
   if (!therapistCurrentNote.value) return
+  therapistError.value = null
   try {
     therapistCurrentNote.value = await api.patch<TherapistSessionNote>(
       `/api/life/therapist/notes/${therapistCurrentNote.value.id}`,
@@ -1621,6 +1652,7 @@ async function saveNoteEdit() {
 }
 
 async function deleteTherapistNote(id: number) {
+  therapistError.value = null
   try {
     await api.delete(`/api/life/therapist/notes/${id}`)
     therapistNotes.value = therapistNotes.value.filter(n => n.id !== id)
@@ -1662,7 +1694,7 @@ onUnmounted(() => {
 
 <template>
   <div>
-    <!-- Animated background layer (fixed position, -z-10 renders behind content) -->
+    <!-- Animated background layer (fixed position, z-0 renders behind content) -->
     <BackgroundTheme />
 
     <div
@@ -3349,7 +3381,23 @@ onUnmounted(() => {
                   </span>
                 </div>
               </div>
-              <button @click="deleteEntry" class="text-xs text-txt-muted hover:text-red-400 transition-colors px-2 py-1">Delete</button>
+              <div class="flex items-center gap-2">
+                <div class="relative">
+                  <button @click="showExportMenu = !showExportMenu" class="text-xs text-txt-muted hover:text-accent transition-colors px-2 py-1 flex items-center gap-1">
+                    <Download :size="12" />
+                    Export
+                  </button>
+                  <div v-if="showExportMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[140px]">
+                    <button @click="exportEntry('markdown')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
+                      Markdown (.md)
+                    </button>
+                    <button @click="exportEntry('json')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
+                      JSON (.json)
+                    </button>
+                  </div>
+                </div>
+                <button @click="deleteEntry" class="text-xs text-txt-muted hover:text-red-400 transition-colors px-2 py-1">Delete</button>
+              </div>
             </div>
             <p class="text-sm text-txt-secondary leading-relaxed whitespace-pre-wrap">{{ currentEntry.content }}</p>
           </div>

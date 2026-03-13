@@ -312,6 +312,60 @@ async def export_journal(
     )
 
 
+@router.get("/{entry_id}/export")
+async def export_single_entry(
+    entry_id: int,
+    format: str = Query("markdown", pattern="^(markdown|json)$"),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Export a single journal entry as Markdown (.md) or JSON file."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(JournalEntry).where(JournalEntry.id == entry_id)
+        )
+        entry = result.scalar_one_or_none()
+
+        if not entry or entry.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Entry not found")
+
+    if format == "json":
+        import json as json_lib
+
+        data = {
+            "id": entry.id,
+            "title": entry.title,
+            "content": entry.content,
+            "mood_emoji": entry.mood_emoji,
+            "mood_label": entry.mood_label,
+            "created_at": entry.created_at.isoformat(),
+            "updated_at": entry.updated_at.isoformat(),
+            "reflections": [
+                {
+                    "content": r.content,
+                    "model_used": r.model_used,
+                    "created_at": r.created_at.isoformat(),
+                }
+                for r in entry.reflections
+            ],
+        }
+        json_bytes = json_lib.dumps(data, indent=2, ensure_ascii=False).encode()
+        filename = _safe_filename(entry.title, entry.created_at, entry.id).replace(".md", ".json")
+        return StreamingResponse(
+            io.BytesIO(json_bytes),
+            media_type="application/json",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    # Markdown
+    md_content = _entry_to_markdown(entry)
+    filename = _safe_filename(entry.title, entry.created_at, entry.id)
+    return StreamingResponse(
+        io.BytesIO(md_content.encode()),
+        media_type="text/markdown",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @router.get("/{entry_id}", response_model=JournalEntryResponse)
 async def get_journal_entry(
     entry_id: int,
