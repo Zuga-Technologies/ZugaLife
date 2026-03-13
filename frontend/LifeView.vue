@@ -2409,7 +2409,7 @@ onUnmounted(() => {
               @click="goalCreateMode = 'templates'"
               class="text-xs text-txt-muted hover:text-accent transition-colors px-3"
             >
-              &larr; Templates
+              &larr;
             </button>
           </div>
         </div>
@@ -2873,7 +2873,7 @@ onUnmounted(() => {
       <!-- ===== PLAYER VIEW ===== -->
       <template v-if="medView === 'player' && medSession">
         <!-- Back button -->
-        <button @click="goToNewMeditation" class="text-txt-muted hover:text-txt-primary transition-colors text-sm mb-4">&larr; New session</button>
+        <button @click="goToNewMeditation" class="text-txt-muted hover:text-txt-primary transition-colors text-sm mb-4">&larr;</button>
 
         <!-- Session card -->
         <div class="glass-card p-6 mb-4">
@@ -3204,7 +3204,7 @@ onUnmounted(() => {
             @click="therapistView = 'notes'; therapistEditingNote = false"
             class="text-sm text-accent hover:underline mb-4 inline-block"
           >
-            &larr; Back to notes
+            &larr;
           </button>
 
           <div class="glass-card p-6 space-y-5">
@@ -3327,7 +3327,7 @@ onUnmounted(() => {
 
       <template v-if="journalView === 'compose'">
         <div class="mb-6">
-          <button @click="goToJournalList" class="text-txt-muted hover:text-txt-primary transition-colors text-sm mb-2">&larr; Back</button>
+          <button @click="goToJournalList" class="text-txt-muted hover:text-txt-primary transition-colors text-sm mb-2">&larr;</button>
           <h2 class="text-xl font-bold text-txt-primary">New Entry</h2>
         </div>
         <div class="glass-card p-6 space-y-4">
@@ -3363,7 +3363,7 @@ onUnmounted(() => {
 
       <template v-if="journalView === 'detail'">
         <div class="mb-6">
-          <button @click="goToJournalList" class="text-txt-muted hover:text-txt-primary transition-colors text-sm mb-2">&larr; Back</button>
+          <button @click="goToJournalList" class="text-txt-muted hover:text-txt-primary transition-colors text-sm mb-2">&larr;</button>
           <h2 class="text-xl font-bold text-txt-primary">Entry</h2>
         </div>
         <div v-if="loadingDetail" class="text-sm text-txt-muted">Loading...</div>
