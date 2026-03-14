@@ -116,7 +116,8 @@ Here's what you know about this user:
 
 {last_session_note}
 
-Write ONLY the greeting — no preamble, no labels.\
+Write ONLY the greeting — no preamble, no labels. Do NOT use thinking tags. \
+Respond directly with the greeting text.\
 """
 
 SESSION_SUMMARY_PROMPT = """\
