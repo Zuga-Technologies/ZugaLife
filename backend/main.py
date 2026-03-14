@@ -37,6 +37,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await init_db()
     logger.info("Database initialized")
 
+    # Initialize shared auth token store (shared across all services)
+    from core.auth.token_store import init_auth_store
+
+    await init_auth_store()
+    logger.info("Auth store initialized")
+
     # Load ZugaLife plugin to register models and get router
     from plugin import ZugaLifePlugin
 
