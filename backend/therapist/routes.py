@@ -365,9 +365,15 @@ async def _generate_returning_greeting(user_id: str, context_summary: str) -> st
                 {"role": "user", "content": user_prompt},
             ],
         )
-        return response.content.strip()
+        greeting = response.content.strip()
+        if not greeting:
+            logger.warning("Venice returned empty greeting, using fallback")
+            return RETURNING_SESSION_GREETING.format(
+                last_session_reference=last_ref or "It's good to see you again.",
+            )
+        return greeting
     except Exception:
-        logger.warning("Failed to generate greeting via Venice, using static fallback")
+        logger.exception("Failed to generate greeting via Venice, using static fallback")
         return RETURNING_SESSION_GREETING.format(
             last_session_reference=last_ref or "It's good to see you again.",
         )
