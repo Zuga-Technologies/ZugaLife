@@ -359,22 +359,21 @@ async def _generate_returning_greeting(user_id: str, context_summary: str) -> st
         response = await ai_call(
             prompt="",
             task="therapist",
-            max_tokens=1024,
+            max_tokens=4096,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
         )
         greeting = response.content.strip()
-        print(f"[THERAPIST] Greeting raw length={len(greeting)} content={greeting[:200]!r}" if greeting else "[THERAPIST] Greeting EMPTY")
         if not greeting:
-            logger.warning("Venice returned empty greeting, using fallback")
+            logger.warning("Venice returned empty greeting (reasoning-only), using fallback")
             return RETURNING_SESSION_GREETING.format(
                 last_session_reference=last_ref or "It's good to see you again.",
             )
         return greeting
     except Exception:
-        logger.exception("Failed to generate greeting via Venice, using static fallback")
+        logger.warning("Failed to generate greeting via Venice, using static fallback")
         return RETURNING_SESSION_GREETING.format(
             last_session_reference=last_ref or "It's good to see you again.",
         )

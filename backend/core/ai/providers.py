@@ -67,11 +67,6 @@ async def call_venice(
     msg = data["choices"][0]["message"]
     content = (msg.get("content") or "").strip()
 
-    # Kimi K2.5 sometimes puts entire response in reasoning_content
-    # with nothing in content. Use reasoning as fallback.
-    if not content and msg.get("reasoning_content"):
-        content = msg["reasoning_content"].strip()
-
     input_rate, output_rate = _PRICING.get(f"venice/{model}", (0.75, 3.75))
     cost = (usage["prompt_tokens"] * input_rate + usage["completion_tokens"] * output_rate) / 1_000_000
 
