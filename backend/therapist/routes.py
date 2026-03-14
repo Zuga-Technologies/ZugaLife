@@ -163,7 +163,7 @@ async def therapist_chat(
         response = await ai_call(
             prompt="",  # unused when messages is provided
             task="therapist",
-            max_tokens=1024,
+            max_tokens=4096,
             messages=messages,
         )
     except BudgetExhaustedError:
@@ -178,9 +178,26 @@ async def therapist_chat(
         logger.exception("Venice API call failed")
         raise HTTPException(status_code=503, detail="Therapist is currently unavailable. Please try later.")
 
+    # If Venice returned empty (model spent all tokens reasoning), retry once
+    if not response.content.strip():
+        logger.warning("Venice returned empty chat response, retrying")
+        try:
+            response = await ai_call(
+                prompt="",
+                task="therapist",
+                max_tokens=4096,
+                messages=messages,
+            )
+        except Exception:
+            pass
+
+    content = response.content.strip()
+    if not content:
+        content = "I'm sorry, I lost my train of thought. Could you repeat what you just said?"
+
     user_exchanges = (message_count + 1) // 2
     return TherapistChatResponse(
-        content=response.content,
+        content=content,
         message_index=message_count + 1,
         session_messages_remaining=max(0, MAX_MESSAGES_PER_SESSION - user_exchanges),
         cost=response.cost,
@@ -215,25 +232,32 @@ async def end_session(
         response = await ai_call(
             prompt="",
             task="therapist",
-            max_tokens=1024,
+            max_tokens=4096,
             messages=messages,
         )
+        # Retry once if Venice returned empty (reasoning-only response)
+        if not response.content.strip():
+            logger.warning("Empty session summary, retrying")
+            response = await ai_call(
+                prompt="",
+                task="therapist",
+                max_tokens=4096,
+                messages=messages,
+            )
     except Exception:
         logger.exception("Failed to generate session summary")
-        # Fallback: save a minimal note rather than losing the session
         response = None
 
     # Parse the structured summary
-    if response:
-        logger.info("Session summary raw content: %s", response.content[:500])
+    if response and response.content.strip():
         themes, patterns, follow_up, mood = _parse_summary(response.content)
         total_cost = response.cost
     else:
-        themes = "Session ended (summary generation failed)"
+        themes = "Session completed (no summary generated)"
         patterns = None
         follow_up = None
         mood = None
-        total_cost = 0.0
+        total_cost = response.cost if response else 0.0
 
     # Save session note
     async with get_session() as session:
