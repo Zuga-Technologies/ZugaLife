@@ -90,6 +90,12 @@ _t_prompts = _load_submodule("therapist", "prompts")
 _t_context = _load_submodule("therapist", "context")
 _t_routes = _load_submodule("therapist", "routes")
 
+# Load forecasting submodule: engine → schemas → context → routes
+_f_engine = _load_submodule("forecasting", "engine")
+_f_schemas = _load_submodule("forecasting", "schemas")
+_f_context = _load_submodule("forecasting", "context")
+_f_routes = _load_submodule("forecasting", "routes")
+
 # Load dashboard AFTER all modules — it reads from sys.modules at request time
 _dashboard = _load_sibling("dashboard")
 
@@ -101,6 +107,7 @@ _combined_router.include_router(_h_routes.router)
 _combined_router.include_router(_g_routes.router)
 _combined_router.include_router(_m_routes.router)
 _combined_router.include_router(_t_routes.router)
+_combined_router.include_router(_f_routes.router)
 _combined_router.include_router(_dashboard.router)
 
 

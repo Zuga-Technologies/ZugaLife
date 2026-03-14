@@ -4,8 +4,11 @@ Single read-only endpoint that pulls key metrics from all modules
 for the frontend dashboard. No models needed — pure aggregation.
 """
 
+import logging
 import sys
 from datetime import date, datetime, timedelta, timezone
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import desc, func, select
@@ -34,6 +37,7 @@ async def get_dashboard(
         meditation = await _meditation_metrics(session, user.id, week_ago)
         journal = await _journal_metrics(session, user.id, week_ago)
         therapist = await _therapist_metrics(session, user.id)
+        forecast = await _forecast_preview(session, user.id)
 
     # Time-based greeting
     hour = (now.hour - 5) % 24  # rough EST offset, good enough
@@ -53,6 +57,7 @@ async def get_dashboard(
         "meditation": meditation,
         "journal": journal,
         "therapist": therapist,
+        "forecast": forecast,
     }
 
 
@@ -83,6 +88,27 @@ async def _mood_metrics(session, user_id: str, since: datetime) -> dict:
         "total": total,
         "has_data": total > 0,
     }
+
+
+async def _forecast_preview(session, user_id: str) -> dict:
+    """Lightweight forecast preview for dashboard — trend + tomorrow's forecast."""
+    try:
+        _engine = sys.modules["zugalife.forecasting.engine"]
+        data = await _engine.compute_all(session, user_id, days=14)
+
+        trend = data["trend"]
+        forecast = data["forecast"]
+
+        return {
+            "has_data": data["total_entries"] >= 3,
+            "trend_direction": trend["direction"],
+            "trend_description": trend["description"],
+            "forecast_label": forecast.get("forecast_label"),
+            "forecast_description": forecast.get("description"),
+        }
+    except Exception:
+        logger.warning("Forecast preview failed", exc_info=True)
+        return {"has_data": False}
 
 
 async def _habit_metrics(session, user_id: str, week_start: date, today: date) -> dict:

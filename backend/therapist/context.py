@@ -45,6 +45,18 @@ async def build_user_context(user_id: str) -> str:
         if meditation_summary:
             sections.append(meditation_summary)
 
+    # Forecasting context runs its own session (separate module)
+    try:
+        _forecast_ctx = sys.modules.get("zugalife.forecasting.context")
+        if _forecast_ctx:
+            forecast_summary = await _forecast_ctx.build_forecast_context(user_id)
+            if forecast_summary:
+                sections.append(forecast_summary)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning("Forecast context failed, skipping", exc_info=True)
+
+    async with get_session() as session:
         session_notes = await _recent_session_notes(session, user_id)
         if session_notes:
             sections.append(session_notes)
