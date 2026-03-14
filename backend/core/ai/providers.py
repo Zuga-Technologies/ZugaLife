@@ -71,6 +71,11 @@ async def call_venice(
     import re
 
     content = re.sub(r"<think>.*?</think>\s*", "", raw_content, flags=re.DOTALL).strip()
+    if not content and raw_content:
+        # Model put everything in <think> tags — extract the think content as the response
+        think_match = re.search(r"<think>(.*?)</think>", raw_content, flags=re.DOTALL)
+        if think_match:
+            content = think_match.group(1).strip()
 
     input_rate, output_rate = _PRICING.get(f"venice/{model}", (0.75, 3.75))
     cost = (usage["prompt_tokens"] * input_rate + usage["completion_tokens"] * output_rate) / 1_000_000
