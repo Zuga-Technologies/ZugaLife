@@ -57,9 +57,6 @@ async def call_venice(
                 "model": model,
                 "max_tokens": max_tokens,
                 "messages": messages,
-                "venice_parameters": {
-                    "strip_thinking_response": True,
-                },
             },
             timeout=120.0,
         )
@@ -67,7 +64,13 @@ async def call_venice(
         data = response.json()
 
     usage = data["usage"]
-    content = data["choices"][0]["message"]["content"] or ""
+    raw_content = data["choices"][0]["message"]["content"] or ""
+
+    # Strip <think> blocks ourselves — Venice's strip_thinking_response
+    # can return empty when the model puts everything in think tags
+    import re
+
+    content = re.sub(r"<think>.*?</think>\s*", "", raw_content, flags=re.DOTALL).strip()
 
     input_rate, output_rate = _PRICING.get(f"venice/{model}", (0.75, 3.75))
     cost = (usage["prompt_tokens"] * input_rate + usage["completion_tokens"] * output_rate) / 1_000_000
