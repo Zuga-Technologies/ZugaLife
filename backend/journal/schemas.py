@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 class JournalCreateRequest(BaseModel):
     title: str | None = Field(None, max_length=200)
     content: str = Field(..., min_length=1, max_length=50000)
-    mood_emoji: str | None = Field(None, max_length=4)
+    mood_emoji: str | None = Field(None, max_length=32)
 
 
 class JournalReflectionResponse(BaseModel):

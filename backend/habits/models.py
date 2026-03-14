@@ -27,7 +27,7 @@ class HabitDefinition(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False)
-    emoji: Mapped[str] = mapped_column(String(4), nullable=False)
+    emoji: Mapped[str] = mapped_column(String(32), nullable=False)
     unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
     default_target: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_preset: Mapped[bool] = mapped_column(Boolean, default=False)

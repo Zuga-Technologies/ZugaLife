@@ -21,14 +21,14 @@ class HabitUnit(str, Enum):
 
 class HabitCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=50)
-    emoji: str = Field(..., min_length=1, max_length=4)
+    emoji: str = Field(..., min_length=1, max_length=32)
     unit: HabitUnit | None = None
     default_target: float | None = Field(None, gt=0)
 
 
 class HabitUpdateRequest(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=50)
-    emoji: str | None = Field(None, min_length=1, max_length=4)
+    emoji: str | None = Field(None, min_length=1, max_length=32)
     is_active: bool | None = None
     sort_order: int | None = Field(None, ge=0)
     weekly_target: int | None = Field(None, ge=1, le=7)

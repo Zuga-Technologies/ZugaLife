@@ -15,7 +15,7 @@ class JournalEntry(Base, TimestampMixin):
     user_id: Mapped[str] = mapped_column(String(64), index=True)
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    mood_emoji: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    mood_emoji: Mapped[str | None] = mapped_column(String(32), nullable=True)
     mood_label: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     reflections: Mapped[list["JournalReflection"]] = relationship(
