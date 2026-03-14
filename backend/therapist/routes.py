@@ -366,7 +366,7 @@ async def _generate_returning_greeting(user_id: str, context_summary: str) -> st
             ],
         )
         greeting = response.content.strip()
-        logger.info("Greeting raw length=%d content=%r", len(greeting), greeting[:200] if greeting else "EMPTY")
+        print(f"[THERAPIST] Greeting raw length={len(greeting)} content={greeting[:200]!r}" if greeting else "[THERAPIST] Greeting EMPTY")
         if not greeting:
             logger.warning("Venice returned empty greeting, using fallback")
             return RETURNING_SESSION_GREETING.format(
