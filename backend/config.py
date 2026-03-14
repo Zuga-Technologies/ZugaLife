@@ -23,5 +23,8 @@ class Settings(BaseSettings):
         "http://192.168.1.200:5176",
     ]
 
+    # AI providers
+    venice_api_key: str = ""
+
 
 settings = Settings()
