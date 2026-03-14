@@ -64,18 +64,13 @@ async def call_venice(
         data = response.json()
 
     usage = data["usage"]
-    raw_content = data["choices"][0]["message"]["content"] or ""
+    msg = data["choices"][0]["message"]
+    content = (msg.get("content") or "").strip()
 
-    # Strip <think> blocks ourselves — Venice's strip_thinking_response
-    # can return empty when the model puts everything in think tags
-    import re
-
-    content = re.sub(r"<think>.*?</think>\s*", "", raw_content, flags=re.DOTALL).strip()
-    if not content and raw_content:
-        # Model put everything in <think> tags — extract the think content as the response
-        think_match = re.search(r"<think>(.*?)</think>", raw_content, flags=re.DOTALL)
-        if think_match:
-            content = think_match.group(1).strip()
+    # Kimi K2.5 sometimes puts entire response in reasoning_content
+    # with nothing in content. Use reasoning as fallback.
+    if not content and msg.get("reasoning_content"):
+        content = msg["reasoning_content"].strip()
 
     input_rate, output_rate = _PRICING.get(f"venice/{model}", (0.75, 3.75))
     cost = (usage["prompt_tokens"] * input_rate + usage["completion_tokens"] * output_rate) / 1_000_000
