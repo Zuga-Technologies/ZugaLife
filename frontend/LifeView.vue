@@ -1667,6 +1667,16 @@ async function deleteTherapistNote(id: number) {
   }
 }
 
+// --- Markdown rendering (lightweight — bold, italic, inline code) ---
+
+function renderMarkdown(text: string): string {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')  // escape HTML
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')                     // **bold**
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')                                 // *italic*
+    .replace(/`(.+?)`/g, '<code class="bg-surface-3 px-1 rounded text-xs">$1</code>')  // `code`
+}
+
 // --- Init ---
 
 onMounted(async () => {
@@ -3004,7 +3014,7 @@ onUnmounted(() => {
             @click="openMedSession(s.id)"
             class="glass-card px-4 py-3 w-full text-left flex items-start gap-3 transition-colors hover:bg-surface-2 cursor-pointer"
           >
-            <span class="text-2xl flex-shrink-0">{{ getMedTypeEmoji(s.type) }}</span>
+            <component :is="meditationTypeIcons[s.type]" :size="22" class="text-accent flex-shrink-0 mt-0.5" v-if="meditationTypeIcons[s.type]" />
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
                 <span class="text-sm font-medium text-txt-primary truncate">{{ s.title }}</span>
@@ -3109,8 +3119,7 @@ onUnmounted(() => {
                     ? 'bg-accent text-white rounded-br-md'
                     : 'glass-card text-txt-primary rounded-bl-md'"
                 >
-                  <p v-for="(para, j) in msg.content.split('\n\n')" :key="j" :class="j > 0 ? 'mt-2' : ''">
-                    {{ para }}
+                  <p v-for="(para, j) in msg.content.split('\n\n')" :key="j" :class="j > 0 ? 'mt-2' : ''" v-html="renderMarkdown(para)">
                   </p>
                 </div>
               </div>

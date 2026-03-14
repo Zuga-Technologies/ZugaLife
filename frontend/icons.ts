@@ -75,10 +75,11 @@ export const ambienceIcons: Record<string, LucideIcon> = {
   silence: VolumeX,
 }
 
-// --- Habit icons (preset emoji → Lucide) ---
+// --- Habit icons (emoji chars + Lucide icon names → Lucide components) ---
 export const habitIcons: Record<string, LucideIcon> = {
+  // Legacy emoji keys (preset habits stored as emoji in DB)
   '😴': Moon,
-  '\uD83C\uDFCB': Dumbbell,   // 🏋
+  '\uD83C\uDFCB': Dumbbell,
   '🏋': Dumbbell,
   '💧': Droplets,
   '🧘': Brain,
@@ -87,6 +88,27 @@ export const habitIcons: Record<string, LucideIcon> = {
   '📵': MonitorOff,
   '🙏': HandHeart,
   '🚶': Footprints,
+  // Icon name keys (custom habits stored as icon names)
+  'dumbbell': Dumbbell,
+  'moon': Moon,
+  'droplets': Droplets,
+  'brain': Brain,
+  'book-open': BookOpen,
+  'salad': Salad,
+  'heart': Heart,
+  'leaf': Leaf,
+  'zap': Zap,
+  'footprints': Footprints,
+  'smile': Smile,
+  'flame': Flame,
+  'sparkles': Sparkles,
+  'wind': Wind,
+  'mountain': Mountain,
+  'waves': Waves,
+  'monitor-off': MonitorOff,
+  'hand-heart': HandHeart,
+  'snowflake': Snowflake,
+  'circle-dot': CircleDot,
 }
 
 // --- Icon picker options for custom habits ---
