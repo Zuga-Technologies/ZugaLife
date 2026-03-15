@@ -78,6 +78,14 @@ class ArimaWeekEntry(BaseModel):
     forecast_label: str
 
 
+class StationarityResult(BaseModel):
+    raw_p_value: float
+    raw_stationary: bool
+    diff_p_value: float | None = None
+    diff_stationary: bool | None = None
+    recommended_d: int
+
+
 class ArimaForecastResponse(BaseModel):
     next_day: ArimaDayForecast | None
     next_7_days: list[ArimaWeekEntry]
@@ -85,6 +93,7 @@ class ArimaForecastResponse(BaseModel):
     data_days: int | None = None
     model_order: list[int] | None = None
     aic: float | None = None
+    stationarity: StationarityResult | None = None
     description: str
     method: str = "arima"
 

@@ -524,25 +524,74 @@ def compute_meditation_effectiveness(med_sessions) -> dict:
 MIN_ARIMA_ENTRIES = 7  # minimum mood entries required
 
 
-def _select_arima_order(daily_avgs: list[float]) -> tuple[int, int, int]:
-    """Select best ARIMA(p,d,q) order using AIC (Akaike Information Criterion).
+def _test_stationarity(daily_avgs: list[float]) -> dict:
+    """Augmented Dickey-Fuller test for stationarity.
 
-    Tests a grid of candidate models and picks the one with lowest AIC.
-    AIC balances model fit vs complexity — lower is better.
-    Falls back to (1,1,1) if auto-selection fails.
+    ADF tests whether a time series has a unit root (is non-stationary).
+    - p-value < 0.05 → data IS stationary (no differencing needed, d=0)
+    - p-value >= 0.05 → data is NOT stationary (needs differencing, d>=1)
+
+    Returns test results including recommended d value.
+    """
+    from statsmodels.tsa.stattools import adfuller
+
+    # Test raw data
+    result = adfuller(daily_avgs, autolag="AIC")
+    raw_p = result[1]
+    raw_stationary = raw_p < 0.05
+
+    # If not stationary, test first difference
+    if not raw_stationary and len(daily_avgs) > 3:
+        diffs = [daily_avgs[i] - daily_avgs[i - 1] for i in range(1, len(daily_avgs))]
+        diff_result = adfuller(diffs, autolag="AIC")
+        diff_p = diff_result[1]
+        diff_stationary = diff_p < 0.05
+    else:
+        diff_p = None
+        diff_stationary = None
+
+    # Recommend d value
+    if raw_stationary:
+        recommended_d = 0
+    elif diff_stationary:
+        recommended_d = 1
+    else:
+        recommended_d = 1  # default — d=2 is rare and risky
+
+    return {
+        "raw_p_value": round(raw_p, 4),
+        "raw_stationary": raw_stationary,
+        "diff_p_value": round(diff_p, 4) if diff_p is not None else None,
+        "diff_stationary": diff_stationary,
+        "recommended_d": recommended_d,
+    }
+
+
+def _select_arima_order(daily_avgs: list[float]) -> tuple[tuple[int, int, int], dict]:
+    """Select best ARIMA(p,d,q) order using ADF + AIC.
+
+    Step 1: ADF test determines d (differencing order).
+    Step 2: AIC grid search over p and q candidates with fixed d.
+    Returns (best_order, stationarity_info).
     """
     import warnings
 
     from statsmodels.tsa.arima.model import ARIMA
 
-    candidates = [
-        (1, 0, 0), (1, 1, 0), (0, 1, 1), (1, 1, 1),
-        (2, 1, 0), (0, 1, 2), (2, 1, 1), (1, 1, 2),
-        (2, 1, 2),
-    ]
+    # Step 1: Determine d via ADF test
+    stationarity = _test_stationarity(daily_avgs)
+    d = stationarity["recommended_d"]
+
+    # Step 2: Grid search p and q with ADF-determined d
+    candidates = []
+    for p in range(0, 4):
+        for q in range(0, 3):
+            if p == 0 and q == 0:
+                continue  # (0,d,0) is meaningless
+            candidates.append((p, d, q))
 
     best_aic = float("inf")
-    best_order = (1, 1, 1)  # safe default
+    best_order = (1, d, 1)  # safe default with ADF-chosen d
 
     for order in candidates:
         try:
@@ -556,7 +605,7 @@ def _select_arima_order(daily_avgs: list[float]) -> tuple[int, int, int]:
         except Exception:
             continue
 
-    return best_order
+    return best_order, stationarity
 
 
 def compute_arima_forecast(entries) -> dict:
@@ -609,7 +658,7 @@ def compute_arima_forecast(entries) -> dict:
         import warnings
         from statsmodels.tsa.arima.model import ARIMA
 
-        order = _select_arima_order(daily_avgs)
+        order, stationarity = _select_arima_order(daily_avgs)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -656,6 +705,7 @@ def compute_arima_forecast(entries) -> dict:
             "data_days": len(sorted_dates),
             "model_order": list(order),
             "aic": round(fitted.aic, 2),
+            "stationarity": stationarity,
             "description": (
                 f"ARIMA{order} predicts tomorrow may feel around "
                 f"'{next_day_label}' territory."
@@ -834,7 +884,7 @@ def compute_arimax_forecast(
 
                 exog_filtered = exog_array[:, useful_cols]
 
-                order = _select_arima_order(daily_avgs)
+                order, stationarity = _select_arima_order(daily_avgs)
                 model = ARIMA(daily_avgs, exog=exog_filtered, order=order)
                 fitted = model.fit()
 
@@ -851,7 +901,7 @@ def compute_arimax_forecast(
                 selected_order = order
             else:
                 # Fall back to plain ARIMA
-                order = _select_arima_order(daily_avgs)
+                order, stationarity = _select_arima_order(daily_avgs)
                 model = ARIMA(daily_avgs, order=order)
                 fitted = model.fit()
                 selected_order = order
