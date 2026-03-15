@@ -1789,7 +1789,39 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Metric Cards Grid -->
+        <!-- Analytics Dashboard (main visualization) -->
+        <div class="mb-4">
+          <AnalyticsDashboard />
+        </div>
+
+        <!-- Therapist card — full width hero CTA -->
+        <button
+          @click="navigateTo('therapist')"
+          class="dash-card glass-card p-5 w-full text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group mb-4"
+        >
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 rounded-xl bg-teal-500/10 flex items-center justify-center">
+                <MessageCircleHeart :size="18" class="text-teal-400" />
+              </div>
+              <span class="text-sm font-semibold text-txt-primary">Therapist</span>
+            </div>
+            <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+          <template v-if="dashboardData.therapist.has_data">
+            <p class="text-sm text-txt-secondary mb-2 line-clamp-1">{{ dashboardData.therapist.last_themes }}</p>
+            <div class="flex items-center gap-2 text-xs text-txt-muted">
+              <span v-if="dashboardData.therapist.last_mood" class="px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400">{{ dashboardData.therapist.last_mood }}</span>
+              <span>{{ dashboardData.therapist.total_sessions }} sessions</span>
+              <span v-if="dashboardData.therapist.last_date">· {{ timeAgo(dashboardData.therapist.last_date) }}</span>
+            </div>
+          </template>
+          <template v-else>
+            <p class="text-sm text-txt-muted">AI companion for reflection — talk through what's on your mind</p>
+          </template>
+        </button>
+
+        <!-- Module Cards Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
 
           <!-- HABITS CARD -->
@@ -1983,39 +2015,6 @@ onUnmounted(() => {
             </div>
           </button>
         </div>
-
-        <!-- Analytics Dashboard (main visualization) -->
-        <div class="mb-4">
-          <AnalyticsDashboard />
-        </div>
-
-        <!-- Therapist card — full width hero CTA -->
-        <button
-          @click="navigateTo('therapist')"
-          class="dash-card glass-card p-5 w-full text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
-          style="animation-delay: 250ms"
-        >
-          <div class="flex items-center justify-between mb-3">
-            <div class="flex items-center gap-2.5">
-              <div class="w-9 h-9 rounded-xl bg-teal-500/10 flex items-center justify-center">
-                <MessageCircleHeart :size="18" class="text-teal-400" />
-              </div>
-              <span class="text-sm font-semibold text-txt-primary">Therapist</span>
-            </div>
-            <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-          <template v-if="dashboardData.therapist.has_data">
-            <p class="text-sm text-txt-secondary mb-2 line-clamp-1">{{ dashboardData.therapist.last_themes }}</p>
-            <div class="flex items-center gap-2 text-xs text-txt-muted">
-              <span v-if="dashboardData.therapist.last_mood" class="px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400">{{ dashboardData.therapist.last_mood }}</span>
-              <span>{{ dashboardData.therapist.total_sessions }} sessions</span>
-              <span v-if="dashboardData.therapist.last_date">· {{ timeAgo(dashboardData.therapist.last_date) }}</span>
-            </div>
-          </template>
-          <template v-else>
-            <p class="text-sm text-txt-muted">AI companion for reflection — talk through what's on your mind</p>
-          </template>
-        </button>
 
       </template>
     </template>
