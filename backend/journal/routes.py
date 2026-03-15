@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/life/journal", tags=["life-journal"])
 
 
-async def _infer_mood(entry_id: int, content: str) -> None:
+async def _infer_mood(entry_id: int, content: str, user_id: str = "", user_email: str = "") -> None:
     """Background task: classify journal mood via AI and update the entry."""
     try:
         from core.ai.gateway import ai_call
@@ -47,7 +47,10 @@ async def _infer_mood(entry_id: int, content: str) -> None:
     prompt = _prompts.build_mood_inference_prompt(content)
 
     try:
-        ai_response = await ai_call(prompt, task="chat", max_tokens=256)
+        ai_response = await ai_call(
+            prompt, task="chat", max_tokens=256,
+            user_id=user_id or None, user_email=user_email or None,
+        )
     except Exception:
         log.warning("Mood inference failed for entry %d", entry_id)
         return
@@ -98,7 +101,7 @@ async def create_journal_entry(
 
     # Fire background mood inference if user didn't tag manually
     if not body.mood_emoji:
-        background_tasks.add_task(_infer_mood, entry_id, body.content)
+        background_tasks.add_task(_infer_mood, entry_id, body.content, user.id, user.email)
 
     return response
 
@@ -425,9 +428,13 @@ async def reflect_on_entry(
         )
 
         # AI call — task="chat" routes to Kimi K2.5 (cheapest)
+        from core.ai.gateway import CreditBlockedError
         try:
-            ai_response = await ai_call(prompt, task="chat", max_tokens=2048)
-        except BudgetExhaustedError:
+            ai_response = await ai_call(
+                prompt, task="chat", max_tokens=2048,
+                user_id=user.id, user_email=user.email,
+            )
+        except (BudgetExhaustedError, CreditBlockedError):
             raise HTTPException(
                 status_code=402, detail="Daily AI budget exhausted",
             )

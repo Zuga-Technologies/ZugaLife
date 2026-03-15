@@ -725,9 +725,13 @@ async def generate_insight(
             previous_insights=previous if previous else None,
         )
 
+        from core.ai.gateway import CreditBlockedError
         try:
-            ai_response = await ai_call(prompt, task="chat", max_tokens=2048)
-        except BudgetExhaustedError:
+            ai_response = await ai_call(
+                prompt, task="chat", max_tokens=2048,
+                user_id=user.id, user_email=user.email,
+            )
+        except (BudgetExhaustedError, CreditBlockedError):
             raise HTTPException(
                 status_code=402,
                 detail="Daily AI budget exhausted",

@@ -82,7 +82,7 @@ async def therapist_greeting(
         greeting = FIRST_SESSION_GREETING
     else:
         # Generate a natural greeting via Venice instead of dumping raw data
-        greeting = await _generate_returning_greeting(user.id, context_summary)
+        greeting = await _generate_returning_greeting(user.id, user.email, context_summary)
 
     return {
         "greeting": greeting,
@@ -157,7 +157,7 @@ async def therapist_chat(
     ]
 
     # Call Venice via gateway (task="therapist" enforces Venice-only routing)
-    from core.ai.gateway import BudgetExhaustedError, PromptBlockedError, ai_call
+    from core.ai.gateway import BudgetExhaustedError, CreditBlockedError, PromptBlockedError, ai_call
 
     try:
         response = await ai_call(
@@ -165,8 +165,10 @@ async def therapist_chat(
             task="therapist",
             max_tokens=4096,
             messages=messages,
+            user_id=user.id,
+            user_email=user.email,
         )
-    except BudgetExhaustedError:
+    except (BudgetExhaustedError, CreditBlockedError):
         raise HTTPException(status_code=402, detail="Daily AI budget exhausted")
     except PromptBlockedError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -187,6 +189,8 @@ async def therapist_chat(
                 task="therapist",
                 max_tokens=4096,
                 messages=messages,
+                user_id=user.id,
+                user_email=user.email,
             )
         except Exception:
             pass
@@ -234,6 +238,8 @@ async def end_session(
             task="therapist",
             max_tokens=4096,
             messages=messages,
+            user_id=user.id,
+            user_email=user.email,
         )
         # Retry once if Venice returned empty (reasoning-only response)
         if not response.content.strip():
@@ -243,6 +249,8 @@ async def end_session(
                 task="therapist",
                 max_tokens=4096,
                 messages=messages,
+                user_id=user.id,
+                user_email=user.email,
             )
     except Exception:
         logger.exception("Failed to generate session summary")
@@ -364,7 +372,7 @@ async def _get_user_note(session, note_id: int, user_id: str) -> TherapistSessio
     return note
 
 
-async def _generate_returning_greeting(user_id: str, context_summary: str) -> str:
+async def _generate_returning_greeting(user_id: str, user_email: str, context_summary: str) -> str:
     """Generate a warm, natural returning-user greeting via Venice.
 
     Falls back to the static template if Venice is unavailable.
@@ -388,6 +396,8 @@ async def _generate_returning_greeting(user_id: str, context_summary: str) -> st
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
+            user_id=user_id,
+            user_email=user_email,
         )
         greeting = response.content.strip()
         if not greeting:

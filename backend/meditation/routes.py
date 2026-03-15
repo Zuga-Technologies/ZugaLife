@@ -85,10 +85,14 @@ async def generate_meditation(
     max_tokens = 8192 if body.duration_minutes >= 10 else 4096
     total_script_cost = 0.0
 
+    from core.ai.gateway import CreditBlockedError
     try:
-        script_response = await ai_call(prompt, task="creative", max_tokens=max_tokens)
+        script_response = await ai_call(
+            prompt, task="creative", max_tokens=max_tokens,
+            user_id=user.id, user_email=user.email,
+        )
         total_script_cost += script_response.cost
-    except BudgetExhaustedError:
+    except (BudgetExhaustedError, CreditBlockedError):
         raise HTTPException(status_code=402, detail="Daily AI budget exhausted")
     except PromptBlockedError:
         raise HTTPException(status_code=400, detail="Content blocked by security filter")
@@ -146,7 +150,10 @@ async def generate_meditation(
                 f"{raw_script}"
             )
         try:
-            retry_response = await ai_call(fix_prompt, task="creative", max_tokens=max_tokens)
+            retry_response = await ai_call(
+                fix_prompt, task="creative", max_tokens=max_tokens,
+                user_id=user.id, user_email=user.email,
+            )
             total_script_cost += retry_response.cost
             raw_script = retry_response.content.strip()
             title, transcript = _parse_script(raw_script)

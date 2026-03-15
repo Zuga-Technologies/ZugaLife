@@ -8,3 +8,4 @@ __pycache__/
 /backend/core/auth
 /backend/core/database
 /backend/core/plugins
+/backend/core/credits
