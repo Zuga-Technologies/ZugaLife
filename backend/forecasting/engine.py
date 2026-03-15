@@ -674,6 +674,109 @@ def compute_meditation_type_breakdown(med_sessions) -> dict:
     }
 
 
+async def _fetch_therapist_dates(session, user_id: str, days: int) -> set[date]:
+    """Fetch dates when user had therapist sessions."""
+    _models = sys.modules["zugalife.therapist.models"]
+    TherapistSessionNote = _models.TherapistSessionNote
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    result = await session.execute(
+        select(TherapistSessionNote.created_at)
+        .where(TherapistSessionNote.user_id == user_id, TherapistSessionNote.created_at >= since)
+    )
+    return {_to_date(row.created_at) for row in result.all()}
+
+
+def compute_engagement_correlations(
+    entries, journal_dates: set[date], therapist_dates: set[date],
+) -> dict:
+    """Correlate self-reflection engagement with mood.
+
+    Three analyses:
+    1. Journal days vs non-journal days (binary delta)
+    2. Therapist session days vs non-session days (binary delta)
+    3. Any engagement (journal OR therapy) vs none
+
+    Same delta method as habit_correlations — avg mood on days
+    with the behavior vs days without.
+    """
+    if not entries:
+        return {"journal": None, "therapist": None, "any_engagement": None,
+                "description": "No mood data available."}
+
+    # Build daily mood averages
+    by_date: dict[date, list[int]] = defaultdict(list)
+    for entry in entries:
+        v = valence(entry.label)
+        if v is not None:
+            by_date[_to_date(entry.created_at)].append(v)
+
+    daily_mood: dict[date, float] = {
+        d: sum(vs) / len(vs) for d, vs in by_date.items()
+    }
+
+    if not daily_mood:
+        return {"journal": None, "therapist": None, "any_engagement": None,
+                "description": "No mood data available."}
+
+    mood_dates = set(daily_mood.keys())
+
+    def _binary_delta(activity_dates: set[date], label: str) -> dict | None:
+        """Compute mood delta for days with vs without an activity."""
+        with_activity = [daily_mood[d] for d in mood_dates if d in activity_dates]
+        without_activity = [daily_mood[d] for d in mood_dates if d not in activity_dates]
+
+        if not with_activity or not without_activity:
+            return None
+
+        avg_with = sum(with_activity) / len(with_activity)
+        avg_without = sum(without_activity) / len(without_activity)
+        delta = avg_with - avg_without
+
+        return {
+            "label": label,
+            "avg_mood_with": round(avg_with, 2),
+            "avg_mood_without": round(avg_without, 2),
+            "delta": round(delta, 2),
+            "days_with": len(with_activity),
+            "days_without": len(without_activity),
+        }
+
+    journal_result = _binary_delta(journal_dates, "journaling")
+    therapist_result = _binary_delta(therapist_dates, "therapist")
+
+    # Combined: any self-reflection activity
+    any_engagement_dates = journal_dates | therapist_dates
+    engagement_result = _binary_delta(any_engagement_dates, "any_reflection")
+
+    # Build description
+    parts = []
+    for result in [journal_result, therapist_result]:
+        if result and abs(result["delta"]) > 0.3:
+            direction = "higher" if result["delta"] > 0 else "lower"
+            parts.append(
+                f"{result['label']} days average {abs(result['delta']):.1f} points "
+                f"{direction} mood"
+            )
+
+    if parts:
+        desc_text = "Self-reflection impact: " + "; ".join(parts) + "."
+    elif engagement_result and abs(engagement_result["delta"]) > 0.3:
+        direction = "higher" if engagement_result["delta"] > 0 else "lower"
+        desc_text = (
+            f"Days with any self-reflection (journal or therapy) show "
+            f"{abs(engagement_result['delta']):.1f} points {direction} mood."
+        )
+    else:
+        desc_text = "No strong mood difference between reflection and non-reflection days yet."
+
+    return {
+        "journal": journal_result,
+        "therapist": therapist_result,
+        "any_engagement": engagement_result,
+        "description": desc_text,
+    }
+
+
 def compute_streak_mood_correlations(
     entries, habits, completed_set,
 ) -> dict:
@@ -1422,6 +1525,8 @@ async def compute_all(session, user_id: str, days: int = 30) -> dict:
     habits, completed_set, amount_map = await _fetch_habit_completions(session, user_id, days)
     med_sessions = await _fetch_meditation_moods(session, user_id, days)
     med_sessions_full = await _fetch_meditation_sessions_full(session, user_id, days)
+    journal_dates = await _fetch_journal_dates(session, user_id, days)
+    therapist_dates = await _fetch_therapist_dates(session, user_id, days)
 
     return {
         "period_days": days,
@@ -1432,6 +1537,7 @@ async def compute_all(session, user_id: str, days: int = 30) -> dict:
         "habit_correlations": compute_habit_correlations(entries, habits, completed_set),
         "habit_amount_correlations": compute_habit_amount_correlations(entries, habits, amount_map),
         "streak_correlations": compute_streak_mood_correlations(entries, habits, completed_set),
+        "engagement_correlations": compute_engagement_correlations(entries, journal_dates, therapist_dates),
         "volatility": compute_volatility(entries),
         "meditation_effectiveness": compute_meditation_effectiveness(med_sessions),
         "meditation_type_breakdown": compute_meditation_type_breakdown(med_sessions_full),
