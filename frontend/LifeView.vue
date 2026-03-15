@@ -2086,15 +2086,6 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Streaks summary -->
-          <div v-if="habitStreaks && habitStreaks.overall_current > 0" class="glass-card p-4 mt-6 flex items-center gap-3">
-            <span class="text-lg">&#x1F525;</span>
-            <div>
-              <p class="text-sm font-semibold text-txt-primary">{{ habitStreaks.overall_current }}-day habit streak</p>
-              <p class="text-xs text-txt-muted">Longest: {{ habitStreaks.overall_longest }} days</p>
-            </div>
-          </div>
-
           <!-- Reset options -->
           <div class="mt-6 flex flex-wrap gap-2">
             <button
