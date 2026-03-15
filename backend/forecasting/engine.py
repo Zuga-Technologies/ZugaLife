@@ -543,6 +543,146 @@ def compute_habit_amount_correlations(
     return {"habits": results, "description": desc_text}
 
 
+def compute_streak_mood_correlations(
+    entries, habits, completed_set,
+) -> dict:
+    """Correlate habit streak length with mood valence.
+
+    For each habit, reconstructs the running streak on each day
+    (consecutive days completed), then computes Pearson r between
+    streak length and daily mood. A positive r means longer streaks
+    predict better mood — the compounding effect of consistency.
+    """
+    if not habits or not entries:
+        return {"habits": [], "description": "No habit or mood data to analyze."}
+
+    # Build daily mood averages
+    by_date: dict[date, list[int]] = defaultdict(list)
+    for entry in entries:
+        v = valence(entry.label)
+        if v is not None:
+            by_date[_to_date(entry.created_at)].append(v)
+
+    daily_mood: dict[date, float] = {
+        d: sum(vs) / len(vs) for d, vs in by_date.items()
+    }
+
+    if not daily_mood:
+        return {"habits": [], "description": "No mood data available."}
+
+    # Determine the date range to analyze
+    all_dates = sorted(daily_mood.keys())
+    if len(all_dates) < 3:
+        return {"habits": [], "description": "Need at least 3 days of mood data."}
+
+    date_range = [
+        all_dates[0] + timedelta(days=i)
+        for i in range((all_dates[-1] - all_dates[0]).days + 1)
+    ]
+
+    results = []
+
+    for habit in habits:
+        # Build streak series: for each day, what's the running streak?
+        streak = 0
+        pairs: list[tuple[int, float]] = []  # (streak_length, mood)
+
+        for d in date_range:
+            if (habit.id, d) in completed_set:
+                streak += 1
+            else:
+                streak = 0
+
+            # Only pair days where we have mood data
+            if d in daily_mood:
+                pairs.append((streak, daily_mood[d]))
+
+        if len(pairs) < 5:
+            continue
+
+        streaks = [p[0] for p in pairs]
+        moods = [p[1] for p in pairs]
+
+        # Need variance in both
+        if len(set(streaks)) < 2 or len(set(moods)) < 2:
+            continue
+
+        # Max streak observed
+        max_streak = max(streaks)
+        avg_streak = sum(streaks) / len(streaks)
+
+        # Pearson r
+        n = len(pairs)
+        sum_x = sum(streaks)
+        sum_y = sum(moods)
+        sum_xy = sum(s * m for s, m in pairs)
+        sum_x2 = sum(s * s for s in streaks)
+        sum_y2 = sum(m * m for m in moods)
+
+        numerator = n * sum_xy - sum_x * sum_y
+        denom_x = n * sum_x2 - sum_x * sum_x
+        denom_y = n * sum_y2 - sum_y * sum_y
+
+        if denom_x <= 0 or denom_y <= 0:
+            continue
+
+        r = numerator / math.sqrt(denom_x * denom_y)
+
+        # p-value
+        if abs(r) >= 1.0:
+            p_value = 0.0
+        else:
+            t_stat = r * math.sqrt((n - 2) / (1 - r * r))
+            df = n - 2
+            p_value = 2.0 * (1.0 - _t_cdf_approx(abs(t_stat), df))
+
+        # Strength classification
+        abs_r = abs(r)
+        if abs_r < 0.2:
+            strength = "negligible"
+        elif abs_r < 0.4:
+            strength = "weak"
+        elif abs_r < 0.6:
+            strength = "moderate"
+        elif abs_r < 0.8:
+            strength = "strong"
+        else:
+            strength = "very_strong"
+
+        results.append({
+            "habit_name": habit.name,
+            "habit_emoji": habit.emoji,
+            "r": round(r, 3),
+            "p_value": round(p_value, 4),
+            "strength": strength,
+            "significant": p_value < 0.05,
+            "data_points": n,
+            "max_streak": max_streak,
+            "avg_streak": round(avg_streak, 1),
+            "direction": "positive" if r > 0 else "negative" if r < 0 else "none",
+        })
+
+    results.sort(key=lambda x: abs(x["r"]), reverse=True)
+
+    if not results:
+        desc_text = "Not enough streak data to analyze yet. Keep logging for a few more days."
+    else:
+        top = results[0]
+        if top["significant"] and top["strength"] not in ("negligible",):
+            desc_text = (
+                f"Consistency matters: longer '{top['habit_name']}' streaks "
+                f"{'correlate with higher' if top['r'] > 0 else 'correlate with lower'} mood "
+                f"(r={top['r']:.2f}, longest streak: {top['max_streak']} days)."
+            )
+        else:
+            desc_text = (
+                f"No strong streak-mood relationship yet. "
+                f"Longest streak: {results[0]['max_streak']} days ({results[0]['habit_name']})."
+            )
+
+    return {"habits": results, "description": desc_text}
+
+
 def _t_cdf_approx(t: float, df: int) -> float:
     """Approximate t-distribution CDF using normal approximation.
 
@@ -1159,6 +1299,7 @@ async def compute_all(session, user_id: str, days: int = 30) -> dict:
         "forecast": compute_forecast(entries),
         "habit_correlations": compute_habit_correlations(entries, habits, completed_set),
         "habit_amount_correlations": compute_habit_amount_correlations(entries, habits, amount_map),
+        "streak_correlations": compute_streak_mood_correlations(entries, habits, completed_set),
         "volatility": compute_volatility(entries),
         "meditation_effectiveness": compute_meditation_effectiveness(med_sessions),
     }
