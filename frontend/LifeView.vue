@@ -530,10 +530,10 @@ async function toggleHabit(item: HabitCheckInItem) {
   habitError.value = null
   try {
     if (item.logged) {
-      // Uncheck — use local date to match server's date.today()
-      const d = new Date()
-      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      await api.delete(`/api/life/habits/log/${item.habit.id}/${today}`)
+      // Uncheck — use server's date from checkin response (not local date)
+      const serverDate = habitCheckin.value?.date
+      if (!serverDate) return
+      await api.delete(`/api/life/habits/log/${item.habit.id}/${serverDate}`)
     } else {
       // Check
       const amt = amountInputs.value[item.habit.id]
