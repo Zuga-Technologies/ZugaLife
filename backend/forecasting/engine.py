@@ -777,6 +777,141 @@ def compute_engagement_correlations(
     }
 
 
+def compute_interaction_effects(
+    entries, habits, completed_set, med_sessions, journal_dates: set[date],
+) -> dict:
+    """Detect synergistic behavior combinations.
+
+    For every pair of behaviors, compares mood across 4 groups:
+      - Both done: avg mood when A AND B happen same day
+      - A only: avg mood when A but not B
+      - B only: avg mood when B but not A
+      - Neither: avg mood when neither happens
+
+    Interaction effect = both - A_only - B_only + neither
+    Positive = synergistic (combo is better than sum of parts)
+    Negative = redundant (doing both doesn't help more than either alone)
+
+    Only reports pairs with at least 2 days in each group.
+    """
+    if not entries:
+        return {"pairs": [], "description": "No mood data available."}
+
+    # Build daily mood averages
+    by_date: dict[date, list[int]] = defaultdict(list)
+    for entry in entries:
+        v = valence(entry.label)
+        if v is not None:
+            by_date[_to_date(entry.created_at)].append(v)
+
+    daily_mood: dict[date, float] = {
+        d: sum(vs) / len(vs) for d, vs in by_date.items()
+    }
+
+    if len(daily_mood) < 7:
+        return {"pairs": [], "description": "Need at least 7 days of mood data for interaction analysis."}
+
+    mood_dates = set(daily_mood.keys())
+
+    # Build meditation dates
+    med_dates: set[date] = set()
+    for s in med_sessions:
+        med_dates.add(_to_date(s.created_at))
+
+    # Collect all behavior signals
+    signals: list[tuple[str, set[date]]] = []
+    for habit in (habits or []):
+        habit_dates = {d for (hid, d) in completed_set if hid == habit.id}
+        if habit_dates:
+            signals.append((habit.name, habit_dates))
+
+    if med_dates:
+        signals.append(("Meditation", med_dates))
+    if journal_dates:
+        signals.append(("Journaling", journal_dates))
+
+    if len(signals) < 2:
+        return {"pairs": [], "description": "Need at least 2 tracked behaviors to detect interactions."}
+
+    results = []
+
+    # Test every unique pair
+    for i in range(len(signals)):
+        for j in range(i + 1, len(signals)):
+            name_a, dates_a = signals[i]
+            name_b, dates_b = signals[j]
+
+            # Split mood dates into 4 groups
+            both = [daily_mood[d] for d in mood_dates if d in dates_a and d in dates_b]
+            a_only = [daily_mood[d] for d in mood_dates if d in dates_a and d not in dates_b]
+            b_only = [daily_mood[d] for d in mood_dates if d not in dates_a and d in dates_b]
+            neither = [daily_mood[d] for d in mood_dates if d not in dates_a and d not in dates_b]
+
+            # Need at least 2 days in each group for meaningful comparison
+            if len(both) < 2 or len(neither) < 2:
+                continue
+            # Need at least 1 in the solo groups (they can be small)
+            if not a_only and not b_only:
+                continue
+
+            avg_both = sum(both) / len(both)
+            avg_a = sum(a_only) / len(a_only) if a_only else avg_both
+            avg_b = sum(b_only) / len(b_only) if b_only else avg_both
+            avg_none = sum(neither) / len(neither)
+
+            # Interaction effect: does the combo beat the sum of individual effects?
+            # individual_a = avg_a - avg_none (A's solo effect vs baseline)
+            # individual_b = avg_b - avg_none (B's solo effect vs baseline)
+            # combined = avg_both - avg_none (combo effect vs baseline)
+            # interaction = combined - individual_a - individual_b
+            #            = avg_both - avg_a - avg_b + avg_none
+            interaction = avg_both - avg_a - avg_b + avg_none
+
+            # Combo lift: how much better is both vs the better single?
+            best_single = max(avg_a, avg_b)
+            combo_lift = avg_both - best_single
+
+            results.append({
+                "behavior_a": name_a,
+                "behavior_b": name_b,
+                "avg_mood_both": round(avg_both, 2),
+                "avg_mood_a_only": round(avg_a, 2),
+                "avg_mood_b_only": round(avg_b, 2),
+                "avg_mood_neither": round(avg_none, 2),
+                "interaction_effect": round(interaction, 2),
+                "combo_lift": round(combo_lift, 2),
+                "synergistic": interaction > 0.2,
+                "days_both": len(both),
+                "days_a_only": len(a_only),
+                "days_b_only": len(b_only),
+                "days_neither": len(neither),
+            })
+
+    # Sort by interaction effect (strongest synergy first)
+    results.sort(key=lambda x: x["interaction_effect"], reverse=True)
+
+    if not results:
+        desc_text = "Not enough overlapping behavior data to detect interactions yet."
+    else:
+        synergies = [r for r in results if r["synergistic"]]
+        if synergies:
+            top = synergies[0]
+            desc_text = (
+                f"Synergy detected: '{top['behavior_a']}' + '{top['behavior_b']}' together "
+                f"average {top['avg_mood_both']:+.1f} mood — better than either alone "
+                f"({top['avg_mood_a_only']:+.1f} / {top['avg_mood_b_only']:+.1f}). "
+                f"Interaction effect: {top['interaction_effect']:+.2f}."
+            )
+        else:
+            top = results[0]
+            desc_text = (
+                f"No strong synergies yet. Best combo: '{top['behavior_a']}' + "
+                f"'{top['behavior_b']}' ({top['avg_mood_both']:+.1f} mood on combo days)."
+            )
+
+    return {"pairs": results, "description": desc_text}
+
+
 def compute_lagged_correlations(
     entries, habits, completed_set, med_sessions, journal_dates: set[date],
 ) -> dict:
@@ -1712,6 +1847,7 @@ async def compute_all(session, user_id: str, days: int = 30) -> dict:
         "streak_correlations": compute_streak_mood_correlations(entries, habits, completed_set),
         "engagement_correlations": compute_engagement_correlations(entries, journal_dates, therapist_dates),
         "lagged_correlations": compute_lagged_correlations(entries, habits, completed_set, med_sessions, journal_dates),
+        "interaction_effects": compute_interaction_effects(entries, habits, completed_set, med_sessions, journal_dates),
         "volatility": compute_volatility(entries),
         "meditation_effectiveness": compute_meditation_effectiveness(med_sessions),
         "meditation_type_breakdown": compute_meditation_type_breakdown(med_sessions_full),
