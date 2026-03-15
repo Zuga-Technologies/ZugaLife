@@ -64,6 +64,45 @@ async def build_forecast_context(user_id: str) -> str | None:
     if med["sessions_analyzed"] > 0:
         sections.append(f"Meditation effect: {med['description']}")
 
+    # ARIMA forecast (separate from EWMA — models structural patterns)
+    try:
+        async with get_session() as session:
+            entries = await _engine._fetch_mood_entries(session, user_id, days=30)
+        arima = _engine.compute_arima_forecast(entries)
+
+        if arima["next_day"] is not None:
+            day1 = arima["next_day"]
+            sections.append(
+                f"ARIMA forecast: tomorrow likely around "
+                f"'{day1['forecast_label']}' ({day1['forecast_valence']:+.1f}), "
+                f"confidence: {arima['confidence']}"
+            )
+
+            # Flag divergence between EWMA and ARIMA if both available
+            ewma = data["forecast"]
+            if ewma.get("forecast_valence") is not None:
+                gap = abs(day1["forecast_valence"] - ewma["forecast_valence"])
+                if gap > 1.0:
+                    sections.append(
+                        f"Note: EWMA and ARIMA forecasts diverge by {gap:.1f} points "
+                        f"— mood pattern may be shifting."
+                    )
+
+            # 7-day outlook summary
+            week = arima["next_7_days"]
+            if len(week) >= 7:
+                labels = [d["forecast_label"] for d in week]
+                unique = set(labels)
+                if len(unique) == 1:
+                    sections.append(f"7-day ARIMA outlook: steady around '{labels[0]}'")
+                else:
+                    sections.append(
+                        f"7-day ARIMA outlook: ranges from "
+                        f"'{week[0]['forecast_label']}' to '{week[-1]['forecast_label']}'"
+                    )
+    except Exception:
+        pass  # ARIMA is optional — don't break therapist if it fails
+
     if not sections:
         return None
 
