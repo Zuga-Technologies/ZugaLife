@@ -475,7 +475,7 @@ const historyDays = ref(7)
 // New custom habit form
 const newHabitName = ref('')
 const newHabitIcon = ref('')  // Stores a Lucide icon name (e.g. 'dumbbell')
-const newHabitUnit = ref<string | null>(null)
+const newHabitUnit = ref('')
 const newHabitTarget = ref<number | null>(null)
 const showNewHabitForm = ref(false)
 
@@ -584,12 +584,12 @@ async function createCustomHabit() {
     await api.post('/api/life/habits', {
       name: newHabitName.value.trim(),
       emoji: newHabitIcon.value,
-      unit: newHabitUnit.value || null,
+      unit: newHabitUnit.value.trim() || null,
       default_target: newHabitTarget.value || null,
     })
     newHabitName.value = ''
     newHabitIcon.value = ''
-    newHabitUnit.value = null
+    newHabitUnit.value = ''
     newHabitTarget.value = null
     showNewHabitForm.value = false
     habitSuccess.value = 'Habit created!'
@@ -712,6 +712,13 @@ const habitUnits = [
   { value: 'servings', label: 'Servings' },
   { value: 'pages', label: 'Pages' },
   { value: 'count', label: 'Count' },
+  { value: 'sessions', label: 'Sessions' },
+  { value: 'reps', label: 'Reps' },
+  { value: 'miles', label: 'Miles' },
+  { value: 'km', label: 'Km' },
+  { value: 'calories', label: 'Calories' },
+  { value: 'sets', label: 'Sets' },
+  { value: 'chapters', label: 'Chapters' },
 ]
 
 // ============================
@@ -2238,13 +2245,19 @@ onUnmounted(() => {
             </div>
           </div>
           <div class="flex gap-2">
-            <select
-              v-model="newHabitUnit"
-              class="input-field flex-1 text-sm"
-            >
-              <option :value="null">No unit (checkbox)</option>
-              <option v-for="u in habitUnits" :key="u.value" :value="u.value">{{ u.label }}</option>
-            </select>
+            <div class="flex-1 relative">
+              <input
+                v-model="newHabitUnit"
+                type="text"
+                list="habit-unit-suggestions"
+                placeholder="No unit (checkbox only)"
+                class="input-field w-full text-sm"
+                maxlength="20"
+              />
+              <datalist id="habit-unit-suggestions">
+                <option v-for="u in habitUnits" :key="u.value" :value="u.value">{{ u.label }}</option>
+              </datalist>
+            </div>
             <input
               v-if="newHabitUnit"
               v-model.number="newHabitTarget"

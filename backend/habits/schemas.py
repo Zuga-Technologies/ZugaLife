@@ -1,19 +1,16 @@
 """ZugaLife habit tracking Pydantic request/response schemas."""
 
 from datetime import date, datetime
-from enum import Enum
 
 from pydantic import BaseModel, Field
 
 
-class HabitUnit(str, Enum):
-    HOURS = "hours"
-    MINUTES = "minutes"
-    GLASSES = "glasses"
-    STEPS = "steps"
-    SERVINGS = "servings"
-    PAGES = "pages"
-    COUNT = "count"
+# Common unit suggestions (not enforced — users can type any unit)
+SUGGESTED_UNITS = [
+    "hours", "minutes", "glasses", "steps", "servings",
+    "pages", "count", "sessions", "reps", "miles", "km",
+    "calories", "mg", "oz", "sets", "laps", "chapters",
+]
 
 
 # --- Requests ---
@@ -22,7 +19,7 @@ class HabitUnit(str, Enum):
 class HabitCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=50)
     emoji: str = Field(..., min_length=1, max_length=32)
-    unit: HabitUnit | None = None
+    unit: str | None = Field(None, max_length=20)
     default_target: float | None = Field(None, gt=0)
 
 
