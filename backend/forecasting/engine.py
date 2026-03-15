@@ -543,6 +543,137 @@ def compute_habit_amount_correlations(
     return {"habits": results, "description": desc_text}
 
 
+async def _fetch_meditation_sessions_full(session, user_id: str, days: int):
+    """Fetch meditation sessions with type, duration, and mood data."""
+    MeditationSession = sys.modules["zugalife.meditation.models"].MeditationSession
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    result = await session.execute(
+        select(
+            MeditationSession.type,
+            MeditationSession.duration_minutes,
+            MeditationSession.ambience,
+            MeditationSession.mood_before,
+            MeditationSession.mood_after,
+            MeditationSession.created_at,
+        )
+        .where(
+            MeditationSession.user_id == user_id,
+            MeditationSession.created_at >= since,
+            MeditationSession.mood_before.isnot(None),
+            MeditationSession.mood_after.isnot(None),
+        )
+        .order_by(MeditationSession.created_at)
+    )
+    return result.all()
+
+
+def compute_meditation_type_breakdown(med_sessions) -> dict:
+    """Break down meditation effectiveness by type, duration, and ambience.
+
+    Unlike the aggregate meditation_effectiveness (which lumps all sessions),
+    this answers: which TYPE works best for you? Does duration matter?
+    Which ambience produces the biggest mood shift?
+
+    Uses group comparison — average mood delta per category. Reports
+    confidence based on sample size per group (n >= 3 to report).
+    """
+    if not med_sessions:
+        return {
+            "by_type": [],
+            "by_duration": [],
+            "by_ambience": [],
+            "description": "No meditation sessions with before/after mood data.",
+        }
+
+    # Parse all sessions into (type, duration, ambience, delta)
+    parsed = []
+    for s in med_sessions:
+        before = valence(s.mood_before)
+        after = valence(s.mood_after)
+        if before is not None and after is not None:
+            parsed.append({
+                "type": s.type or "unknown",
+                "duration": s.duration_minutes or 0,
+                "ambience": s.ambience or "unknown",
+                "delta": after - before,
+            })
+
+    if not parsed:
+        return {
+            "by_type": [],
+            "by_duration": [],
+            "by_ambience": [],
+            "description": "No sessions with valid mood comparisons.",
+        }
+
+    def _group_stats(key: str) -> list[dict]:
+        """Compute avg delta and stats per group."""
+        groups: dict[str, list[int]] = defaultdict(list)
+        for p in parsed:
+            groups[p[key]].append(p["delta"])
+
+        results = []
+        for name, deltas in sorted(groups.items(), key=lambda x: -len(x[1])):
+            n = len(deltas)
+            if n < 2:
+                continue  # need at least 2 sessions to compare
+            avg = sum(deltas) / n
+            improved = sum(1 for d in deltas if d > 0)
+            worsened = sum(1 for d in deltas if d < 0)
+
+            # Standard error for confidence
+            if n >= 2:
+                variance = sum((d - avg) ** 2 for d in deltas) / (n - 1)
+                std_err = math.sqrt(variance / n) if variance > 0 else 0
+            else:
+                std_err = 0
+
+            results.append({
+                "name": str(name),
+                "avg_delta": round(avg, 2),
+                "sessions": n,
+                "improved": improved,
+                "worsened": worsened,
+                "std_error": round(std_err, 2),
+                "reliable": n >= 3,  # minimum for trust
+            })
+
+        # Sort by avg_delta descending (best first)
+        results.sort(key=lambda x: x["avg_delta"], reverse=True)
+        return results
+
+    by_type = _group_stats("type")
+    by_duration = _group_stats("duration")
+    by_ambience = _group_stats("ambience")
+
+    # Generate description from the best type
+    if by_type:
+        reliable = [t for t in by_type if t["reliable"]]
+        if reliable:
+            best = reliable[0]
+            desc_text = (
+                f"'{best['name']}' meditation shows the strongest mood improvement "
+                f"(+{best['avg_delta']:.1f} avg across {best['sessions']} sessions)."
+            )
+            if len(reliable) > 1:
+                worst = reliable[-1]
+                desc_text += (
+                    f" '{worst['name']}' shows the least effect "
+                    f"({worst['avg_delta']:+.1f})."
+                )
+        else:
+            desc_text = "Need more sessions per type (3+ each) to compare effectively."
+    else:
+        desc_text = "Not enough meditation data to analyze by type."
+
+    return {
+        "by_type": by_type,
+        "by_duration": by_duration,
+        "by_ambience": by_ambience,
+        "description": desc_text,
+    }
+
+
 def compute_streak_mood_correlations(
     entries, habits, completed_set,
 ) -> dict:
@@ -1290,6 +1421,7 @@ async def compute_all(session, user_id: str, days: int = 30) -> dict:
     entries = await _fetch_mood_entries(session, user_id, days)
     habits, completed_set, amount_map = await _fetch_habit_completions(session, user_id, days)
     med_sessions = await _fetch_meditation_moods(session, user_id, days)
+    med_sessions_full = await _fetch_meditation_sessions_full(session, user_id, days)
 
     return {
         "period_days": days,
@@ -1302,6 +1434,7 @@ async def compute_all(session, user_id: str, days: int = 30) -> dict:
         "streak_correlations": compute_streak_mood_correlations(entries, habits, completed_set),
         "volatility": compute_volatility(entries),
         "meditation_effectiveness": compute_meditation_effectiveness(med_sessions),
+        "meditation_type_breakdown": compute_meditation_type_breakdown(med_sessions_full),
     }
 
 
