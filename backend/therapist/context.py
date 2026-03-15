@@ -186,7 +186,12 @@ async def _habit_summary(session, user_id: str) -> str | None:
         )
         if any_logs.scalar_one() == 0:
             habit_names = [h.name for h in habits]
-            return f"Habits set up ({len(habits)}): {', '.join(habit_names)}. No tracking data yet — user may be just getting started."
+            return (
+                f"NEW HABITS JUST CREATED ({len(habits)}): {', '.join(habit_names)}.\n"
+                "The user set these up recently — this is a meaningful step. "
+                "Acknowledge it warmly. Ask what motivated them to choose these specific habits. "
+                "Explore what success would look like for them."
+            )
 
     return "Habit performance (last 7 days):\n" + "\n".join(lines)
 
