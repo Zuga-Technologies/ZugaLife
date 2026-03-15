@@ -1775,6 +1775,20 @@ onUnmounted(() => {
           </button>
         </div>
 
+        <!-- Streak banner (top) -->
+        <div
+          v-if="habitStreaks && habitStreaks.overall_current > 0"
+          class="mb-4 glass-card p-3 flex items-center gap-3 border-amber-500/20"
+        >
+          <div class="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
+            <FlameIcon :size="18" class="text-amber-400" />
+          </div>
+          <div class="flex-1">
+            <p class="text-sm font-semibold text-txt-primary">{{ habitStreaks.overall_current }}-day streak</p>
+            <p class="text-xs text-txt-muted">Best: {{ habitStreaks.overall_longest }} days</p>
+          </div>
+        </div>
+
         <!-- Metric Cards Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
 
@@ -1970,6 +1984,11 @@ onUnmounted(() => {
           </button>
         </div>
 
+        <!-- Analytics Dashboard (main visualization) -->
+        <div class="mb-4">
+          <AnalyticsDashboard />
+        </div>
+
         <!-- Therapist card — full width hero CTA -->
         <button
           @click="navigateTo('therapist')"
@@ -1998,24 +2017,6 @@ onUnmounted(() => {
           </template>
         </button>
 
-        <!-- Analytics Dashboard -->
-        <div class="mt-6">
-          <AnalyticsDashboard />
-        </div>
-
-        <!-- Streak banner (if exists) -->
-        <div
-          v-if="habitStreaks && habitStreaks.overall_current > 0"
-          class="mt-6 glass-card p-4 flex items-center gap-3 border-amber-500/20"
-        >
-          <div class="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-            <FlameIcon :size="20" class="text-amber-400" />
-          </div>
-          <div class="flex-1">
-            <p class="text-sm font-semibold text-txt-primary">{{ habitStreaks.overall_current }}-day streak</p>
-            <p class="text-xs text-txt-muted">Keep it going! Best: {{ habitStreaks.overall_longest }} days</p>
-          </div>
-        </div>
       </template>
     </template>
 
