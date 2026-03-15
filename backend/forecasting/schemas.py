@@ -87,6 +87,16 @@ class ArimaForecastResponse(BaseModel):
     method: str = "arima"
 
 
+class ArimaxForecastResponse(BaseModel):
+    next_day: ArimaDayForecast | None
+    next_7_days: list[ArimaWeekEntry]
+    confidence: str
+    data_days: int | None = None
+    exogenous_factors: list[str] = []
+    description: str
+    method: str = "arimax"
+
+
 class MoodForecastResponse(BaseModel):
     period_days: int
     total_entries: int

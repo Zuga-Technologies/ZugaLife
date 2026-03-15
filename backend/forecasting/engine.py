@@ -640,6 +640,244 @@ def compute_arima_forecast(entries) -> dict:
         }
 
 
+# ── ARIMAX Forecast (multivariate) ───────────────────────────────────
+
+
+def _build_exogenous_matrix(
+    sorted_dates: list[date],
+    habits,
+    completed_set: set,
+    med_sessions,
+    journal_dates: set[date],
+) -> list[list[float]]:
+    """Build a matrix of external factors aligned to the mood date series.
+
+    Each row = one day. Columns = exogenous variables:
+      [habit_1_done, habit_2_done, ..., meditated, journaled]
+
+    Values are 0.0 or 1.0 (binary: did it or didn't).
+    Designed to be pluggable — adding a new studio's data means
+    adding another column here.
+    """
+    # Map habit completions by date
+    habit_ids = [h.id for h in habits] if habits else []
+
+    rows = []
+    for d in sorted_dates:
+        row = []
+        # One column per habit (did they complete it that day?)
+        for hid in habit_ids:
+            row.append(1.0 if (hid, d) in completed_set else 0.0)
+
+        # Did they meditate that day?
+        med_dates = set()
+        for s in med_sessions:
+            md = _to_date(s.created_at)
+            med_dates.add(md)
+        row.append(1.0 if d in med_dates else 0.0)
+
+        # Did they journal that day?
+        row.append(1.0 if d in journal_dates else 0.0)
+
+        rows.append(row)
+
+    return rows
+
+
+def _get_exog_labels(habits, has_meditation: bool, has_journal: bool) -> list[str]:
+    """Human-readable labels for each exogenous column."""
+    labels = [h.name for h in habits] if habits else []
+    if has_meditation:
+        labels.append("meditation")
+    if has_journal:
+        labels.append("journaling")
+    return labels
+
+
+async def _fetch_journal_dates(session, user_id: str, days: int) -> set[date]:
+    """Fetch dates when user wrote journal entries."""
+    JournalEntry = sys.modules["zugalife.journal.models"].JournalEntry
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    result = await session.execute(
+        select(JournalEntry.created_at)
+        .where(JournalEntry.user_id == user_id, JournalEntry.created_at >= since)
+    )
+    return {_to_date(row.created_at) for row in result.all()}
+
+
+def compute_arimax_forecast(
+    entries, habits, completed_set, med_sessions, journal_dates: set[date],
+) -> dict:
+    """Next-day and 7-day forecast using ARIMAX — ARIMA with external factors.
+
+    Unlike plain ARIMA (mood-only), ARIMAX includes habit completions,
+    meditation, and journaling as predictive inputs. This models the
+    CPP → CQA relationship: external behaviors (inputs) influence
+    mood outcomes (output).
+
+    Requires at least 7 days of mood data. Falls back to plain ARIMA
+    if there are no exogenous variables or they have zero variance.
+    """
+    if len(entries) < MIN_ARIMA_ENTRIES:
+        remaining = MIN_ARIMA_ENTRIES - len(entries)
+        return {
+            "next_day": None,
+            "next_7_days": [],
+            "confidence": "insufficient_data",
+            "exogenous_factors": [],
+            "description": (
+                f"Need {remaining} more mood entr{'y' if remaining == 1 else 'ies'} "
+                f"to generate an ARIMAX forecast (minimum {MIN_ARIMA_ENTRIES})."
+            ),
+            "method": "arimax",
+        }
+
+    # Build daily average valence series
+    by_date: dict[date, list[int]] = defaultdict(list)
+    for entry in entries:
+        v = valence(entry.label)
+        if v is not None:
+            by_date[_to_date(entry.created_at)].append(v)
+
+    sorted_dates = sorted(by_date.keys())
+    if len(sorted_dates) < MIN_ARIMA_ENTRIES:
+        remaining = MIN_ARIMA_ENTRIES - len(sorted_dates)
+        return {
+            "next_day": None,
+            "next_7_days": [],
+            "confidence": "insufficient_data",
+            "exogenous_factors": [],
+            "description": (
+                f"Need mood data on {remaining} more day{'s' if remaining != 1 else ''} "
+                f"to generate an ARIMAX forecast (minimum {MIN_ARIMA_ENTRIES} days)."
+            ),
+            "method": "arimax",
+        }
+
+    daily_avgs = [sum(by_date[d]) / len(by_date[d]) for d in sorted_dates]
+
+    # Build exogenous matrix
+    exog_matrix = _build_exogenous_matrix(
+        sorted_dates, habits, completed_set, med_sessions, journal_dates,
+    )
+    exog_labels = _get_exog_labels(
+        habits, has_meditation=True, has_journal=True,
+    )
+
+    # Check if we have any useful exogenous data (need variance in at least one column)
+    has_useful_exog = False
+    if exog_matrix and exog_matrix[0]:
+        for col_idx in range(len(exog_matrix[0])):
+            col_vals = [row[col_idx] for row in exog_matrix]
+            if len(set(col_vals)) > 1:  # has variance
+                has_useful_exog = True
+                break
+
+    try:
+        import warnings
+        import numpy as np
+        from statsmodels.tsa.arima.model import ARIMA
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            if has_useful_exog:
+                exog_array = np.array(exog_matrix)
+
+                # Remove columns with zero variance (ARIMA can't use them)
+                useful_cols = []
+                useful_labels = []
+                for i in range(exog_array.shape[1]):
+                    if np.std(exog_array[:, i]) > 0:
+                        useful_cols.append(i)
+                        if i < len(exog_labels):
+                            useful_labels.append(exog_labels[i])
+
+                exog_filtered = exog_array[:, useful_cols]
+
+                model = ARIMA(daily_avgs, exog=exog_filtered, order=(1, 1, 1))
+                fitted = model.fit()
+
+                # For forecasting, assume habits/meditation/journal continue
+                # at their recent rate (last 7 days average)
+                recent_window = min(7, len(exog_filtered))
+                future_exog = np.tile(
+                    exog_filtered[-recent_window:].mean(axis=0), (7, 1)
+                )
+
+                raw_forecast = fitted.forecast(steps=7, exog=future_exog)
+                method = "arimax"
+                used_factors = useful_labels
+            else:
+                # Fall back to plain ARIMA
+                model = ARIMA(daily_avgs, order=(1, 1, 1))
+                fitted = model.fit()
+                raw_forecast = fitted.forecast(steps=7)
+                method = "arima_fallback"
+                used_factors = []
+
+        # Clamp to valid valence range
+        clamped = [max(-3.0, min(3.0, float(v))) for v in raw_forecast]
+
+        next_day_val = clamped[0]
+        next_day_label = _valence_to_label(next_day_val)
+
+        # Build 7-day forecast
+        tomorrow = date.today() + timedelta(days=1)
+        seven_day = []
+        for i, val in enumerate(clamped):
+            forecast_date = tomorrow + timedelta(days=i)
+            seven_day.append({
+                "date": forecast_date.isoformat(),
+                "day": forecast_date.strftime("%A"),
+                "forecast_valence": round(val, 2),
+                "forecast_label": _valence_to_label(val),
+            })
+
+        # Confidence
+        if len(sorted_dates) >= 30 and has_useful_exog:
+            confidence = "high"
+        elif len(sorted_dates) >= 14:
+            confidence = "moderate"
+        else:
+            confidence = "low"
+
+        description = (
+            f"ARIMAX predicts tomorrow may feel around "
+            f"'{next_day_label}' territory"
+        )
+        if used_factors:
+            description += f", factoring in: {', '.join(used_factors)}"
+        description += "."
+
+        return {
+            "next_day": {
+                "date": tomorrow.isoformat(),
+                "forecast_valence": round(next_day_val, 2),
+                "forecast_label": next_day_label,
+            },
+            "next_7_days": seven_day,
+            "confidence": confidence,
+            "data_days": len(sorted_dates),
+            "exogenous_factors": used_factors,
+            "description": description,
+            "method": method,
+        }
+
+    except Exception:
+        return {
+            "next_day": None,
+            "next_7_days": [],
+            "confidence": "error",
+            "exogenous_factors": [],
+            "description": (
+                "ARIMAX model could not converge. Falling back to "
+                "standard ARIMA may work better with current data."
+            ),
+            "method": "arimax",
+        }
+
+
 # ── Orchestrator ─────────────────────────────────────────────────────
 
 async def compute_all(session, user_id: str, days: int = 30) -> dict:
