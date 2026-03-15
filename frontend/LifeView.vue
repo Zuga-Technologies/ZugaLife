@@ -11,6 +11,7 @@ import {
 } from 'lucide-vue-next'
 import SettingsPanel from './SettingsPanel.vue'
 import BackgroundTheme from './BackgroundTheme.vue'
+import AnalyticsDashboard from './AnalyticsDashboard.vue'
 
 // --- Settings ---
 const showSettings = ref(false)
@@ -1996,6 +1997,11 @@ onUnmounted(() => {
             <p class="text-sm text-txt-muted">AI companion for reflection — talk through what's on your mind</p>
           </template>
         </button>
+
+        <!-- Analytics Dashboard -->
+        <div class="mt-6">
+          <AnalyticsDashboard />
+        </div>
 
         <!-- Streak banner (if exists) -->
         <div
