@@ -519,6 +519,127 @@ def compute_meditation_effectiveness(med_sessions) -> dict:
     }
 
 
+# ── ARIMA Forecast ───────────────────────────────────────────────────
+
+MIN_ARIMA_ENTRIES = 7  # minimum mood entries required
+
+
+def compute_arima_forecast(entries) -> dict:
+    """Next-day and 7-day mood forecast using ARIMA(1,1,1).
+
+    Unlike EWMA (weighted average of recent values), ARIMA models the
+    *structure* in the time series: autoregression on past values,
+    differencing to remove trend, and error correction from past misses.
+
+    Requires at least 7 mood entries to produce a result.
+    """
+    if len(entries) < MIN_ARIMA_ENTRIES:
+        remaining = MIN_ARIMA_ENTRIES - len(entries)
+        return {
+            "next_day": None,
+            "next_7_days": [],
+            "confidence": "insufficient_data",
+            "description": (
+                f"Need {remaining} more mood entr{'y' if remaining == 1 else 'ies'} "
+                f"to generate an ARIMA forecast (minimum {MIN_ARIMA_ENTRIES})."
+            ),
+            "method": "arima",
+        }
+
+    # Build daily average valence series
+    by_date: dict[date, list[int]] = defaultdict(list)
+    for entry in entries:
+        v = valence(entry.label)
+        if v is not None:
+            by_date[_to_date(entry.created_at)].append(v)
+
+    sorted_dates = sorted(by_date.keys())
+    if len(sorted_dates) < MIN_ARIMA_ENTRIES:
+        remaining = MIN_ARIMA_ENTRIES - len(sorted_dates)
+        return {
+            "next_day": None,
+            "next_7_days": [],
+            "confidence": "insufficient_data",
+            "description": (
+                f"Need mood data on {remaining} more day{'s' if remaining != 1 else ''} "
+                f"to generate an ARIMA forecast (minimum {MIN_ARIMA_ENTRIES} days)."
+            ),
+            "method": "arima",
+        }
+
+    daily_avgs = [sum(by_date[d]) / len(by_date[d]) for d in sorted_dates]
+
+    # Fit ARIMA(1,1,1) — suppress convergence warnings for small datasets
+    try:
+        import warnings
+        from statsmodels.tsa.arima.model import ARIMA
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            model = ARIMA(daily_avgs, order=(1, 1, 1))
+            fitted = model.fit()
+
+        # Forecast next 7 days
+        raw_forecast = fitted.forecast(steps=7)
+
+        # Clamp all predictions to valid valence range [-3, +3]
+        clamped = [max(-3.0, min(3.0, float(v))) for v in raw_forecast]
+
+        next_day_val = clamped[0]
+        next_day_label = _valence_to_label(next_day_val)
+
+        # Build 7-day forecast with dates and labels
+        tomorrow = date.today() + timedelta(days=1)
+        seven_day = []
+        for i, val in enumerate(clamped):
+            forecast_date = tomorrow + timedelta(days=i)
+            seven_day.append({
+                "date": forecast_date.isoformat(),
+                "day": forecast_date.strftime("%A"),
+                "forecast_valence": round(val, 2),
+                "forecast_label": _valence_to_label(val),
+            })
+
+        # Confidence based on data volume
+        if len(sorted_dates) >= 30:
+            confidence = "high"
+        elif len(sorted_dates) >= 14:
+            confidence = "moderate"
+        else:
+            confidence = "low"
+
+        return {
+            "next_day": {
+                "date": tomorrow.isoformat(),
+                "forecast_valence": round(next_day_val, 2),
+                "forecast_label": next_day_label,
+            },
+            "next_7_days": seven_day,
+            "confidence": confidence,
+            "data_days": len(sorted_dates),
+            "description": (
+                f"ARIMA predicts tomorrow may feel around "
+                f"'{next_day_label}' territory."
+            ),
+            "method": "arima",
+        }
+
+    except Exception:
+        # Fallback if ARIMA fitting fails (can happen with constant data
+        # or very short series where differencing leaves nothing)
+        return {
+            "next_day": None,
+            "next_7_days": [],
+            "confidence": "error",
+            "description": (
+                "ARIMA model could not converge on this data. "
+                "This usually means mood values are too constant — "
+                "more varied data will help."
+            ),
+            "method": "arima",
+        }
+
+
 # ── Orchestrator ─────────────────────────────────────────────────────
 
 async def compute_all(session, user_id: str, days: int = 30) -> dict:

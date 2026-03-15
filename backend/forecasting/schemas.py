@@ -65,6 +65,28 @@ class MeditationEffectivenessResult(BaseModel):
     description: str
 
 
+class ArimaDayForecast(BaseModel):
+    date: str
+    forecast_valence: float
+    forecast_label: str
+
+
+class ArimaWeekEntry(BaseModel):
+    date: str
+    day: str
+    forecast_valence: float
+    forecast_label: str
+
+
+class ArimaForecastResponse(BaseModel):
+    next_day: ArimaDayForecast | None
+    next_7_days: list[ArimaWeekEntry]
+    confidence: str
+    data_days: int | None = None
+    description: str
+    method: str = "arima"
+
+
 class MoodForecastResponse(BaseModel):
     period_days: int
     total_entries: int
