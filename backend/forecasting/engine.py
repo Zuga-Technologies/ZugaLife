@@ -777,6 +777,179 @@ def compute_engagement_correlations(
     }
 
 
+def compute_lagged_correlations(
+    entries, habits, completed_set, med_sessions, journal_dates: set[date],
+) -> dict:
+    """Correlate today's behaviors with TOMORROW's mood (lag-1 analysis).
+
+    Same-day correlations miss delayed effects: exercise today might not
+    feel good today (you're tired), but tomorrow you feel great. This
+    computes Pearson r between each behavior on day N and mood on day N+1.
+
+    Compares lag-0 (same-day) vs lag-1 (next-day) r values. If lag-1 > lag-0,
+    the behavior has a delayed benefit — a genuinely actionable insight.
+    """
+    if not entries:
+        return {"factors": [], "description": "No mood data available."}
+
+    # Build daily mood averages
+    by_date: dict[date, list[int]] = defaultdict(list)
+    for entry in entries:
+        v = valence(entry.label)
+        if v is not None:
+            by_date[_to_date(entry.created_at)].append(v)
+
+    daily_mood: dict[date, float] = {
+        d: sum(vs) / len(vs) for d, vs in by_date.items()
+    }
+
+    if len(daily_mood) < 5:
+        return {"factors": [], "description": "Need at least 5 days of mood data for lag analysis."}
+
+    # Build meditation dates set
+    med_dates: set[date] = set()
+    for s in med_sessions:
+        med_dates.add(_to_date(s.created_at))
+
+    # Collect all behavior signals: (name, set_of_dates)
+    behavior_signals: list[tuple[str, str, set[date]]] = []
+
+    # Habits
+    for habit in (habits or []):
+        habit_dates = {d for (hid, d) in completed_set if hid == habit.id}
+        if habit_dates:
+            behavior_signals.append((habit.name, habit.emoji, habit_dates))
+
+    # Meditation
+    if med_dates:
+        behavior_signals.append(("Meditation", "🧘", med_dates))
+
+    # Journaling
+    if journal_dates:
+        behavior_signals.append(("Journaling", "📓", journal_dates))
+
+    if not behavior_signals:
+        return {"factors": [], "description": "No behavioral data to correlate."}
+
+    mood_dates_sorted = sorted(daily_mood.keys())
+    results = []
+
+    for name, emoji, activity_dates in behavior_signals:
+        # Lag-0 (same-day): behavior[d] vs mood[d]
+        lag0_pairs = []
+        # Lag-1 (next-day): behavior[d] vs mood[d+1]
+        lag1_pairs = []
+
+        for d in mood_dates_sorted:
+            did_it = 1.0 if d in activity_dates else 0.0
+
+            # Same-day
+            if d in daily_mood:
+                lag0_pairs.append((did_it, daily_mood[d]))
+
+            # Next-day
+            next_day = d + timedelta(days=1)
+            if next_day in daily_mood:
+                lag1_pairs.append((did_it, daily_mood[next_day]))
+
+        def _pearson(pairs: list[tuple[float, float]]) -> tuple[float, float] | None:
+            """Compute Pearson r + p-value from (x, y) pairs."""
+            if len(pairs) < 5:
+                return None
+            xs = [p[0] for p in pairs]
+            ys = [p[1] for p in pairs]
+            if len(set(xs)) < 2 or len(set(ys)) < 2:
+                return None
+
+            n = len(pairs)
+            sum_x = sum(xs)
+            sum_y = sum(ys)
+            sum_xy = sum(x * y for x, y in pairs)
+            sum_x2 = sum(x * x for x in xs)
+            sum_y2 = sum(y * y for y in ys)
+
+            num = n * sum_xy - sum_x * sum_y
+            dx = n * sum_x2 - sum_x * sum_x
+            dy = n * sum_y2 - sum_y * sum_y
+
+            if dx <= 0 or dy <= 0:
+                return None
+
+            r = num / math.sqrt(dx * dy)
+            if abs(r) >= 1.0:
+                return (r, 0.0)
+
+            t_stat = r * math.sqrt((n - 2) / (1 - r * r))
+            p = 2.0 * (1.0 - _t_cdf_approx(abs(t_stat), n - 2))
+            return (r, p)
+
+        r0 = _pearson(lag0_pairs)
+        r1 = _pearson(lag1_pairs)
+
+        if r0 is None and r1 is None:
+            continue
+
+        result = {
+            "name": name,
+            "emoji": emoji,
+            "same_day": {
+                "r": round(r0[0], 3) if r0 else None,
+                "p_value": round(r0[1], 4) if r0 else None,
+                "data_points": len(lag0_pairs),
+            },
+            "next_day": {
+                "r": round(r1[0], 3) if r1 else None,
+                "p_value": round(r1[1], 4) if r1 else None,
+                "data_points": len(lag1_pairs),
+            },
+        }
+
+        # Determine if delayed effect is stronger
+        if r0 and r1:
+            if abs(r1[0]) > abs(r0[0]) + 0.1:
+                result["effect_timing"] = "delayed"
+            elif abs(r0[0]) > abs(r1[0]) + 0.1:
+                result["effect_timing"] = "immediate"
+            else:
+                result["effect_timing"] = "both"
+        elif r1 and not r0:
+            result["effect_timing"] = "delayed"
+        else:
+            result["effect_timing"] = "immediate"
+
+        results.append(result)
+
+    # Sort by strongest next-day effect
+    results.sort(
+        key=lambda x: abs(x["next_day"]["r"] or 0),
+        reverse=True,
+    )
+
+    # Build description
+    delayed = [r for r in results if r["effect_timing"] == "delayed" and r["next_day"]["r"]]
+    if delayed:
+        top = delayed[0]
+        desc_text = (
+            f"'{top['name']}' has a stronger NEXT-DAY effect on mood "
+            f"(lag-1 r={top['next_day']['r']:.2f}) than same-day "
+            f"(r={top['same_day']['r']:.2f if top['same_day']['r'] else 'N/A'}). "
+            f"The benefit is delayed."
+        )
+    elif results:
+        top = results[0]
+        if top["next_day"]["r"] and abs(top["next_day"]["r"]) > 0.2:
+            desc_text = (
+                f"'{top['name']}' shows a next-day mood effect "
+                f"(r={top['next_day']['r']:.2f})."
+            )
+        else:
+            desc_text = "No strong delayed effects detected yet. Need more data."
+    else:
+        desc_text = "Not enough data for lag analysis."
+
+    return {"factors": results, "description": desc_text}
+
+
 def compute_streak_mood_correlations(
     entries, habits, completed_set,
 ) -> dict:
@@ -1538,6 +1711,7 @@ async def compute_all(session, user_id: str, days: int = 30) -> dict:
         "habit_amount_correlations": compute_habit_amount_correlations(entries, habits, amount_map),
         "streak_correlations": compute_streak_mood_correlations(entries, habits, completed_set),
         "engagement_correlations": compute_engagement_correlations(entries, journal_dates, therapist_dates),
+        "lagged_correlations": compute_lagged_correlations(entries, habits, completed_set, med_sessions, journal_dates),
         "volatility": compute_volatility(entries),
         "meditation_effectiveness": compute_meditation_effectiveness(med_sessions),
         "meditation_type_breakdown": compute_meditation_type_breakdown(med_sessions_full),
