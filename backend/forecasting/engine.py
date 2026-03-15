@@ -79,16 +79,19 @@ async def _fetch_habit_completions(session, user_id: str, days: int):
 
     since = date.today() - timedelta(days=days)
 
-    # Get active habits
+    # Get active habits (include unit + target for amount correlations)
     habits_result = await session.execute(
-        select(HabitDefinition.id, HabitDefinition.name, HabitDefinition.emoji)
+        select(
+            HabitDefinition.id, HabitDefinition.name, HabitDefinition.emoji,
+            HabitDefinition.unit, HabitDefinition.default_target,
+        )
         .where(HabitDefinition.user_id == user_id, HabitDefinition.is_active == True)
     )
     habits = habits_result.all()
 
-    # Get completed logs
+    # Get completed logs (include amount for quantified correlations)
     logs_result = await session.execute(
-        select(HabitLog.habit_id, HabitLog.log_date)
+        select(HabitLog.habit_id, HabitLog.log_date, HabitLog.amount)
         .where(
             HabitLog.user_id == user_id,
             HabitLog.log_date >= since,
@@ -100,7 +103,13 @@ async def _fetch_habit_completions(session, user_id: str, days: int):
     # Build a set of (habit_id, date) pairs for quick lookup
     completed_set = {(log.habit_id, log.log_date) for log in logs}
 
-    return habits, completed_set
+    # Build amount map: (habit_id, date) → amount (for quantified habits)
+    amount_map = {}
+    for log in logs:
+        if log.amount is not None:
+            amount_map[(log.habit_id, log.log_date)] = log.amount
+
+    return habits, completed_set, amount_map
 
 
 async def _fetch_meditation_moods(session, user_id: str, days: int):
@@ -401,6 +410,166 @@ def compute_habit_correlations(
             desc_text = "No strong mood-habit correlations detected yet."
 
     return {"habits": results, "description": desc_text}
+
+
+def compute_habit_amount_correlations(
+    entries, habits, amount_map: dict,
+) -> dict:
+    """Pearson correlation between habit AMOUNTS and mood valence.
+
+    Unlike binary habit correlations (did/didn't do it), this measures
+    whether MORE of a habit predicts better mood. Only works for habits
+    with a unit (e.g., "45 minutes of exercise", "8 glasses of water").
+
+    Pearson r ranges from -1 to +1:
+      +1 = perfect positive (more amount → better mood)
+       0 = no linear relationship
+      -1 = perfect negative (more amount → worse mood)
+    """
+    if not habits or not entries or not amount_map:
+        return {"habits": [], "description": "No quantified habit data to analyze."}
+
+    # Filter to habits that have a unit (quantified)
+    quantified_habits = [h for h in habits if h.unit]
+    if not quantified_habits:
+        return {"habits": [], "description": "No habits with measurable amounts (units) set."}
+
+    # Build daily mood averages
+    by_date: dict[date, list[int]] = defaultdict(list)
+    for entry in entries:
+        v = valence(entry.label)
+        if v is not None:
+            by_date[_to_date(entry.created_at)].append(v)
+
+    daily_mood: dict[date, float] = {
+        d: sum(vs) / len(vs) for d, vs in by_date.items()
+    }
+
+    if not daily_mood:
+        return {"habits": [], "description": "No mood data available."}
+
+    mood_dates = set(daily_mood.keys())
+    results = []
+
+    for habit in quantified_habits:
+        # Collect paired data: (amount, mood) for days with both
+        pairs: list[tuple[float, float]] = []
+        for d in mood_dates:
+            key = (habit.id, d)
+            if key in amount_map:
+                pairs.append((amount_map[key], daily_mood[d]))
+
+        if len(pairs) < 3:
+            continue  # need at least 3 data points for Pearson
+
+        amounts = [p[0] for p in pairs]
+        moods = [p[1] for p in pairs]
+
+        # Check variance — Pearson undefined if either variable is constant
+        if len(set(amounts)) < 2 or len(set(moods)) < 2:
+            continue
+
+        # Compute Pearson r manually (no numpy dependency)
+        n = len(pairs)
+        sum_x = sum(amounts)
+        sum_y = sum(moods)
+        sum_xy = sum(x * y for x, y in pairs)
+        sum_x2 = sum(x * x for x in amounts)
+        sum_y2 = sum(y * y for y in moods)
+
+        numerator = n * sum_xy - sum_x * sum_y
+        denom_x = n * sum_x2 - sum_x * sum_x
+        denom_y = n * sum_y2 - sum_y * sum_y
+
+        if denom_x <= 0 or denom_y <= 0:
+            continue
+
+        r = numerator / math.sqrt(denom_x * denom_y)
+
+        # Compute t-statistic for significance (p-value approximation)
+        if abs(r) >= 1.0:
+            p_value = 0.0
+        else:
+            t_stat = r * math.sqrt((n - 2) / (1 - r * r))
+            # Rough p-value using t-distribution approximation (2-tailed)
+            # For small n, this is approximate but sufficient for our purposes
+            df = n - 2
+            p_value = 2.0 * (1.0 - _t_cdf_approx(abs(t_stat), df))
+
+        # Interpret strength
+        abs_r = abs(r)
+        if abs_r < 0.2:
+            strength = "negligible"
+        elif abs_r < 0.4:
+            strength = "weak"
+        elif abs_r < 0.6:
+            strength = "moderate"
+        elif abs_r < 0.8:
+            strength = "strong"
+        else:
+            strength = "very_strong"
+
+        results.append({
+            "habit_name": habit.name,
+            "habit_emoji": habit.emoji,
+            "unit": habit.unit,
+            "r": round(r, 3),
+            "p_value": round(p_value, 4),
+            "strength": strength,
+            "significant": p_value < 0.05,
+            "data_points": n,
+            "avg_amount": round(sum_x / n, 1),
+            "direction": "positive" if r > 0 else "negative" if r < 0 else "none",
+        })
+
+    # Sort by absolute r (strongest correlation first)
+    results.sort(key=lambda r: abs(r["r"]), reverse=True)
+
+    if not results:
+        desc_text = "Not enough overlapping amount and mood data for quantified habits."
+    else:
+        top = results[0]
+        if top["significant"] and top["strength"] not in ("negligible",):
+            direction = "more" if top["r"] > 0 else "less"
+            desc_text = (
+                f"{top['strength'].capitalize()} {top['direction']} correlation: "
+                f"{direction} {top['unit']} of '{top['habit_name']}' "
+                f"tends to align with {'higher' if top['r'] > 0 else 'lower'} mood "
+                f"(r={top['r']:.2f}, p={top['p_value']:.3f})."
+            )
+        else:
+            desc_text = "No statistically significant amount-mood correlations detected yet."
+
+    return {"habits": results, "description": desc_text}
+
+
+def _t_cdf_approx(t: float, df: int) -> float:
+    """Approximate t-distribution CDF using normal approximation.
+
+    Good enough for df >= 3. For our use (significance testing),
+    we just need to know if p < 0.05, not the exact value.
+    """
+    # Cornish-Fisher approximation for t → z
+    if df <= 0:
+        return 0.5
+    g1 = (t * t + 1) / (4 * df)
+    z = t * (1 - g1)
+
+    # Standard normal CDF approximation (Abramowitz & Stegun)
+    if z < 0:
+        return 1.0 - _t_cdf_approx(-t, df)
+
+    b0 = 0.2316419
+    b1 = 0.319381530
+    b2 = -0.356563782
+    b3 = 1.781477937
+    b4 = -1.821255978
+    b5 = 1.330274429
+
+    t_val = 1.0 / (1.0 + b0 * z)
+    phi = math.exp(-z * z / 2.0) / math.sqrt(2.0 * math.pi)
+    return 1.0 - phi * (b1 * t_val + b2 * t_val**2 + b3 * t_val**3
+                        + b4 * t_val**4 + b5 * t_val**5)
 
 
 def compute_volatility(entries, window: int = 7) -> dict:
@@ -976,10 +1145,10 @@ def compute_arimax_forecast(
 # ── Orchestrator ─────────────────────────────────────────────────────
 
 async def compute_all(session, user_id: str, days: int = 30) -> dict:
-    """Run all 6 analyses and return combined results."""
+    """Run all analytics and return combined results."""
     days = min(max(days, 1), 365)  # defensive clamp
     entries = await _fetch_mood_entries(session, user_id, days)
-    habits, completed_set = await _fetch_habit_completions(session, user_id, days)
+    habits, completed_set, amount_map = await _fetch_habit_completions(session, user_id, days)
     med_sessions = await _fetch_meditation_moods(session, user_id, days)
 
     return {
@@ -989,6 +1158,7 @@ async def compute_all(session, user_id: str, days: int = 30) -> dict:
         "day_of_week": compute_day_of_week(entries),
         "forecast": compute_forecast(entries),
         "habit_correlations": compute_habit_correlations(entries, habits, completed_set),
+        "habit_amount_correlations": compute_habit_amount_correlations(entries, habits, amount_map),
         "volatility": compute_volatility(entries),
         "meditation_effectiveness": compute_meditation_effectiveness(med_sessions),
     }

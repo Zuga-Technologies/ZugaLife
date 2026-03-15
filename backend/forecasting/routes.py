@@ -63,7 +63,7 @@ async def get_arimax_forecast(
     """
     async with get_session() as session:
         entries = await _engine._fetch_mood_entries(session, user.id, days)
-        habits, completed_set = await _engine._fetch_habit_completions(
+        habits, completed_set, _amounts = await _engine._fetch_habit_completions(
             session, user.id, days,
         )
         med_sessions = await _engine._fetch_meditation_moods(session, user.id, days)
