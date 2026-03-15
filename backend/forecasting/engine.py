@@ -524,6 +524,41 @@ def compute_meditation_effectiveness(med_sessions) -> dict:
 MIN_ARIMA_ENTRIES = 7  # minimum mood entries required
 
 
+def _select_arima_order(daily_avgs: list[float]) -> tuple[int, int, int]:
+    """Select best ARIMA(p,d,q) order using AIC (Akaike Information Criterion).
+
+    Tests a grid of candidate models and picks the one with lowest AIC.
+    AIC balances model fit vs complexity — lower is better.
+    Falls back to (1,1,1) if auto-selection fails.
+    """
+    import warnings
+
+    from statsmodels.tsa.arima.model import ARIMA
+
+    candidates = [
+        (1, 0, 0), (1, 1, 0), (0, 1, 1), (1, 1, 1),
+        (2, 1, 0), (0, 1, 2), (2, 1, 1), (1, 1, 2),
+        (2, 1, 2),
+    ]
+
+    best_aic = float("inf")
+    best_order = (1, 1, 1)  # safe default
+
+    for order in candidates:
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                model = ARIMA(daily_avgs, order=order)
+                fitted = model.fit()
+                if fitted.aic < best_aic:
+                    best_aic = fitted.aic
+                    best_order = order
+        except Exception:
+            continue
+
+    return best_order
+
+
 def compute_arima_forecast(entries) -> dict:
     """Next-day and 7-day mood forecast using ARIMA(1,1,1).
 
@@ -569,14 +604,16 @@ def compute_arima_forecast(entries) -> dict:
 
     daily_avgs = [sum(by_date[d]) / len(by_date[d]) for d in sorted_dates]
 
-    # Fit ARIMA(1,1,1) — suppress convergence warnings for small datasets
+    # Auto-select best ARIMA order via AIC, then fit and forecast
     try:
         import warnings
         from statsmodels.tsa.arima.model import ARIMA
 
+        order = _select_arima_order(daily_avgs)
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = ARIMA(daily_avgs, order=(1, 1, 1))
+            model = ARIMA(daily_avgs, order=order)
             fitted = model.fit()
 
         # Forecast next 7 days
@@ -617,8 +654,10 @@ def compute_arima_forecast(entries) -> dict:
             "next_7_days": seven_day,
             "confidence": confidence,
             "data_days": len(sorted_dates),
+            "model_order": list(order),
+            "aic": round(fitted.aic, 2),
             "description": (
-                f"ARIMA predicts tomorrow may feel around "
+                f"ARIMA{order} predicts tomorrow may feel around "
                 f"'{next_day_label}' territory."
             ),
             "method": "arima",
@@ -795,7 +834,8 @@ def compute_arimax_forecast(
 
                 exog_filtered = exog_array[:, useful_cols]
 
-                model = ARIMA(daily_avgs, exog=exog_filtered, order=(1, 1, 1))
+                order = _select_arima_order(daily_avgs)
+                model = ARIMA(daily_avgs, exog=exog_filtered, order=order)
                 fitted = model.fit()
 
                 # For forecasting, assume habits/meditation/journal continue
@@ -808,10 +848,13 @@ def compute_arimax_forecast(
                 raw_forecast = fitted.forecast(steps=7, exog=future_exog)
                 method = "arimax"
                 used_factors = useful_labels
+                selected_order = order
             else:
                 # Fall back to plain ARIMA
-                model = ARIMA(daily_avgs, order=(1, 1, 1))
+                order = _select_arima_order(daily_avgs)
+                model = ARIMA(daily_avgs, order=order)
                 fitted = model.fit()
+                selected_order = order
                 raw_forecast = fitted.forecast(steps=7)
                 method = "arima_fallback"
                 used_factors = []
@@ -843,7 +886,7 @@ def compute_arimax_forecast(
             confidence = "low"
 
         description = (
-            f"ARIMAX predicts tomorrow may feel around "
+            f"ARIMAX{selected_order} predicts tomorrow may feel around "
             f"'{next_day_label}' territory"
         )
         if used_factors:
@@ -859,6 +902,8 @@ def compute_arimax_forecast(
             "next_7_days": seven_day,
             "confidence": confidence,
             "data_days": len(sorted_dates),
+            "model_order": list(selected_order),
+            "aic": round(fitted.aic, 2),
             "exogenous_factors": used_factors,
             "description": description,
             "method": method,

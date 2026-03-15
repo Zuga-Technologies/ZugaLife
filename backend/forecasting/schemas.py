@@ -83,6 +83,8 @@ class ArimaForecastResponse(BaseModel):
     next_7_days: list[ArimaWeekEntry]
     confidence: str
     data_days: int | None = None
+    model_order: list[int] | None = None
+    aic: float | None = None
     description: str
     method: str = "arima"
 
@@ -92,6 +94,8 @@ class ArimaxForecastResponse(BaseModel):
     next_7_days: list[ArimaWeekEntry]
     confidence: str
     data_days: int | None = None
+    model_order: list[int] | None = None
+    aic: float | None = None
     exogenous_factors: list[str] = []
     description: str
     method: str = "arimax"
