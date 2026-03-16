@@ -184,8 +184,10 @@ async def _goal_metrics(session, user_id: str) -> dict:
 
     # Nearest deadline among active goals
     nearest = None
+    nearest_date = None
     for g in active:
-        if g.deadline and (nearest is None or g.deadline < nearest["date"]):
+        if g.deadline and (nearest_date is None or g.deadline < nearest_date):
+            nearest_date = g.deadline
             nearest = {"title": g.title, "date": g.deadline.isoformat() if hasattr(g.deadline, 'isoformat') else str(g.deadline)}
 
     # Total milestone progress across active goals
