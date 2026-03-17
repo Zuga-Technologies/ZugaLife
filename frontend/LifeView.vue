@@ -101,6 +101,58 @@ function navigateTo(tab: Tab) {
   activeTab.value = tab
 }
 
+// Dashboard mood picker
+const dashMoodNote = ref('')
+const dashMoodSubmitting = ref(false)
+const dashMoodSuccess = ref<string | null>(null)
+const dashMoodError = ref<string | null>(null)
+const dashMoodCooldownUntil = ref<string | null>(null)
+
+const dashMoodOnCooldown = computed(() => {
+  if (!dashMoodCooldownUntil.value) return false
+  return new Date(dashMoodCooldownUntil.value) > new Date()
+})
+
+const dashMoodTimeLeft = computed(() => {
+  if (!dashMoodCooldownUntil.value) return ''
+  const diff = new Date(dashMoodCooldownUntil.value).getTime() - Date.now()
+  if (diff <= 0) return ''
+  const hrs = Math.floor(diff / 3600000)
+  const mins = Math.ceil((diff % 3600000) / 60000)
+  return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`
+})
+
+async function logDashMood(emoji: string) {
+  if (dashMoodSubmitting.value || dashMoodOnCooldown.value) return
+  dashMoodSubmitting.value = true
+  dashMoodError.value = null
+  dashMoodSuccess.value = null
+  try {
+    const res = await api.post<{ entry: { emoji: string; label: string }; streak: number; today_count: number }>('/api/life/mood', {
+      emoji,
+      note: dashMoodNote.value.trim() || null,
+    })
+    dashMoodSuccess.value = `${res.entry.label} logged! (${res.today_count}/4 today)`
+    dashMoodNote.value = ''
+    setTimeout(() => { dashMoodSuccess.value = null }, 3000)
+    // Set cooldown for 6 hours from now
+    dashMoodCooldownUntil.value = new Date(Date.now() + 6 * 3600000).toISOString()
+    await fetchDashboard()
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 429) {
+      // Extract cooldown time from error detail
+      const detail = (e.body as Record<string, string>).detail || ''
+      const match = detail.match(/(\d{4}-\d{2}-\d{2}T[\d:.]+)/)
+      if (match) dashMoodCooldownUntil.value = match[1]
+      dashMoodError.value = 'Cooldown active — ' + dashMoodTimeLeft.value + ' left'
+    } else {
+      dashMoodError.value = 'Failed to log mood'
+    }
+  } finally {
+    dashMoodSubmitting.value = false
+  }
+}
+
 // Re-fetch dashboard when switching back to overview
 watch(activeTab, (tab) => {
   if (tab === 'dashboard') fetchDashboard()
@@ -1833,6 +1885,53 @@ onUnmounted(() => {
           <div class="flex-1">
             <p class="text-sm font-semibold text-txt-primary">{{ habitStreaks.overall_current }}-day streak</p>
             <p class="text-xs text-txt-muted">Best: {{ habitStreaks.overall_longest }} days</p>
+          </div>
+        </div>
+
+        <!-- Mood Check-in -->
+        <div class="glass-card p-4 mb-4 animate-fade-in">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="text-sm font-semibold text-txt-primary">How are you feeling?</span>
+            <span v-if="dashboardData?.mood.has_data" class="text-xs text-txt-muted ml-auto">{{ dashboardData.mood.total }} total logs</span>
+          </div>
+
+          <!-- Mood grid -->
+          <div class="grid grid-cols-6 gap-2 mb-3" :class="dashMoodOnCooldown ? 'opacity-40 pointer-events-none' : ''">
+            <button
+              v-for="m in moods"
+              :key="m.emoji"
+              @click="logDashMood(m.emoji)"
+              :disabled="dashMoodSubmitting"
+              class="flex flex-col items-center gap-1 py-2 rounded-xl hover:bg-surface-3 transition-all active:scale-95"
+              :title="m.label"
+            >
+              <component :is="moodIcons[m.emoji]" :size="22" class="text-amber-400" v-if="moodIcons[m.emoji]" />
+              <span v-else class="text-lg">{{ m.emoji }}</span>
+              <span class="text-[10px] text-txt-muted">{{ m.label }}</span>
+            </button>
+          </div>
+
+          <!-- Cooldown notice -->
+          <div v-if="dashMoodOnCooldown" class="text-center">
+            <p class="text-xs text-txt-muted">Next check-in available in <span class="text-accent">{{ dashMoodTimeLeft }}</span></p>
+          </div>
+
+          <!-- Success / Error -->
+          <p v-if="dashMoodSuccess" class="text-xs text-emerald-400 text-center">{{ dashMoodSuccess }}</p>
+          <p v-if="dashMoodError" class="text-xs text-red-400 text-center">{{ dashMoodError }}</p>
+
+          <!-- Recent moods sparkline -->
+          <div v-if="dashboardData?.mood.has_data && dashboardData.mood.recent.length > 0" class="flex items-center gap-1.5 mt-3 pt-3 border-t border-bdr/50">
+            <template v-for="(entry, i) in dashboardData.mood.recent.slice(0, 5)" :key="i">
+              <div
+                class="w-7 h-7 rounded-lg bg-surface-3 flex items-center justify-center transition-transform hover:scale-110"
+                :title="entry.label + ' — ' + timeAgo(entry.date)"
+              >
+                <component :is="moodIcons[entry.emoji]" :size="14" class="text-amber-400" v-if="moodIcons[entry.emoji]" />
+                <span v-else class="text-xs">{{ entry.emoji }}</span>
+              </div>
+            </template>
+            <span class="text-[10px] text-txt-muted ml-1">recent</span>
           </div>
         </div>
 
