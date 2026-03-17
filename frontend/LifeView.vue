@@ -818,6 +818,53 @@ const newMilestoneTitle = ref('')
 // Habit linking
 const linkingHabitTo = ref<number | null>(null)
 
+// Editing goal
+const editingGoalId = ref<number | null>(null)
+const editGoalTitle = ref('')
+const editGoalDescription = ref('')
+const editGoalDeadline = ref('')
+const editGoalSaving = ref(false)
+
+function startEditGoal(goal: Goal) {
+  editingGoalId.value = goal.id
+  editGoalTitle.value = goal.title
+  editGoalDescription.value = goal.description || ''
+  editGoalDeadline.value = goal.deadline || ''
+  expandedGoals.value.add(goal.id)
+}
+
+function cancelEditGoal() {
+  editingGoalId.value = null
+  editGoalTitle.value = ''
+  editGoalDescription.value = ''
+  editGoalDeadline.value = ''
+}
+
+async function saveEditGoal(goalId: number) {
+  if (!editGoalTitle.value.trim() || editGoalSaving.value) return
+  editGoalSaving.value = true
+  goalError.value = null
+  try {
+    await api.patch(`/api/life/goals/${goalId}`, {
+      title: editGoalTitle.value.trim(),
+      description: editGoalDescription.value.trim() || null,
+      deadline: editGoalDeadline.value || null,
+    })
+    editingGoalId.value = null
+    goalSuccess.value = 'Goal updated!'
+    setTimeout(() => { goalSuccess.value = null }, 2000)
+    await fetchGoals()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
+    } else {
+      goalError.value = 'Network error'
+    }
+  } finally {
+    editGoalSaving.value = false
+  }
+}
+
 // Editing weekly target
 const editingTargetFor = ref<number | null>(null)
 const editTargetValue = ref<number | null>(null)
@@ -2450,8 +2497,45 @@ onUnmounted(() => {
             :key="goal.id"
             class="glass-card overflow-hidden animate-slide-up"
           >
-            <!-- Goal header -->
-            <div class="px-4 py-3 flex items-start gap-3">
+            <!-- Goal header: edit mode -->
+            <div v-if="editingGoalId === goal.id" class="px-4 py-3 space-y-2">
+              <input
+                v-model="editGoalTitle"
+                type="text"
+                placeholder="Goal title"
+                maxlength="200"
+                class="input-field w-full text-sm font-medium"
+                @keyup.enter="saveEditGoal(goal.id)"
+              />
+              <textarea
+                v-model="editGoalDescription"
+                placeholder="Description (optional)"
+                maxlength="2000"
+                rows="2"
+                class="input-field w-full text-sm resize-none"
+              />
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-txt-muted">Deadline:</label>
+                <input
+                  v-model="editGoalDeadline"
+                  type="date"
+                  class="input-field text-sm flex-1"
+                />
+              </div>
+              <div class="flex items-center gap-2 pt-1">
+                <button
+                  @click="saveEditGoal(goal.id)"
+                  :disabled="!editGoalTitle.trim() || editGoalSaving"
+                  class="text-xs text-accent hover:text-accent/80 disabled:opacity-40"
+                >
+                  {{ editGoalSaving ? 'Saving...' : 'Save' }}
+                </button>
+                <button @click="cancelEditGoal()" class="text-xs text-txt-muted hover:text-txt-primary">Cancel</button>
+              </div>
+            </div>
+
+            <!-- Goal header: display mode -->
+            <div v-else class="px-4 py-3 flex items-start gap-3 group/goal">
               <button
                 @click="toggleGoalComplete(goal)"
                 class="w-5 h-5 rounded-full border-2 border-bdr hover:border-accent flex-shrink-0 mt-0.5 transition-colors"
@@ -2459,6 +2543,13 @@ onUnmounted(() => {
               <div class="flex-1 min-w-0 cursor-pointer" @click="toggleGoalExpand(goal.id)">
                 <div class="flex items-center gap-2">
                   <span class="text-sm font-medium text-txt-primary">{{ goal.title }}</span>
+                  <button
+                    @click.stop="startEditGoal(goal)"
+                    class="opacity-0 group-hover/goal:opacity-100 p-0.5 rounded text-txt-muted hover:text-accent transition-all"
+                    title="Edit goal"
+                  >
+                    <Pencil :size="12" />
+                  </button>
                   <span
                     v-if="goal.deadline"
                     class="text-xs px-1.5 py-0.5 rounded"
@@ -2597,6 +2688,13 @@ onUnmounted(() => {
                   class="text-xs text-accent hover:text-accent/80 transition-colors"
                 >
                   + Add Milestone
+                </button>
+                <button
+                  v-if="editingGoalId !== goal.id"
+                  @click="startEditGoal(goal)"
+                  class="text-xs text-accent hover:text-accent/80 transition-colors"
+                >
+                  Edit
                 </button>
                 <button
                   @click="deleteGoal(goal)"
