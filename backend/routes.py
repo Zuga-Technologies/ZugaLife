@@ -169,8 +169,8 @@ async def _calculate_streak(session, user_id: str) -> int:
 
     first = _to_date(log_dates[0])
 
-    # Streak must include today or yesterday
-    if first != today and first != today - timedelta(days=1):
+    # Streak must include today (strict — no grace period)
+    if first != today:
         return 0
 
     streak = 1

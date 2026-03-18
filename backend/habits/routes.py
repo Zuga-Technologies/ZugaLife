@@ -642,10 +642,9 @@ def _calculate_streaks(dates: list[date]) -> tuple[int, int]:
         return 0, 0
 
     today = date.today()
-    yesterday = today - timedelta(days=1)
 
-    # Current streak must include today or yesterday
-    if dates[0] != today and dates[0] != yesterday:
+    # Current streak: must include today (strict — no grace period)
+    if dates[0] != today:
         current = 0
     else:
         current = 1
