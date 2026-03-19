@@ -50,6 +50,12 @@ def _load_submodule(package: str, name: str):
     return module
 
 
+# Load settings siblings first — other modules reference settings_helpers at request time
+_s_models = _load_sibling("settings_models")
+_s_schemas = _load_sibling("settings_schemas")
+_s_helpers = _load_sibling("settings_helpers")
+_s_routes = _load_sibling("settings_routes")
+
 # Load mood siblings in dependency order: models → schemas → routes
 _models = _load_sibling("models")
 _schemas = _load_sibling("schemas")
@@ -107,6 +113,7 @@ _combined_router.include_router(_h_routes.router)
 _combined_router.include_router(_g_routes.router)
 _combined_router.include_router(_m_routes.router)
 _combined_router.include_router(_t_routes.router)
+_combined_router.include_router(_s_routes.router)
 _combined_router.include_router(_f_routes.router)
 _combined_router.include_router(_dashboard.router)
 
@@ -129,6 +136,7 @@ class ZugaLifePlugin(StudioPlugin):
     def models(self) -> list:
         return [
             _models.MoodEntry,
+            _s_models.LifeUserSettings,
             _j_models.JournalEntry, _j_models.JournalReflection,
             _h_models.HabitDefinition, _h_models.HabitLog, _h_models.HabitInsight,
             _g_models.GoalDefinition, _g_models.GoalMilestone, _g_models.GoalHabitLink,
@@ -149,4 +157,4 @@ class ZugaLifePlugin(StudioPlugin):
 
         async with get_engine().begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("ZugaLife tables initialized (mood + journal + habits + goals + meditation + therapist)")
+        logger.info("ZugaLife tables initialized (mood + settings + journal + habits + goals + meditation + therapist)")

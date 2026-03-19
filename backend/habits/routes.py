@@ -581,6 +581,10 @@ async def get_streaks(
     async with get_session() as session:
         await _ensure_presets(session, user.id)
 
+        # Get user's timezone-aware today
+        _helpers = sys.modules["zugalife.settings_helpers"]
+        user_today = await _helpers.get_user_today(session, user.id)
+
         # Get active habits
         habits_result = await session.execute(
             select(HabitDefinition)
@@ -616,7 +620,7 @@ async def get_streaks(
         streak_infos = []
         for habit in habits:
             dates = sorted(set(logs_by_habit.get(habit.id, [])), reverse=True)
-            current, longest = _calculate_streaks(dates)
+            current, longest = _calculate_streaks(dates, today=user_today)
             streak_infos.append(HabitStreakInfo(
                 habit_id=habit.id,
                 habit_name=habit.name,
@@ -627,7 +631,7 @@ async def get_streaks(
 
         # Overall streak: consecutive days with at least 1 ACTIVE habit logged
         overall_dates = sorted(active_dates, reverse=True)
-        overall_current, overall_longest = _calculate_streaks(overall_dates)
+        overall_current, overall_longest = _calculate_streaks(overall_dates, today=user_today)
 
     return AllStreaksResponse(
         habits=streak_infos,
@@ -636,12 +640,17 @@ async def get_streaks(
     )
 
 
-def _calculate_streaks(dates: list[date]) -> tuple[int, int]:
-    """Calculate current and longest streak from a sorted (desc) list of unique dates."""
+def _calculate_streaks(dates: list[date], today: date | None = None) -> tuple[int, int]:
+    """Calculate current and longest streak from a sorted (desc) list of unique dates.
+
+    Accepts an optional `today` param for timezone-aware streak calculation.
+    Falls back to date.today() if not provided (server time).
+    """
     if not dates:
         return 0, 0
 
-    today = date.today()
+    if today is None:
+        today = date.today()
 
     # Current streak: must include today (strict — no grace period)
     if dates[0] != today:

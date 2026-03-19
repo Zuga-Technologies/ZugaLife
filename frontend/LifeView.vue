@@ -16,6 +16,29 @@ import AnalyticsDashboard from './AnalyticsDashboard.vue'
 // --- Settings ---
 const showSettings = ref(false)
 
+interface UserSettings {
+  display_name: string | null
+  timezone: string
+  theme: string
+  theme_opacity: number
+  med_duration: number
+  med_voice: string
+  med_ambience: string
+}
+
+function onSettingsLoaded(settings: UserSettings) {
+  // Apply meditation defaults from server settings (only if user hasn't changed them yet)
+  if (medView.value === 'new' && !medSession.value) {
+    if (durationOptions.includes(settings.med_duration)) {
+      medDuration.value = settings.med_duration
+    }
+    medVoice.value = settings.med_voice
+    if (ambienceOptions.some(a => a.key === settings.med_ambience)) {
+      medAmbience.value = settings.med_ambience
+    }
+  }
+}
+
 // --- Tabs ---
 
 type Tab = 'dashboard' | 'journal' | 'habits' | 'goals' | 'meditate' | 'therapist'
@@ -167,6 +190,11 @@ watch(activeTab, (tab) => {
 function handleLogoHome() { activeTab.value = 'dashboard' }
 onMounted(() => document.addEventListener('zugalife-go-home', handleLogoHome))
 onUnmounted(() => document.removeEventListener('zugalife-go-home', handleLogoHome))
+
+// Listen for settings open from ZugaApp dropdown
+function handleOpenSettings() { showSettings.value = true }
+onMounted(() => document.addEventListener('zugalife-open-settings', handleOpenSettings))
+onUnmounted(() => document.removeEventListener('zugalife-open-settings', handleOpenSettings))
 
 // Module labels for back-nav header
 const moduleLabels: Record<Exclude<Tab, 'dashboard'>, string> = {
@@ -3656,7 +3684,7 @@ onUnmounted(() => {
 
     <!-- Settings panel overlay -->
     <transition name="fade">
-      <SettingsPanel v-if="showSettings" @close="showSettings = false" />
+      <SettingsPanel v-if="showSettings" @close="showSettings = false" @settings-loaded="onSettingsLoaded" />
     </transition>
     </div>
   </div>

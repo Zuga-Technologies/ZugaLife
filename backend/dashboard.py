@@ -25,12 +25,30 @@ async def get_dashboard(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Aggregated dashboard data — one call, all modules."""
+    import zoneinfo
+    from zoneinfo import ZoneInfo
+
     now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
-    today = date.today()
-    week_start = today - timedelta(days=today.weekday())  # Monday
 
     async with get_session() as session:
+        # Load user settings for timezone + display_name
+        LifeUserSettings = sys.modules["zugalife.settings_models"].LifeUserSettings
+        settings_result = await session.execute(
+            select(LifeUserSettings).where(LifeUserSettings.user_id == user.id)
+        )
+        settings = settings_result.scalar_one_or_none()
+
+        tz_name = settings.timezone if settings else "America/New_York"
+        try:
+            user_tz = ZoneInfo(tz_name)
+        except (KeyError, zoneinfo.ZoneInfoNotFoundError):
+            user_tz = ZoneInfo("America/New_York")
+
+        user_now = datetime.now(user_tz)
+        today = user_now.date()
+        week_start = today - timedelta(days=today.weekday())  # Monday
+
         mood = await _mood_metrics(session, user.id, week_ago)
         habits = await _habit_metrics(session, user.id, week_start, today)
         goals = await _goal_metrics(session, user.id)
@@ -39,14 +57,19 @@ async def get_dashboard(
         therapist = await _therapist_metrics(session, user.id)
         forecast = await _forecast_preview(session, user.id)
 
-    # Time-based greeting
-    hour = (now.hour - 5) % 24  # rough EST offset, good enough
+    # Time-based greeting using user's actual timezone hour
+    hour = user_now.hour
     if hour < 12:
         greeting = "Good morning"
     elif hour < 17:
         greeting = "Good afternoon"
     else:
         greeting = "Good evening"
+
+    # Append display name if set
+    display_name = settings.display_name if settings else None
+    if display_name:
+        greeting = f"{greeting}, {display_name}"
 
     return {
         "greeting": greeting,

@@ -149,7 +149,14 @@ async def get_streak(
 
 
 async def _calculate_streak(session, user_id: str) -> int:
-    """Count consecutive days with at least one mood entry, ending today."""
+    """Count consecutive days with at least one mood entry, ending today.
+
+    Uses the user's configured timezone so streaks reset at the
+    user's local midnight — not UTC midnight.
+    """
+    _helpers = sys.modules["zugalife.settings_helpers"]
+    today = await _helpers.get_user_today(session, user_id)
+
     result = await session.execute(
         select(func.date(MoodEntry.created_at))
         .where(MoodEntry.user_id == user_id)
@@ -160,8 +167,6 @@ async def _calculate_streak(session, user_id: str) -> int:
 
     if not log_dates:
         return 0
-
-    today = date.today()
 
     # Parse if SQLite returned strings
     def _to_date(d):

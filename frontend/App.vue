@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@core/auth/store'
 import { getToken } from '@core/api/client'
-import { Settings, Leaf } from 'lucide-vue-next'
+import { Settings, Leaf, LogOut, ChevronDown } from 'lucide-vue-next'
 import BackgroundTheme from './BackgroundTheme.vue'
 import SettingsPanel from './SettingsPanel.vue'
 
@@ -10,12 +10,25 @@ const auth = useAuthStore()
 const email = ref('')
 const submitting = ref(false)
 const showSettings = ref(false)
+const showDropdown = ref(false)
+const dropdownRef = ref<HTMLElement | null>(null)
 
 onMounted(async () => {
   if (getToken()) {
     await auth.checkAuth()
   }
+  document.addEventListener('click', handleClickOutside)
 })
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
+
+function handleClickOutside(e: MouseEvent) {
+  if (dropdownRef.value && !dropdownRef.value.contains(e.target as Node)) {
+    showDropdown.value = false
+  }
+}
 
 async function handleLogin() {
   if (!email.value.trim() || submitting.value) return
@@ -30,7 +43,13 @@ async function handleLogin() {
 }
 
 async function handleLogout() {
+  showDropdown.value = false
   await auth.logout()
+}
+
+function openSettings() {
+  showDropdown.value = false
+  showSettings.value = true
 }
 
 function goHome() {
@@ -54,14 +73,44 @@ function goHome() {
           <span class="text-sm font-semibold text-txt-primary tracking-wide">ZugaLife</span>
         </button>
         <div class="flex-1" />
-        <div class="flex items-center gap-3">
-          <span class="text-sm text-txt-secondary">{{ auth.user?.email }}</span>
+
+        <!-- User dropdown -->
+        <div ref="dropdownRef" class="relative">
           <button
-            @click="handleLogout"
-            class="px-3 py-1.5 text-sm text-txt-muted rounded-md transition-colors hover:text-txt-primary hover:bg-surface-3/50"
+            @click="showDropdown = !showDropdown"
+            class="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors hover:bg-surface-3/50"
           >
-            Logout
+            <span class="text-sm text-txt-secondary">{{ auth.user?.email }}</span>
+            <ChevronDown
+              :size="14"
+              class="text-txt-muted transition-transform duration-200"
+              :class="{ 'rotate-180': showDropdown }"
+            />
           </button>
+
+          <!-- Dropdown menu -->
+          <transition name="dropdown">
+            <div
+              v-if="showDropdown"
+              class="absolute right-0 mt-1.5 w-48 rounded-xl bg-surface-1 border border-bdr shadow-xl shadow-black/20 overflow-hidden"
+            >
+              <button
+                @click="openSettings"
+                class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-txt-secondary hover:text-txt-primary hover:bg-surface-3/50 transition-colors"
+              >
+                <Settings :size="15" class="text-txt-muted" />
+                Settings
+              </button>
+              <div class="border-t border-bdr" />
+              <button
+                @click="handleLogout"
+                class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-txt-secondary hover:text-red-400 hover:bg-surface-3/50 transition-colors"
+              >
+                <LogOut :size="15" class="text-txt-muted" />
+                Logout
+              </button>
+            </div>
+          </transition>
         </div>
       </nav>
       <main class="pt-16 relative z-10">
@@ -134,3 +183,17 @@ function goHome() {
     </transition>
   </div>
 </template>
+
+<style scoped>
+.dropdown-enter-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.dropdown-leave-active {
+  transition: opacity 0.1s ease, transform 0.1s ease;
+}
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.97);
+}
+</style>
