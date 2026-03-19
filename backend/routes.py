@@ -58,6 +58,9 @@ async def log_mood(
                 .limit(1)
             )
             oldest_time = oldest_result.scalar_one()
+            # SQLite may strip timezone — ensure UTC
+            if oldest_time.tzinfo is None:
+                oldest_time = oldest_time.replace(tzinfo=timezone.utc)
             next_available = oldest_time + timedelta(hours=6)
             raise HTTPException(
                 status_code=429,
