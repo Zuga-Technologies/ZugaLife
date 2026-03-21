@@ -102,6 +102,9 @@ _f_schemas = _load_submodule("forecasting", "schemas")
 _f_context = _load_submodule("forecasting", "context")
 _f_routes = _load_submodule("forecasting", "routes")
 
+# Load data management (reset endpoints) — must come after all domain modules
+_data_mgmt = _load_sibling("data_management")
+
 # Load dashboard AFTER all modules — it reads from sys.modules at request time
 _dashboard = _load_sibling("dashboard")
 
@@ -115,6 +118,7 @@ _combined_router.include_router(_m_routes.router)
 _combined_router.include_router(_t_routes.router)
 _combined_router.include_router(_s_routes.router)
 _combined_router.include_router(_f_routes.router)
+_combined_router.include_router(_data_mgmt.router)
 _combined_router.include_router(_dashboard.router)
 
 
