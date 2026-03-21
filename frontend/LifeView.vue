@@ -16,29 +16,6 @@ import AnalyticsDashboard from './AnalyticsDashboard.vue'
 // --- Settings ---
 const showSettings = ref(false)
 
-interface UserSettings {
-  display_name: string | null
-  timezone: string
-  theme: string
-  theme_opacity: number
-  med_duration: number
-  med_voice: string
-  med_ambience: string
-}
-
-function onSettingsLoaded(settings: UserSettings) {
-  // Apply meditation defaults from server settings (only if user hasn't changed them yet)
-  if (medView.value === 'new' && !medSession.value) {
-    if (durationOptions.includes(settings.med_duration)) {
-      medDuration.value = settings.med_duration
-    }
-    medVoice.value = settings.med_voice
-    if (ambienceOptions.some(a => a.key === settings.med_ambience)) {
-      medAmbience.value = settings.med_ambience
-    }
-  }
-}
-
 // --- Tabs ---
 
 type Tab = 'dashboard' | 'journal' | 'habits' | 'goals' | 'meditate' | 'therapist'
@@ -3684,7 +3661,7 @@ onUnmounted(() => {
 
     <!-- Settings panel overlay -->
     <transition name="fade">
-      <SettingsPanel v-if="showSettings" @close="showSettings = false" @settings-loaded="onSettingsLoaded" />
+      <SettingsPanel v-if="showSettings" @close="showSettings = false" />
     </transition>
     </div>
   </div>
