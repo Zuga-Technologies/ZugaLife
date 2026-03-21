@@ -160,6 +160,9 @@ async def _habit_summary(session, user_id: str) -> str | None:
     if not habits:
         return None
 
+    preset_habits = [h for h in habits if h.is_preset]
+    custom_habits = [h for h in habits if not h.is_preset]
+
     lines = []
     total_completions = 0
     for h in habits:
@@ -175,7 +178,8 @@ async def _habit_summary(session, user_id: str) -> str | None:
         )
         days = log_result.scalar_one()
         total_completions += days
-        lines.append(f"  {h.name}: {days}/7 days")
+        label = h.name if not h.is_preset else f"{h.name} (default)"
+        lines.append(f"  {label}: {days}/7 days")
 
     # Check if user has EVER logged any habits (not just this week)
     if total_completions == 0:
@@ -185,13 +189,29 @@ async def _habit_summary(session, user_id: str) -> str | None:
             .where(HabitLog.user_id == user_id, HabitLog.completed == True)
         )
         if any_logs.scalar_one() == 0:
-            habit_names = [h.name for h in habits]
-            return (
-                f"NEW HABITS JUST CREATED ({len(habits)}): {', '.join(habit_names)}.\n"
-                "The user set these up recently — this is a meaningful step. "
-                "Acknowledge it warmly. Ask what motivated them to choose these specific habits. "
-                "Explore what success would look like for them."
-            )
+            # Distinguish between system defaults and user-created habits
+            parts = []
+            if preset_habits:
+                parts.append(
+                    f"The app provided {len(preset_habits)} default starter habits "
+                    f"({', '.join(h.name for h in preset_habits)}). "
+                    "These are system defaults, NOT habits the user personally chose. "
+                    "Do not praise them for 'choosing' these habits."
+                )
+            if custom_habits:
+                parts.append(
+                    f"The user also CREATED {len(custom_habits)} custom habit(s): "
+                    f"{', '.join(h.name for h in custom_habits)}. "
+                    "This IS a meaningful, intentional step — acknowledge it warmly. "
+                    "Ask what motivated them to add these specific habits."
+                )
+            if not custom_habits:
+                parts.append(
+                    "The user hasn't started tracking any habits yet. "
+                    "If relevant, you could gently explore whether any of the "
+                    "default habits resonate or if they'd like to add their own."
+                )
+            return "Habits:\n" + "\n".join(parts)
 
     return "Habit performance (last 7 days):\n" + "\n".join(lines)
 

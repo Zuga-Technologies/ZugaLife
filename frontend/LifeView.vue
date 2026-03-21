@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { api, ApiError, getToken } from '@core/api/client'
 import { startAmbience, stopAmbience, pauseAmbience, resumeAmbience, setAmbienceVolume } from './ambience'
 import { moodIcons, meditationTypeIcons, ambienceIcons, habitIcons, habitIconPicker, getIcon, BrandIcon } from './icons'
@@ -97,9 +98,61 @@ async function fetchDashboard() {
   }
 }
 
+// --- Therapist session navigation guard ---
+const showTherapistLeaveWarning = ref(false)
+const pendingTab = ref<Tab | null>(null)
+const pendingRouteLeave = ref<(() => void) | null>(null)
+
 function navigateTo(tab: Tab) {
+  if (tab !== 'therapist' && therapistSessionActive.value && therapistMessages.value.length >= 2) {
+    pendingTab.value = tab
+    pendingRouteLeave.value = null
+    showTherapistLeaveWarning.value = true
+    return
+  }
   activeTab.value = tab
 }
+
+function confirmTherapistLeave() {
+  showTherapistLeaveWarning.value = false
+  therapistSessionActive.value = false
+  therapistMessages.value = []
+  if (pendingTab.value) {
+    activeTab.value = pendingTab.value
+    pendingTab.value = null
+  }
+  if (pendingRouteLeave.value) {
+    pendingRouteLeave.value()
+    pendingRouteLeave.value = null
+  }
+}
+
+function cancelTherapistLeave() {
+  showTherapistLeaveWarning.value = false
+  pendingTab.value = null
+  pendingRouteLeave.value = null
+}
+
+// Guard: leaving ZugaLife entirely (router navigation to another studio)
+onBeforeRouteLeave((_to, _from, next) => {
+  if (therapistSessionActive.value && therapistMessages.value.length >= 2) {
+    pendingTab.value = null
+    pendingRouteLeave.value = () => next()
+    showTherapistLeaveWarning.value = true
+    next(false) // block navigation until user confirms
+  } else {
+    next()
+  }
+})
+
+// Guard: browser refresh / close tab
+function beforeUnloadHandler(e: BeforeUnloadEvent) {
+  if (therapistSessionActive.value && therapistMessages.value.length >= 2) {
+    e.preventDefault()
+  }
+}
+onMounted(() => window.addEventListener('beforeunload', beforeUnloadHandler))
+onUnmounted(() => window.removeEventListener('beforeunload', beforeUnloadHandler))
 
 // Dashboard mood picker
 const dashMoodNote = ref('')
@@ -165,7 +218,7 @@ watch(activeTab, (tab) => {
 })
 
 // Listen for logo click → return to dashboard
-function handleLogoHome() { activeTab.value = 'dashboard' }
+function handleLogoHome() { navigateTo('dashboard') }
 onMounted(() => document.addEventListener('zugalife-go-home', handleLogoHome))
 onUnmounted(() => document.removeEventListener('zugalife-go-home', handleLogoHome))
 
@@ -1840,7 +1893,7 @@ onUnmounted(() => {
     <!-- Back nav + module label (shown on non-dashboard tabs) -->
     <div v-if="activeTab !== 'dashboard'" class="flex items-center gap-3 mb-6">
       <button
-        @click="activeTab = 'dashboard'"
+        @click="navigateTo('dashboard')"
         class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-txt-muted transition-colors hover:text-txt-primary hover:bg-surface-3/50"
       >
         <ArrowLeft :size="16" />
@@ -3659,6 +3712,35 @@ onUnmounted(() => {
         </div>
       </template>
     </template>
+
+    <!-- Therapist session leave warning -->
+    <transition name="fade">
+      <div v-if="showTherapistLeaveWarning" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div class="bg-surface-1 border border-white/[0.08] rounded-2xl p-6 max-w-sm mx-4 shadow-xl">
+          <div class="flex items-center gap-3 mb-3">
+            <AlertTriangle class="w-5 h-5 text-amber-400 shrink-0" />
+            <h3 class="text-lg font-semibold text-txt-primary">Active session</h3>
+          </div>
+          <p class="text-sm text-txt-secondary mb-5">
+            You have an active therapy session. Leaving will reset it and your conversation will be lost.
+          </p>
+          <div class="flex gap-3 justify-end">
+            <button
+              @click="cancelTherapistLeave"
+              class="px-4 py-2 text-sm font-medium text-txt-secondary hover:text-txt-primary rounded-lg border border-white/[0.08] hover:bg-surface-2 transition-colors"
+            >
+              Stay
+            </button>
+            <button
+              @click="confirmTherapistLeave"
+              class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
+            >
+              Leave &amp; reset
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <!-- Settings panel overlay -->
     <transition name="fade">
