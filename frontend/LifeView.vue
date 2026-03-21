@@ -117,9 +117,10 @@ const dashMoodTimeLeft = computed(() => {
   if (!dashMoodCooldownUntil.value) return ''
   const diff = new Date(dashMoodCooldownUntil.value).getTime() - Date.now()
   if (diff <= 0) return ''
-  const hrs = Math.floor(diff / 3600000)
-  const mins = Math.ceil((diff % 3600000) / 60000)
-  return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`
+  const totalMins = Math.ceil(diff / 60000)
+  const hrs = Math.floor(totalMins / 60)
+  const mins = totalMins % 60
+  return hrs > 0 ? (mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`) : `${mins}m`
 })
 
 async function logDashMood(emoji: string) {
@@ -142,9 +143,9 @@ async function logDashMood(emoji: string) {
     if (e instanceof ApiError && e.status === 429) {
       // Extract cooldown time from error detail
       const detail = (e.body as Record<string, string>).detail || ''
-      const match = detail.match(/(\d{4}-\d{2}-\d{2}T[\d:.]+)/)
+      const match = detail.match(/(\d{4}-\d{2}-\d{2}T[\d:.]+(?:[Z+\-][\d:]*)?)/)
       if (match) dashMoodCooldownUntil.value = match[1]
-      dashMoodError.value = 'Cooldown active — ' + dashMoodTimeLeft.value + ' left'
+      dashMoodError.value = null  // Timer already shows via dashMoodOnCooldown
     } else {
       dashMoodError.value = 'Failed to log mood'
     }
