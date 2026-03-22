@@ -80,10 +80,10 @@ async def generate_meditation(
     journal_ctx = await _gather_journal_context(user.id)
     prev_titles = await _get_previous_titles(user.id)
 
-    # 1. Generate meditation script via LLM (with word count validation)
+    # 1. Generate meditation script via LLM — single pass, no retry
     prompt = _prompts.build_meditation_prompt(
         meditation_type=body.type.value,
-        duration_minutes=body.duration_minutes,
+        length=body.length.value,
         focus=body.focus,
         mood_context=mood_ctx,
         habit_context=habit_ctx,
@@ -91,8 +91,8 @@ async def generate_meditation(
         previous_titles=prev_titles,
     )
 
-    max_tokens = 8192 if body.duration_minutes >= 10 else 4096
-    total_script_cost = 0.0
+    max_tokens = 8192 if body.length.value == "long" else 4096
+    total_cost = 0.0
 
     from core.ai.gateway import CreditBlockedError
     try:
@@ -100,7 +100,7 @@ async def generate_meditation(
             prompt, task="creative", max_tokens=max_tokens,
             user_id=user.id, user_email=user.email,
         )
-        total_script_cost += script_response.cost
+        total_cost += script_response.cost
     except (BudgetExhaustedError, CreditBlockedError):
         raise HTTPException(status_code=402, detail="Daily AI budget exhausted")
     except PromptBlockedError:
@@ -108,104 +108,44 @@ async def generate_meditation(
 
     raw_script = script_response.content.strip()
     title, transcript = _parse_script(raw_script)
-    word_count = len(transcript.split())
-    logger.info(
-        "Initial script: title=%r, words=%d (target=%d min)",
-        title, word_count, body.duration_minutes,
-    )
 
-    # Generate-TTS-measure loop: generate audio, measure REAL duration,
-    # retry with scaled word count if too short.  Max 1 retry to keep
-    # cost and latency reasonable.
-    target_dur = float(body.duration_minutes)
-    dur_min = target_dur * 0.80  # accept 80%+ of target
-
-    tts_result = None
-    for _attempt in range(2):
-        # Convert script to audio via TTS
-        tts_text = _prepare_tts_text(transcript)
-        try:
-            tts_result = await call_openai_tts(
-                text=tts_text,
-                voice=body.voice.value,
-                speed=0.9,
-            )
-        except Exception as e:
-            logger.error("TTS generation failed: %s", e)
-            raise HTTPException(status_code=502, detail="Audio generation failed")
-
-        total_script_cost += tts_result.cost
-
-        # Measure ACTUAL audio duration from MP3 frames
-        actual_dur = _mp3_duration_seconds(tts_result.audio_bytes) / 60.0
-        logger.info(
-            "Attempt %d: words=%d, actual_audio=%.1f min (target=%.0f min)",
-            _attempt + 1, len(transcript.split()), actual_dur, target_dur,
+    # 2. Convert script to audio via TTS
+    tts_text = _prepare_tts_text(transcript)
+    try:
+        tts_result = await call_openai_tts(
+            text=tts_text,
+            voice=body.voice.value,
+            speed=0.9,
         )
-
-        if actual_dur >= dur_min:
-            break  # close enough
-
-        if _attempt >= 1:
-            break  # already retried once
-
-        # Calculate how many words we actually need based on real TTS rate
-        actual_wpm = len(transcript.split()) / max(actual_dur, 0.5)
-        needed_words = int(actual_wpm * target_dur * 1.10)  # 10% buffer
-        logger.info(
-            "Too short — real rate=%.0f wpm, need ~%d words. Regenerating.",
-            actual_wpm, needed_words,
-        )
-
-        # Regenerate with the calibrated word target
-        fix_prompt = (
-            f"The following meditation script produced only {actual_dur:.1f} minutes "
-            f"of audio. The target is {body.duration_minutes} minutes.\n\n"
-            f"You need to rewrite and SIGNIFICANTLY EXPAND this script to "
-            f"approximately {needed_words} words. The current script is only "
-            f"{len(transcript.split())} words.\n\n"
-            f"CRITICAL: Write {needed_words} words minimum. Count carefully.\n\n"
-            f"INSTRUCTIONS:\n"
-            f"- Keep the same title and overall structure\n"
-            f"- Add much more sensory detail, more breath cycles, more pauses\n"
-            f"- Expand each section — don't rush through any part\n"
-            f"- Include generous [PAUSE 5s] markers between sections\n"
-            f"- Output the COMPLETE expanded script (title + full body)\n\n"
-            f"Original script:\n\n{raw_script}"
-        )
-        try:
-            retry_response = await ai_call(
-                fix_prompt, task="creative", max_tokens=max_tokens,
-                user_id=user.id, user_email=user.email,
-            )
-            total_script_cost += retry_response.cost
-            raw_script = retry_response.content.strip()
-            title, transcript = _parse_script(raw_script)
-            script_response = retry_response
-        except Exception:
-            break  # use whatever we have
-
-    if tts_result is None:
+    except Exception as e:
+        logger.error("TTS generation failed: %s", e)
         raise HTTPException(status_code=502, detail="Audio generation failed")
 
+    total_cost += tts_result.cost
+
+    # Measure actual audio duration from MP3 frame headers
+    actual_seconds = int(_mp3_duration_seconds(tts_result.audio_bytes))
+    logger.info(
+        "Meditation generated: length=%s, words=%d, audio=%ds (%s), title=%r",
+        body.length.value, len(transcript.split()), actual_seconds,
+        f"{actual_seconds // 60}:{actual_seconds % 60:02d}", title,
+    )
+
     # 3. Save audio file
+    import time
     user_dir = _AUDIO_DIR / user.id
     user_dir.mkdir(parents=True, exist_ok=True)
-
-    # Use a temp name, update after we get the session ID
-    import time
     temp_filename = f"{int(time.time())}_{body.type.value}.mp3"
     audio_path = user_dir / temp_filename
     audio_path.write_bytes(tts_result.audio_bytes)
-
-    total_cost = total_script_cost  # includes both LLM and TTS costs from loop
 
     # 4. Save session to database
     async with get_session() as session:
         meditation = MeditationSession(
             user_id=user.id,
             type=body.type.value,
-            duration_minutes=body.duration_minutes,
+            length=body.length.value,
+            duration_seconds=actual_seconds,
             ambience=body.ambience.value,
             voice=body.voice.value,
             focus=body.focus,
@@ -221,8 +161,8 @@ async def generate_meditation(
         await session.refresh(meditation)
 
     logger.info(
-        "Meditation generated: user=%s type=%s duration=%d cost=$%.4f",
-        user.id, body.type.value, body.duration_minutes, total_cost,
+        "Meditation saved: user=%s type=%s length=%s duration=%ds cost=$%.4f",
+        user.id, body.type.value, body.length.value, actual_seconds, total_cost,
     )
 
     return SessionResponse.model_validate(meditation)

@@ -25,17 +25,19 @@ _EMOJI_LABELS: dict[str, str] = {
     "\U0001f914": "Thoughtful", "\U0001f60c": "Calm", "\U0001f4aa": "Motivated",
 }
 
-# Word targets for the LLM output.  Calibrated against real OpenAI TTS
-# output at speed 0.9: effective rate is ~165 wpm (not 150 — TTS speaks
-# faster than natural narration).  Targets include a +20 % overshoot
-# buffer because LLMs consistently under-produce vs. the word count
-# they're asked for.  Better to generate slightly long and let the
-# duration-validation loop trim than to land short.
+# Word targets by length category.  Deliberately generous — it's better
+# to overshoot than undershoot since there's no retry loop.  Calibrated
+# against OpenAI TTS at speed 0.9 (~165 wpm effective rate).
 _WORD_TARGETS = {
-    3: 600,
-    5: 1100,
-    10: 2200,
-    15: 3300,
+    "short": 900,     # ~4-6 min
+    "medium": 1800,   # ~8-11 min
+    "long": 3500,     # ~14-20 min (must be 12+ min)
+}
+
+_LENGTH_LABELS = {
+    "short": "3 to 5 minutes",
+    "medium": "8 to 10 minutes",
+    "long": "15 to 20 minutes",
 }
 
 # --- Content modes for variety ---
@@ -220,7 +222,7 @@ Include [PAUSE 3s] between breath cycles.""",
 
 def build_meditation_prompt(
     meditation_type: str,
-    duration_minutes: int,
+    length: str,
     focus: str | None = None,
     mood_context: str | None = None,
     habit_context: str | None = None,
@@ -228,7 +230,8 @@ def build_meditation_prompt(
     previous_titles: list[str] | None = None,
 ) -> str:
     """Build the full meditation script generation prompt."""
-    word_target = _WORD_TARGETS.get(duration_minutes, 1500)
+    word_target = _WORD_TARGETS.get(length, 1800)
+    length_label = _LENGTH_LABELS.get(length, "8 to 10 minutes")
     technique = _TECHNIQUE_INSTRUCTIONS.get(
         meditation_type, _TECHNIQUE_INSTRUCTIONS["breathing"],
     )
@@ -280,7 +283,7 @@ PACING (CRITICAL — this will be read aloud by TTS at slow speed):
 
 LENGTH REQUIREMENT (NON-NEGOTIABLE):
 - You MUST write at least {word_target} words. This is a HARD requirement.
-- A {duration_minutes}-minute meditation needs substantial content to fill the time.
+- This is a {length_label} meditation — write enough content to fill that time when read aloud.
 - If you feel you've covered everything, go DEEPER — add more sensory details, more pause markers, more gentle repetition, more silence invitations.
 - Count your output before finishing. If under {word_target} words, keep writing.
 
@@ -295,7 +298,7 @@ FORMAT:
 TECHNIQUE:
 {technique}
 
-Write the meditation script now. Remember: title on line 1, blank line, then the script. Aim for {word_target}+ words."""
+Write the meditation script now. Remember: title on line 1, blank line, then the script. This is a {length_label} meditation — aim for {word_target}+ words."""
 
 
 def _pick_content_mode(previous_titles: list[str] | None = None) -> str:

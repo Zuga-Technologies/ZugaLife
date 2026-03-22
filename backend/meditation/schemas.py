@@ -1,6 +1,6 @@
 """ZugaLife meditation Pydantic request/response schemas."""
 
-from datetime import date, datetime
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -18,6 +18,12 @@ class MeditationType(str, Enum):
     stress_relief = "stress_relief"
 
 
+class MeditationLength(str, Enum):
+    short = "short"    # ~3-5 min
+    medium = "medium"  # ~7-10 min
+    long = "long"      # ~12+ min
+
+
 class AmbienceType(str, Enum):
     rain = "rain"
     ocean = "ocean"
@@ -31,22 +37,15 @@ class VoiceType(str, Enum):
     nova = "nova"
 
 
-VALID_DURATIONS = {3, 5, 10, 15}
-
-
 # --- Requests ---
 
 
 class GenerateRequest(BaseModel):
     type: MeditationType
-    duration_minutes: int = Field(..., description="3, 5, 10, or 15")
+    length: MeditationLength = MeditationLength.medium
     ambience: AmbienceType = AmbienceType.rain
     voice: VoiceType = VoiceType.shimmer
     focus: str | None = Field(None, max_length=200)
-
-    def model_post_init(self, __context):
-        if self.duration_minutes not in VALID_DURATIONS:
-            raise ValueError(f"duration_minutes must be one of {VALID_DURATIONS}")
 
 
 class MoodAfterRequest(BaseModel):
@@ -61,7 +60,8 @@ class SessionResponse(BaseModel):
 
     id: int
     type: str
-    duration_minutes: int
+    length: str
+    duration_seconds: int
     ambience: str
     voice: str
     focus: str | None
@@ -82,7 +82,8 @@ class SessionBrief(BaseModel):
 
     id: int
     type: str
-    duration_minutes: int
+    length: str
+    duration_seconds: int
     title: str
     is_favorite: bool
     mood_after: str | None

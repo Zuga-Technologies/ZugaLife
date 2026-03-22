@@ -238,8 +238,8 @@ async def _meditation_metrics(session, user_id: str, since: datetime) -> dict:
     result = await session.execute(
         select(
             func.count(),
-            func.sum(MeditationSession.duration_minutes),
-            func.avg(MeditationSession.duration_minutes),
+            func.sum(MeditationSession.duration_seconds),
+            func.avg(MeditationSession.duration_seconds),
         )
         .where(
             MeditationSession.user_id == user_id,
@@ -262,8 +262,8 @@ async def _meditation_metrics(session, user_id: str, since: datetime) -> dict:
     return {
         "has_data": True,
         "sessions_this_week": count,
-        "total_minutes": int(row[1] or 0),
-        "avg_minutes": int(row[2] or 0),
+        "total_minutes": int((row[1] or 0) / 60),
+        "avg_minutes": int((row[2] or 0) / 60),
         "total_sessions": total,
     }
 

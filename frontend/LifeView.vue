@@ -1213,7 +1213,8 @@ function isOverdue(deadline: string | null): boolean {
 interface MeditationSession {
   id: number
   type: string
-  duration_minutes: number
+  length: string
+  duration_seconds: number
   ambience: string
   voice: string
   focus: string | null
@@ -1232,7 +1233,8 @@ interface MeditationSession {
 interface MeditationBrief {
   id: number
   type: string
-  duration_minutes: number
+  length: string
+  duration_seconds: number
   title: string
   is_favorite: boolean
   mood_after: string | null
@@ -1267,14 +1269,18 @@ const ambienceOptions = [
   { key: 'silence', label: 'Silence' },
 ]
 
-const durationOptions = [3, 5, 10, 15]
+const lengthOptions = [
+  { key: 'short', label: 'Short', desc: '~3-5 min' },
+  { key: 'medium', label: 'Medium', desc: '~7-10 min' },
+  { key: 'long', label: 'Long', desc: '~12+ min' },
+]
 
 type MedView = 'new' | 'player' | 'history'
 const medView = ref<MedView>('new')
 
 // Config state
 const medType = ref('breathing')
-const medDuration = ref(5)
+const medLength = ref('medium')
 const medAmbience = ref('rain')
 const medVoice = ref('shimmer')
 const medFocus = ref('')
@@ -1345,7 +1351,7 @@ async function generateMeditation() {
   try {
     const payload: Record<string, unknown> = {
       type: medType.value,
-      duration_minutes: medDuration.value,
+      length: medLength.value,
       ambience: medAmbience.value,
       voice: medVoice.value,
     }
@@ -3052,20 +3058,21 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Duration -->
+        <!-- Length -->
         <div class="mb-6">
-          <h3 class="text-sm font-semibold text-txt-primary mb-3">Duration</h3>
+          <h3 class="text-sm font-semibold text-txt-primary mb-3">Length</h3>
           <div class="flex gap-2">
             <button
-              v-for="d in durationOptions"
-              :key="d"
-              @click="medDuration = d"
+              v-for="opt in lengthOptions"
+              :key="opt.key"
+              @click="medLength = opt.key"
               class="flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-              :class="medDuration === d
+              :class="medLength === opt.key
                 ? 'bg-accent text-white'
                 : 'glass-card text-txt-muted hover:text-txt-primary'"
             >
-              ~{{ d }} min
+              <div>{{ opt.label }}</div>
+              <div class="text-[10px] opacity-70 mt-0.5">{{ opt.desc }}</div>
             </button>
           </div>
         </div>
@@ -3158,7 +3165,7 @@ onUnmounted(() => {
               <h2 class="text-lg font-semibold text-txt-primary">{{ medSession.title }}</h2>
               <div class="flex items-center gap-2 mt-1">
                 <span class="text-xs text-txt-muted">{{ getMedTypeLabel(medSession.type) }}</span>
-                <span class="text-xs text-txt-muted">~{{ medSession.duration_minutes }} min</span>
+                <span class="text-xs text-txt-muted">{{ Math.floor(medSession.duration_seconds / 60) }}:{{ String(medSession.duration_seconds % 60).padStart(2, '0') }}</span>
                 <span class="text-xs text-txt-muted">${{ medSession.cost.toFixed(4) }}</span>
               </div>
             </div>
@@ -3288,7 +3295,7 @@ onUnmounted(() => {
               </div>
               <div class="flex items-center gap-2 mt-0.5">
                 <span class="text-xs text-txt-muted">{{ getMedTypeLabel(s.type) }}</span>
-                <span class="text-xs text-txt-muted">~{{ s.duration_minutes }} min</span>
+                <span class="text-xs text-txt-muted">{{ Math.floor(s.duration_seconds / 60) }}:{{ String(s.duration_seconds % 60).padStart(2, '0') }}</span>
                 <span v-if="s.mood_after" class="text-sm">{{ s.mood_after }}</span>
                 <span v-if="s.is_favorite" class="text-amber-400 text-xs">&#9733;</span>
               </div>

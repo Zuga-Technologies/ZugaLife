@@ -23,6 +23,6 @@ class LifeUserSettings(Base, TimestampMixin):
     theme_opacity: Mapped[float] = mapped_column(Float, default=0.3)
 
     # Meditation defaults
-    med_duration: Mapped[int] = mapped_column(Integer, default=10)
+    med_length: Mapped[str] = mapped_column(String(10), default="medium")
     med_voice: Mapped[str] = mapped_column(String(20), default="nova")
     med_ambience: Mapped[str] = mapped_column(String(20), default="rain")

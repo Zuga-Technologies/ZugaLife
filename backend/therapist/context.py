@@ -275,7 +275,7 @@ async def _meditation_summary(session, user_id: str) -> str | None:
     result = await session.execute(
         select(
             func.count(),
-            func.avg(MeditationSession.duration_minutes),
+            func.avg(MeditationSession.duration_seconds),
         )
         .where(
             MeditationSession.user_id == user_id,
@@ -295,7 +295,7 @@ async def _meditation_summary(session, user_id: str) -> str | None:
             return None  # Never meditated — don't mention it
         return "Meditation: No sessions in the last 7 days."
 
-    avg_duration = int(row[1] or 0)
+    avg_duration = int((row[1] or 0) / 60)
     return f"Meditation: {count} sessions in the last 7 days (avg ~{avg_duration} min)."
 
 

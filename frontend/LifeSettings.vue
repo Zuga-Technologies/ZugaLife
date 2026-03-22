@@ -8,7 +8,7 @@ import {
 
 // ─── Meditation defaults ────────────────────────────────────────────────────
 
-const medDuration = ref<number>(10)
+const medLength = ref<string>('medium')
 const medVoice = ref<string>('nova')
 const medAmbience = ref<string>('rain')
 const savedIndicator = ref(false)
@@ -16,10 +16,10 @@ let savedTimer: ReturnType<typeof setTimeout> | null = null
 
 async function fetchSettings() {
   try {
-    const data = await api.get<{ med_duration: number; med_voice: string; med_ambience: string }>(
+    const data = await api.get<{ med_length: string; med_voice: string; med_ambience: string }>(
       '/api/life/settings',
     )
-    medDuration.value = data.med_duration ?? 10
+    medLength.value = data.med_length ?? 'medium'
     medVoice.value = data.med_voice ?? 'nova'
     medAmbience.value = data.med_ambience ?? 'rain'
   } catch {
@@ -30,7 +30,7 @@ async function fetchSettings() {
 async function saveMedSettings() {
   try {
     await api.put('/api/life/settings', {
-      med_duration: medDuration.value,
+      med_length: medLength.value,
       med_voice: medVoice.value,
       med_ambience: medAmbience.value,
     })
@@ -196,21 +196,17 @@ function exportJournal() {
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <!-- Duration -->
+        <!-- Length -->
         <div>
-          <label class="block text-sm font-medium text-txt-secondary mb-1.5">Duration</label>
+          <label class="block text-sm font-medium text-txt-secondary mb-1.5">Length</label>
           <select
-            v-model.number="medDuration"
+            v-model="medLength"
             @change="saveMedSettings"
             class="w-full bg-surface-2 border border-bdr rounded-lg px-3 py-2 text-sm text-txt-primary focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50 transition-colors"
           >
-            <option :value="5">5 minutes</option>
-            <option :value="10">10 minutes</option>
-            <option :value="15">15 minutes</option>
-            <option :value="20">20 minutes</option>
-            <option :value="30">30 minutes</option>
-            <option :value="45">45 minutes</option>
-            <option :value="60">60 minutes</option>
+            <option value="short">Short (~3-5 min)</option>
+            <option value="medium">Medium (~7-10 min)</option>
+            <option value="long">Long (~12+ min)</option>
           </select>
         </div>
 

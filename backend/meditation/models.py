@@ -18,7 +18,8 @@ class MeditationSession(Base):
 
     # Session config
     type: Mapped[str] = mapped_column(String(30), nullable=False)
-    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    length: Mapped[str] = mapped_column(String(10), nullable=False, default="medium")
+    duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     ambience: Mapped[str] = mapped_column(String(20), nullable=False)
     voice: Mapped[str] = mapped_column(String(20), nullable=False, default="shimmer")
     focus: Mapped[str | None] = mapped_column(String(200), nullable=True)

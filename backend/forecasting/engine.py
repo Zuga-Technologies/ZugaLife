@@ -550,7 +550,7 @@ async def _fetch_meditation_sessions_full(session, user_id: str, days: int):
     result = await session.execute(
         select(
             MeditationSession.type,
-            MeditationSession.duration_minutes,
+            MeditationSession.duration_seconds,
             MeditationSession.ambience,
             MeditationSession.mood_before,
             MeditationSession.mood_after,
@@ -593,7 +593,7 @@ def compute_meditation_type_breakdown(med_sessions) -> dict:
         if before is not None and after is not None:
             parsed.append({
                 "type": s.type or "unknown",
-                "duration": s.duration_minutes or 0,
+                "duration": (s.duration_seconds or 0) // 60,
                 "ambience": s.ambience or "unknown",
                 "delta": after - before,
             })

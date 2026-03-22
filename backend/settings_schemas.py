@@ -20,7 +20,7 @@ class LifeSettingsResponse(BaseModel):
     timezone: str
     theme: str
     theme_opacity: float
-    med_duration: int
+    med_length: str
     med_voice: str
     med_ambience: str
 
@@ -33,6 +33,6 @@ class LifeSettingsUpdate(BaseModel):
     timezone: str | None = Field(None, max_length=50)
     theme: str | None = Field(None, max_length=30)
     theme_opacity: float | None = Field(None, ge=0.0, le=1.0)
-    med_duration: int | None = Field(None, ge=1, le=60)
+    med_length: str | None = Field(None, max_length=10)
     med_voice: str | None = Field(None, max_length=20)
     med_ambience: str | None = Field(None, max_length=20)
