@@ -25,14 +25,17 @@ _EMOJI_LABELS: dict[str, str] = {
     "\U0001f914": "Thoughtful", "\U0001f60c": "Calm", "\U0001f4aa": "Motivated",
 }
 
-# Word targets for the LLM output. Based on ~150 wpm at TTS speed 0.9,
-# with a slight buffer since pause markers also contribute to duration.
-# The evaluate→fix pipeline in routes.py handles under/overshoot.
+# Word targets for the LLM output.  Calibrated against real OpenAI TTS
+# output at speed 0.9: effective rate is ~165 wpm (not 150 — TTS speaks
+# faster than natural narration).  Targets include a +20 % overshoot
+# buffer because LLMs consistently under-produce vs. the word count
+# they're asked for.  Better to generate slightly long and let the
+# duration-validation loop trim than to land short.
 _WORD_TARGETS = {
-    3: 450,
-    5: 750,
-    10: 1500,
-    15: 2250,
+    3: 600,
+    5: 1100,
+    10: 2200,
+    15: 3300,
 }
 
 # --- Content modes for variety ---

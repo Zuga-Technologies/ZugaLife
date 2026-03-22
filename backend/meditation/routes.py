@@ -108,40 +108,45 @@ async def generate_meditation(
     raw_script = script_response.content.strip()
     title, transcript = _parse_script(raw_script)
 
-    # Duration estimation — evaluate if audio will fill the requested time.
-    # We accept a range around the target since exact durations aren't
-    # possible with LLM-generated content + TTS.
-    estimated_dur = _estimate_audio_duration(transcript)
+    # Duration estimation — retry up to 2 times if the script doesn't
+    # fill the requested time.  Each pass asks the LLM to expand/trim.
     target_dur = float(body.duration_minutes)
-    dur_min = target_dur * 0.85  # e.g. 3 min → accept 2:33+
-    dur_max = target_dur * 1.15  # e.g. 3 min → accept up to 3:27
+    dur_min = target_dur * 0.80  # accept 80%+ of target
+    dur_max = target_dur * 1.15
 
-    if estimated_dur < dur_min or estimated_dur > dur_max:
+    for _attempt in range(2):
+        estimated_dur = _estimate_audio_duration(transcript)
+        if dur_min <= estimated_dur <= dur_max:
+            break  # within range
+
         if estimated_dur < dur_min:
             shortfall = target_dur - estimated_dur
             logger.info(
-                "Script too short: estimated %.1f min, target %.0f min (need +%.1f min). Retrying.",
-                estimated_dur, target_dur, shortfall,
+                "Script too short (attempt %d): estimated %.1f min, target %.0f min (need +%.1f min).",
+                _attempt + 1, estimated_dur, target_dur, shortfall,
             )
             fix_prompt = (
                 f"The following meditation script will only produce approximately "
                 f"{estimated_dur:.1f} minutes of audio when read aloud. "
                 f"The target duration is {body.duration_minutes} minutes. "
                 f"You need to add approximately {shortfall:.1f} more minutes of spoken content.\n\n"
+                f"WORD COUNT: The current script is ~{len(transcript.split())} words. "
+                f"You need at least {int(target_dur * 165)} words total.\n\n"
                 f"SPECIFIC INSTRUCTIONS:\n"
-                f"- Add more [PAUSE 5s] markers between sections (each adds 5 seconds of silence)\n"
+                f"- Add more [PAUSE 5s] markers between sections\n"
                 f"- Expand breathing/body scan/visualization sections with richer sensory detail\n"
                 f"- Add more breath cycles with individually counted breaths\n"
                 f"- Slow down transitions — let moments linger longer\n"
-                f"- Do NOT change the title or overall structure, just deepen and extend\n\n"
+                f"- Do NOT change the title or overall structure, just deepen and extend\n"
+                f"- Output the COMPLETE expanded script (title + full body), not just additions\n\n"
                 f"Here is the script to expand:\n\n"
                 f"{raw_script}"
             )
         else:
             excess = estimated_dur - target_dur
             logger.info(
-                "Script too long: estimated %.1f min, target %.0f min (%.1f min over). Trimming.",
-                estimated_dur, target_dur, excess,
+                "Script too long (attempt %d): estimated %.1f min, target %.0f min (%.1f min over).",
+                _attempt + 1, estimated_dur, target_dur, excess,
             )
             fix_prompt = (
                 f"The following meditation script will produce approximately "
@@ -169,7 +174,7 @@ async def generate_meditation(
             new_dur = _estimate_audio_duration(transcript)
             logger.info("After adjustment: estimated %.1f min (was %.1f)", new_dur, estimated_dur)
         except Exception:
-            pass  # Use original if retry fails
+            break  # Use whatever we have if retry fails
 
     # 2. Convert script to audio via TTS
     # Replace pause markers with SSML-style silence instructions
@@ -405,8 +410,8 @@ def _parse_script(raw: str) -> tuple[str, str]:
 def _estimate_audio_duration(transcript: str) -> float:
     """Estimate how many minutes the transcript will produce as audio.
 
-    Calibrated from real TTS output measurements:
-    - Spoken words at ~150 wpm (OpenAI TTS at speed 0.9)
+    Calibrated from real TTS output measurements (OpenAI TTS at speed 0.9):
+    - Effective speaking rate: ~165 wpm (faster than natural narration)
     - Each pause marker produces ~0.6s of actual TTS silence regardless
       of the labeled duration. OpenAI TTS doesn't support real silence —
       we fake it with ellipsis/newlines which produce minimal gaps.
@@ -418,7 +423,7 @@ def _estimate_audio_duration(transcript: str) -> float:
     # Count spoken words (exclude pause markers)
     text_without_pauses = re.sub(r"\[PAUSE\s*\d+s?\]", "", transcript)
     word_count = len(text_without_pauses.split())
-    speaking_minutes = word_count / 150.0
+    speaking_minutes = word_count / 165.0
 
     # Count ALL pause markers — each produces ~0.6s actual silence
     total_pauses = len(re.findall(r"\[PAUSE\s*\d+s?\]", transcript))
