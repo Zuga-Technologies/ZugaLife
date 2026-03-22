@@ -1,6 +1,6 @@
 """Pydantic schemas for user settings endpoints."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # Allowed values for validation
@@ -20,11 +20,16 @@ class LifeSettingsResponse(BaseModel):
     timezone: str
     theme: str
     theme_opacity: float
-    med_length: str
-    med_voice: str
-    med_ambience: str
+    med_length: str = "medium"
+    med_voice: str = "nova"
+    med_ambience: str = "rain"
 
     model_config = {"from_attributes": True}
+
+    @field_validator("med_length", mode="before")
+    @classmethod
+    def _default_med_length(cls, v):
+        return v if v is not None else "medium"
 
 
 class LifeSettingsUpdate(BaseModel):

@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # --- Enums ---
@@ -60,8 +60,8 @@ class SessionResponse(BaseModel):
 
     id: int
     type: str
-    length: str
-    duration_seconds: int
+    length: str = "medium"
+    duration_seconds: int = 0
     ambience: str
     voice: str
     focus: str | None
@@ -76,18 +76,38 @@ class SessionResponse(BaseModel):
     is_favorite: bool
     created_at: datetime
 
+    @field_validator("length", mode="before")
+    @classmethod
+    def _default_length(cls, v):
+        return v if v is not None else "medium"
+
+    @field_validator("duration_seconds", mode="before")
+    @classmethod
+    def _default_duration(cls, v):
+        return v if v is not None else 0
+
 
 class SessionBrief(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
     type: str
-    length: str
-    duration_seconds: int
+    length: str = "medium"
+    duration_seconds: int = 0
     title: str
     is_favorite: bool
     mood_after: str | None
     created_at: datetime
+
+    @field_validator("length", mode="before")
+    @classmethod
+    def _default_length(cls, v):
+        return v if v is not None else "medium"
+
+    @field_validator("duration_seconds", mode="before")
+    @classmethod
+    def _default_duration(cls, v):
+        return v if v is not None else 0
 
 
 class SessionListResponse(BaseModel):
