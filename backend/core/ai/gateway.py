@@ -45,14 +45,14 @@ async def ai_call(
     All tasks route to Venice (privacy-first, zero data retention).
     If user_id/user_email are provided, credit checks and tracking are applied.
     """
-    from core.credits.client import get_credit_client, dollars_to_credits
+    from core.credits.client import get_credit_client, dollars_to_tokens
 
     credit_client = get_credit_client()
 
-    # Pre-flight credit check (only if user context available)
+    # Pre-flight token check (only if user context available)
     if user_id and user_email:
         if not await credit_client.can_spend(user_id, user_email):
-            raise CreditBlockedError("No credits available")
+            raise CreditBlockedError("Insufficient ZugaTokens")
 
     model = "kimi-k2-5"
     logger.info("AI call: task=%s model=%s user=%s", task, model, user_id or "anonymous")
@@ -71,11 +71,11 @@ async def ai_call(
         response.cost,
     )
 
-    # Record spend to credit ledger
+    # Record token spend
     if user_id:
         await credit_client.record_spend(
             user_id=user_id,
-            credits=dollars_to_credits(response.cost),
+            tokens=dollars_to_tokens(response.cost),
             cost_usd=response.cost,
             service="venice",
             reason=task,
