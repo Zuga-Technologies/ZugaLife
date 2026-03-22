@@ -171,6 +171,8 @@ class ZugaLifePlugin(StudioPlugin):
                 "ALTER TABLE meditation_sessions ADD COLUMN duration_seconds INTEGER DEFAULT 0",
                 "ALTER TABLE meditation_sessions ADD COLUMN status VARCHAR(20) DEFAULT 'ready'",
                 "ALTER TABLE meditation_sessions ADD COLUMN error_message VARCHAR(500)",
+                # Drop legacy column that blocks inserts (NOT NULL, no default, not in model)
+                "ALTER TABLE meditation_sessions DROP COLUMN duration_minutes",
             ]
             for sql in migrations:
                 try:
