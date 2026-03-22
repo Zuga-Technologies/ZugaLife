@@ -81,6 +81,10 @@ async def generate_meditation(
 
     try:
         from core.ai.gateway import BudgetExhaustedError, CreditBlockedError, PromptBlockedError, ai_call
+        try:
+            from core.ai.gateway import InsufficientTokensError
+        except ImportError:
+            InsufficientTokensError = CreditBlockedError  # fallback for standalone
         from core.ai.providers import call_openai_tts
     except ImportError:
         raise HTTPException(
@@ -90,6 +94,15 @@ async def generate_meditation(
 
     async def _stream() -> AsyncGenerator[str, None]:
         """SSE generator — yields events as the pipeline progresses."""
+        try:
+            async for event in _stream_inner():
+                yield event
+        except Exception as e:
+            logger.error("Meditation SSE stream failed: %s", e, exc_info=True)
+            yield _sse_event("error", {"detail": str(e)[:200], "code": 500})
+
+    async def _stream_inner() -> AsyncGenerator[str, None]:
+        """Inner generator — separated so outer can catch unhandled errors."""
         total_cost = 0.0
 
         # Stage 1: Gather context
@@ -125,7 +138,7 @@ async def generate_meditation(
                     user_id=user.id, user_email=user.email,
                 )
                 total_cost += outline_response.cost
-            except (BudgetExhaustedError, CreditBlockedError):
+            except (BudgetExhaustedError, CreditBlockedError, InsufficientTokensError):
                 yield _sse_event("error", {"detail": "Daily AI budget exhausted", "code": 402})
                 return
             except PromptBlockedError:
@@ -151,7 +164,7 @@ async def generate_meditation(
                     user_id=user.id, user_email=user.email,
                 )
                 total_cost += script_response.cost
-            except (BudgetExhaustedError, CreditBlockedError):
+            except (BudgetExhaustedError, CreditBlockedError, InsufficientTokensError):
                 yield _sse_event("error", {"detail": "Daily AI budget exhausted", "code": 402})
                 return
             except PromptBlockedError:
@@ -178,7 +191,7 @@ async def generate_meditation(
                     user_id=user.id, user_email=user.email,
                 )
                 total_cost += script_response.cost
-            except (BudgetExhaustedError, CreditBlockedError):
+            except (BudgetExhaustedError, CreditBlockedError, InsufficientTokensError):
                 yield _sse_event("error", {"detail": "Daily AI budget exhausted", "code": 402})
                 return
             except PromptBlockedError:
