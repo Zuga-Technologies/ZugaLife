@@ -37,11 +37,13 @@ router = APIRouter(prefix="/api/life/meditation", tags=["life-meditation"])
 # Audio storage directory (relative to backend working dir)
 _AUDIO_DIR = Path("data/meditation_audio")
 
-# Ensure audio dir exists at import time.
+# Resolve symlinks once at import time.
 # On Railway, _AUDIO_DIR is a symlink to /data/meditation_audio (persistent volume).
-# The volume may not have this subdir yet — resolve() follows the symlink so we
-# create the real target directory, not a new dir over the symlink.
-_AUDIO_DIR.resolve().mkdir(parents=True, exist_ok=True)
+# The volume may not have this subdir yet.  resolve() dereferences the symlink so
+# all subsequent mkdir / path operations use the real path, avoiding the
+# "FileExistsError: symlink already exists" trap in pathlib.mkdir(parents=True).
+_AUDIO_DIR = _AUDIO_DIR.resolve()
+_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # --- Generate ---
