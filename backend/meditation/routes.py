@@ -96,6 +96,7 @@ async def generate_meditation(
         """SSE generator — yields events as the pipeline progresses."""
         total_cost = 0.0
 
+        logger.warning("MEDITATION SSE STREAM STARTED for user=%s length=%s", user.id, body.length.value)
         try:
             # Stage 1: Gather context
             yield _sse_event("stage", {"stage": "validating"})
@@ -176,9 +177,11 @@ async def generate_meditation(
             logger.warning("PARSED title=%r, transcript_words=%d", title, len(transcript.split()))
 
             # Stage 3: TTS
+            logger.warning("MEDITATION STARTING TTS, transcript_len=%d", len(transcript))
             yield _sse_event("stage", {"stage": "synthesizing_audio"})
 
             tts_text = _prepare_tts_text(transcript)
+            logger.warning("MEDITATION TTS text prepared, len=%d", len(tts_text))
             tts_result = await call_openai_tts(
                 text=tts_text,
                 voice=body.voice.value,
