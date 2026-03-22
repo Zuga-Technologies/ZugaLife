@@ -1,13 +1,16 @@
 """ZugaLife meditation endpoints."""
 
+import json
 import logging
 import struct
 import sys
+import time
+from collections.abc import AsyncGenerator
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import desc, func, select
 
 from core.auth.middleware import get_current_user
@@ -50,13 +53,25 @@ _AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 # --- Generate ---
 
 
-@router.post("/generate", response_model=SessionResponse, status_code=201)
+def _sse_event(event: str, data: dict) -> str:
+    """Format a single SSE event string."""
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+@router.post("/generate")
 async def generate_meditation(
     body: GenerateRequest,
     user: CurrentUser = Depends(get_current_user),
 ):
-    """Generate a new AI meditation session with audio."""
-    # Check daily limit
+    """Generate a meditation session, streaming progress via SSE.
+
+    Returns a text/event-stream with these events:
+      event: stage   — {stage: "validating"|"generating_script"|"synthesizing_audio"|"saving"}
+      event: session — full SessionResponse JSON (generation complete)
+      event: error   — {detail: "...", code: 402|429|...}
+    """
+    # Pre-flight validation (these CAN raise HTTP errors since we haven't
+    # started the stream yet — FastAPI handles them normally)
     used = await _sessions_today(user.id)
     if used >= DAILY_LIMIT:
         raise HTTPException(
@@ -64,9 +79,8 @@ async def generate_meditation(
             detail=f"You've used all {DAILY_LIMIT} meditation sessions today. Come back tomorrow.",
         )
 
-    # Import AI dependencies (fails gracefully in standalone mode)
     try:
-        from core.ai.gateway import BudgetExhaustedError, PromptBlockedError, ai_call
+        from core.ai.gateway import BudgetExhaustedError, CreditBlockedError, PromptBlockedError, ai_call
         from core.ai.providers import call_openai_tts
     except ImportError:
         raise HTTPException(
@@ -74,98 +88,119 @@ async def generate_meditation(
             detail="Meditation generation not available in standalone mode",
         )
 
-    # Gather personalization context
-    mood_ctx = await _gather_mood_context(user.id)
-    habit_ctx = await _gather_habit_context(user.id)
-    journal_ctx = await _gather_journal_context(user.id)
-    prev_titles = await _get_previous_titles(user.id)
+    async def _stream() -> AsyncGenerator[str, None]:
+        """SSE generator — yields events as the pipeline progresses."""
+        total_cost = 0.0
 
-    # 1. Generate meditation script via LLM — single pass, no retry
-    prompt = _prompts.build_meditation_prompt(
-        meditation_type=body.type.value,
-        length=body.length.value,
-        focus=body.focus,
-        mood_context=mood_ctx,
-        habit_context=habit_ctx,
-        journal_context=journal_ctx,
-        previous_titles=prev_titles,
-    )
+        # Stage 1: Gather context
+        yield _sse_event("stage", {"stage": "validating"})
 
-    max_tokens = 8192 if body.length.value == "long" else 4096
-    total_cost = 0.0
+        mood_ctx = await _gather_mood_context(user.id)
+        habit_ctx = await _gather_habit_context(user.id)
+        journal_ctx = await _gather_journal_context(user.id)
+        prev_titles = await _get_previous_titles(user.id)
 
-    from core.ai.gateway import CreditBlockedError
-    try:
-        script_response = await ai_call(
-            prompt, task="creative", max_tokens=max_tokens,
-            user_id=user.id, user_email=user.email,
-        )
-        total_cost += script_response.cost
-    except (BudgetExhaustedError, CreditBlockedError):
-        raise HTTPException(status_code=402, detail="Daily AI budget exhausted")
-    except PromptBlockedError:
-        raise HTTPException(status_code=400, detail="Content blocked by security filter")
+        # Stage 2: Generate script via LLM
+        yield _sse_event("stage", {"stage": "generating_script"})
 
-    raw_script = script_response.content.strip()
-    title, transcript = _parse_script(raw_script)
-
-    # 2. Convert script to audio via TTS
-    tts_text = _prepare_tts_text(transcript)
-    try:
-        tts_result = await call_openai_tts(
-            text=tts_text,
-            voice=body.voice.value,
-            speed=0.9,
-        )
-    except Exception as e:
-        logger.error("TTS generation failed: %s", e)
-        raise HTTPException(status_code=502, detail="Audio generation failed")
-
-    total_cost += tts_result.cost
-
-    # Measure actual audio duration from MP3 frame headers
-    actual_seconds = int(_mp3_duration_seconds(tts_result.audio_bytes))
-    logger.info(
-        "Meditation generated: length=%s, words=%d, audio=%ds (%s), title=%r",
-        body.length.value, len(transcript.split()), actual_seconds,
-        f"{actual_seconds // 60}:{actual_seconds % 60:02d}", title,
-    )
-
-    # 3. Save audio file
-    import time
-    user_dir = _AUDIO_DIR / user.id
-    user_dir.mkdir(parents=True, exist_ok=True)
-    temp_filename = f"{int(time.time())}_{body.type.value}.mp3"
-    audio_path = user_dir / temp_filename
-    audio_path.write_bytes(tts_result.audio_bytes)
-
-    # 4. Save session to database
-    async with get_session() as session:
-        meditation = MeditationSession(
-            user_id=user.id,
-            type=body.type.value,
+        prompt = _prompts.build_meditation_prompt(
+            meditation_type=body.type.value,
             length=body.length.value,
-            duration_seconds=actual_seconds,
-            ambience=body.ambience.value,
-            voice=body.voice.value,
             focus=body.focus,
-            title=title,
-            transcript=transcript,
-            audio_filename=f"{user.id}/{temp_filename}",
-            model_used=script_response.model,
-            tts_model=tts_result.model,
-            cost=total_cost,
+            mood_context=mood_ctx,
+            habit_context=habit_ctx,
+            journal_context=journal_ctx,
+            previous_titles=prev_titles,
         )
-        session.add(meditation)
-        await session.flush()
-        await session.refresh(meditation)
 
-    logger.info(
-        "Meditation saved: user=%s type=%s length=%s duration=%ds cost=$%.4f",
-        user.id, body.type.value, body.length.value, actual_seconds, total_cost,
+        max_tokens = 8192 if body.length.value == "long" else 4096
+
+        try:
+            script_response = await ai_call(
+                prompt, task="creative", max_tokens=max_tokens,
+                user_id=user.id, user_email=user.email,
+            )
+            total_cost += script_response.cost
+        except (BudgetExhaustedError, CreditBlockedError):
+            yield _sse_event("error", {"detail": "Daily AI budget exhausted", "code": 402})
+            return
+        except PromptBlockedError:
+            yield _sse_event("error", {"detail": "Content blocked by security filter", "code": 400})
+            return
+
+        raw_script = script_response.content.strip()
+        title, transcript = _parse_script(raw_script)
+
+        # Stage 3: TTS
+        yield _sse_event("stage", {"stage": "synthesizing_audio"})
+
+        tts_text = _prepare_tts_text(transcript)
+        try:
+            tts_result = await call_openai_tts(
+                text=tts_text,
+                voice=body.voice.value,
+                speed=0.9,
+            )
+        except Exception as e:
+            logger.error("TTS generation failed: %s", e)
+            yield _sse_event("error", {"detail": "Audio generation failed", "code": 502})
+            return
+
+        total_cost += tts_result.cost
+        actual_seconds = int(_mp3_duration_seconds(tts_result.audio_bytes))
+        logger.info(
+            "Meditation generated: length=%s, words=%d, audio=%ds (%s), title=%r",
+            body.length.value, len(transcript.split()), actual_seconds,
+            f"{actual_seconds // 60}:{actual_seconds % 60:02d}", title,
+        )
+
+        # Stage 4: Save
+        yield _sse_event("stage", {"stage": "saving"})
+
+        user_dir = _AUDIO_DIR / user.id
+        user_dir.mkdir(parents=True, exist_ok=True)
+        temp_filename = f"{int(time.time())}_{body.type.value}.mp3"
+        audio_path = user_dir / temp_filename
+        audio_path.write_bytes(tts_result.audio_bytes)
+
+        async with get_session() as session:
+            meditation = MeditationSession(
+                user_id=user.id,
+                type=body.type.value,
+                length=body.length.value,
+                duration_seconds=actual_seconds,
+                ambience=body.ambience.value,
+                voice=body.voice.value,
+                focus=body.focus,
+                title=title,
+                transcript=transcript,
+                audio_filename=f"{user.id}/{temp_filename}",
+                model_used=script_response.model,
+                tts_model=tts_result.model,
+                cost=total_cost,
+                status="ready",
+            )
+            session.add(meditation)
+            await session.flush()
+            await session.refresh(meditation)
+
+            logger.info(
+                "Meditation saved: user=%s type=%s length=%s duration=%ds cost=$%.4f",
+                user.id, body.type.value, body.length.value, actual_seconds, total_cost,
+            )
+
+            yield _sse_event("session", json.loads(
+                SessionResponse.model_validate(meditation).model_dump_json()
+            ))
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # Disable nginx/proxy buffering
+        },
     )
-
-    return SessionResponse.model_validate(meditation)
 
 
 # --- CRUD ---

@@ -169,6 +169,8 @@ class ZugaLifePlugin(StudioPlugin):
                 "ALTER TABLE life_user_settings ADD COLUMN med_length VARCHAR(10) DEFAULT 'medium'",
                 "ALTER TABLE meditation_sessions ADD COLUMN length VARCHAR(10) DEFAULT 'medium'",
                 "ALTER TABLE meditation_sessions ADD COLUMN duration_seconds INTEGER DEFAULT 0",
+                "ALTER TABLE meditation_sessions ADD COLUMN status VARCHAR(20) DEFAULT 'ready'",
+                "ALTER TABLE meditation_sessions ADD COLUMN error_message VARCHAR(500)",
             ]
             for sql in migrations:
                 try:

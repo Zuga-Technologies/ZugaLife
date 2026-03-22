@@ -34,6 +34,10 @@ class MeditationSession(Base):
     tts_model: Mapped[str] = mapped_column(String(50), nullable=False)
     cost: Mapped[float] = mapped_column(Float, default=0.0)
 
+    # Generation status (for SSE streaming)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ready")
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # User interaction
     mood_before: Mapped[str | None] = mapped_column(String(10), nullable=True)
     mood_after: Mapped[str | None] = mapped_column(String(10), nullable=True)

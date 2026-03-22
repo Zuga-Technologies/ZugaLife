@@ -71,6 +71,8 @@ class SessionResponse(BaseModel):
     model_used: str
     tts_model: str
     cost: float
+    status: str = "ready"
+    error_message: str | None = None
     mood_before: str | None
     mood_after: str | None
     is_favorite: bool

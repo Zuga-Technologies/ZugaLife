@@ -1287,6 +1287,7 @@ const medFocus = ref('')
 
 // Generation
 const medGenerating = ref(false)
+const medGenStage = ref<string | null>(null)
 const medError = ref<string | null>(null)
 const medSuccess = ref<string | null>(null)
 
@@ -1343,47 +1344,107 @@ async function fetchMedSessions() {
   } catch { /* silent */ }
 }
 
+const _stageLabels: Record<string, string> = {
+  validating: 'Personalizing your session...',
+  generating_script: 'Writing your meditation script...',
+  synthesizing_audio: 'Generating voice audio...',
+  saving: 'Saving session...',
+}
+
 async function generateMeditation() {
   if (medGenerating.value) return
   medGenerating.value = true
+  medGenStage.value = null
   medError.value = null
 
-  try {
-    const payload: Record<string, unknown> = {
-      type: medType.value,
-      length: medLength.value,
-      ambience: medAmbience.value,
-      voice: medVoice.value,
-    }
-    if (medFocus.value.trim()) {
-      payload.focus = medFocus.value.trim()
-    }
+  const payload: Record<string, unknown> = {
+    type: medType.value,
+    length: medLength.value,
+    ambience: medAmbience.value,
+    voice: medVoice.value,
+  }
+  if (medFocus.value.trim()) {
+    payload.focus = medFocus.value.trim()
+  }
 
-    medSession.value = await api.post<MeditationSession>('/api/life/meditation/generate', payload)
-    medMoodAfter.value = null
-    medView.value = 'player'
-    medSuccess.value = 'Meditation generated!'
-    setTimeout(() => { medSuccess.value = null }, 2000)
-    await fetchMedRemaining()
-    await fetchMedSessions()
-    setTimeout(() => loadAndPlayAudio(), 300)
-  } catch (e) {
-    if (e instanceof ApiError) {
-      const detail = (e.body as Record<string, string>).detail
-      if (e.status === 402) {
+  try {
+    const token = getToken()
+    const res = await fetch('/api/life/meditation/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    })
+
+    // Non-stream error responses (429, 402, 503) come as JSON
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: `Error (${res.status})` }))
+      if (res.status === 402) {
         medError.value = 'AI budget exhausted for today.'
-      } else if (e.status === 429) {
-        medError.value = detail ?? 'Daily meditation limit reached.'
-      } else if (e.status === 503) {
+      } else if (res.status === 429) {
+        medError.value = err.detail ?? 'Daily meditation limit reached.'
+      } else if (res.status === 503) {
         medError.value = 'Meditation generation not available.'
       } else {
-        medError.value = detail ?? `Error (${e.status})`
+        medError.value = err.detail ?? `Error (${res.status})`
       }
-    } else {
-      medError.value = 'Network error'
+      return
     }
+
+    // Parse SSE stream
+    const reader = res.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      // Process complete SSE messages (double newline separated)
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop()!  // keep incomplete tail
+
+      for (const part of parts) {
+        if (!part.trim()) continue
+        const lines = part.split('\n')
+        let eventType = ''
+        let data = ''
+        for (const line of lines) {
+          if (line.startsWith('event: ')) eventType = line.slice(7).trim()
+          else if (line.startsWith('data: ')) data = line.slice(6)
+        }
+        if (!eventType || !data) continue
+
+        if (eventType === 'stage') {
+          const { stage } = JSON.parse(data)
+          medGenStage.value = _stageLabels[stage] ?? stage
+        } else if (eventType === 'session') {
+          medSession.value = JSON.parse(data) as MeditationSession
+          medMoodAfter.value = null
+          medView.value = 'player'
+          medSuccess.value = 'Meditation generated!'
+          setTimeout(() => { medSuccess.value = null }, 2000)
+          await fetchMedRemaining()
+          await fetchMedSessions()
+          setTimeout(() => loadAndPlayAudio(), 300)
+        } else if (eventType === 'error') {
+          const { detail, code } = JSON.parse(data)
+          if (code === 402) {
+            medError.value = 'AI budget exhausted for today.'
+          } else {
+            medError.value = detail ?? `Error (${code})`
+          }
+        }
+      }
+    }
+  } catch {
+    medError.value = 'Network error'
   } finally {
     medGenerating.value = false
+    medGenStage.value = null
   }
 }
 
@@ -3142,14 +3203,13 @@ onUnmounted(() => {
         >
           <span v-if="medGenerating" class="inline-flex items-center gap-2">
             <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-            Generating your meditation...
+            {{ medGenStage || 'Starting...' }}
           </span>
           <span v-else-if="medRemaining && medRemaining.remaining <= 0">
             No sessions remaining today
           </span>
           <span v-else>Generate Meditation</span>
         </button>
-        <p v-if="medGenerating" class="text-xs text-txt-muted text-center mt-2">This takes 15-30 seconds (AI script + voice synthesis)</p>
       </template>
 
       <!-- ===== PLAYER VIEW ===== -->
