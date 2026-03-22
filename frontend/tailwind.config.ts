@@ -1,12 +1,12 @@
 import type { Config } from 'tailwindcss'
-import preset from '../../ZugaCore/frontend/theme/tailwind.preset'
+import preset from '../core/frontend/theme/tailwind.preset'
 
 export default {
   presets: [preset],
   content: [
     './index.html',
     './*.{vue,ts}',
-    '../../ZugaCore/frontend/**/*.{ts,css}',
+    '../core/frontend/**/*.{ts,css}',
   ],
   plugins: [],
 } satisfies Config

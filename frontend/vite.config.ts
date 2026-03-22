@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@core': resolve(__dirname, '../../ZugaCore/frontend'),
+      '@core': resolve(__dirname, '../core/frontend'),
     },
     dedupe: ['vue', 'pinia', 'vue-router'],
   },
@@ -15,7 +15,7 @@ export default defineConfig({
     port: 5174,
     allowedHosts: ['.trycloudflare.com'],
     fs: {
-      allow: ['../..'],
+      allow: ['..'],
     },
     proxy: {
       '/api': {

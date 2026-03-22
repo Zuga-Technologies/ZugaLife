@@ -18,12 +18,12 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "@core/*": ["../../ZugaCore/frontend/*"]
+      "@core/*": ["../core/frontend/*"]
     }
   },
   "include": [
     "./**/*.ts",
     "./**/*.vue",
-    "../../ZugaCore/frontend/**/*.ts"
+    "../core/frontend/**/*.ts"
   ]
 }

@@ -2,9 +2,10 @@ node_modules/
 dist/
 __pycache__/
 *.pyc
+.env
+data/
 
-# ZugaCore symlinks (created per-machine by ZugaCore/scripts/setup-symlinks.sh)
-/core
+# Backend symlinks to ZugaCore submodule (created by setup.sh)
 /backend/core/auth
 /backend/core/database
 /backend/core/plugins
