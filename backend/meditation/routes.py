@@ -140,14 +140,14 @@ async def generate_meditation(
 
             logger.info("Outline generated: %d sections, %d words", section_count, len(outline.split()))
 
-            # Pass 2: Expand outline into full script
+            # Pass 2: Expand outline into full script (Claude Sonnet — reliable at length)
             yield _sse_event("stage", {"stage": "expanding_script"})
 
             expansion_prompt = _prompts.build_expansion_prompt(outline, section_count)
 
             try:
                 script_response = await ai_call(
-                    expansion_prompt, task="creative", max_tokens=8192,
+                    expansion_prompt, task="creative_long", max_tokens=8192,
                     user_id=user.id, user_email=user.email,
                 )
                 total_cost += script_response.cost
