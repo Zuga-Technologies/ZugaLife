@@ -1,5 +1,6 @@
 """ZugaLife meditation endpoints."""
 
+import asyncio
 import json
 import logging
 import struct
@@ -56,6 +57,9 @@ _AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 def _sse_event(event: str, data: dict) -> str:
     """Format a single SSE event string."""
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+SSE_KEEPALIVE = ": keepalive\n\n"
 
 
 @router.post("/generate")
@@ -125,10 +129,15 @@ async def generate_meditation(
                     previous_titles=prev_titles,
                 )
 
-                outline_response = await ai_call(
+                _task = asyncio.create_task(ai_call(
                     outline_prompt, task="creative", max_tokens=4096,
                     user_id=user.id, user_email=user.email,
-                )
+                ))
+                while not _task.done():
+                    done, _ = await asyncio.wait({_task}, timeout=15.0)
+                    if not done:
+                        yield SSE_KEEPALIVE
+                outline_response = _task.result()
                 total_cost += outline_response.cost
 
                 outline = outline_response.content.strip()
@@ -143,10 +152,15 @@ async def generate_meditation(
 
                 expansion_prompt = _prompts.build_expansion_prompt(outline, section_count)
 
-                script_response = await ai_call(
+                _task = asyncio.create_task(ai_call(
                     expansion_prompt, task="creative_long", max_tokens=8192,
                     user_id=user.id, user_email=user.email,
-                )
+                ))
+                while not _task.done():
+                    done, _ = await asyncio.wait({_task}, timeout=15.0)
+                    if not done:
+                        yield SSE_KEEPALIVE
+                script_response = _task.result()
                 total_cost += script_response.cost
                 logger.warning("PASS2 done: model=%s words=%d cost=$%.4f",
                     script_response.model, len(script_response.content.split()), script_response.cost)
@@ -165,10 +179,15 @@ async def generate_meditation(
                     previous_titles=prev_titles,
                 )
 
-                script_response = await ai_call(
+                _task = asyncio.create_task(ai_call(
                     prompt, task="creative", max_tokens=4096,
                     user_id=user.id, user_email=user.email,
-                )
+                ))
+                while not _task.done():
+                    done, _ = await asyncio.wait({_task}, timeout=15.0)
+                    if not done:
+                        yield SSE_KEEPALIVE
+                script_response = _task.result()
                 total_cost += script_response.cost
 
             raw_script = script_response.content.strip()
@@ -182,11 +201,16 @@ async def generate_meditation(
 
             tts_text = _prepare_tts_text(transcript)
             logger.warning("MEDITATION TTS text prepared, len=%d", len(tts_text))
-            tts_result = await call_openai_tts(
+            _task = asyncio.create_task(call_openai_tts(
                 text=tts_text,
                 voice=body.voice.value,
                 speed=0.9,
-            )
+            ))
+            while not _task.done():
+                done, _ = await asyncio.wait({_task}, timeout=15.0)
+                if not done:
+                    yield SSE_KEEPALIVE
+            tts_result = _task.result()
 
             total_cost += tts_result.cost
             actual_seconds = int(_mp3_duration_seconds(tts_result.audio_bytes))
