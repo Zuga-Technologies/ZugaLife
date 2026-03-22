@@ -107,6 +107,11 @@ async def generate_meditation(
 
     raw_script = script_response.content.strip()
     title, transcript = _parse_script(raw_script)
+    word_count = len(transcript.split())
+    logger.info(
+        "Initial script: title=%r, words=%d, estimated=%.1f min (target=%d min)",
+        title, word_count, _estimate_audio_duration(transcript), body.duration_minutes,
+    )
 
     # Duration estimation — retry up to 2 times if the script doesn't
     # fill the requested time.  Each pass asks the LLM to expand/trim.
@@ -395,8 +400,17 @@ async def _sessions_today(user_id: str) -> int:
 
 def _parse_script(raw: str) -> tuple[str, str]:
     """Parse AI output: first line = title, rest = transcript."""
+    import re
+
     lines = raw.strip().split("\n")
-    title = lines[0].strip().strip('"').strip("#").strip("*").strip()
+    title = lines[0].strip()
+    # Strip common LLM formatting: markdown headers, bold, quotes, "Title:" prefix
+    title = re.sub(r"^#+\s*", "", title)        # ## Title → Title
+    title = re.sub(r"^\*+\s*|\s*\*+$", "", title)  # **Title** → Title
+    title = re.sub(r'^["\']|["\']$', "", title)  # "Title" → Title
+    title = re.sub(r"^Title:\s*", "", title, flags=re.IGNORECASE)  # Title: X → X
+    title = title.strip()
+
     # Skip blank lines between title and body
     body_start = 1
     for i in range(1, len(lines)):
