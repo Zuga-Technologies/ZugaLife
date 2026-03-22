@@ -136,6 +136,7 @@ async def generate_meditation(
                 while not _task.done():
                     done, _ = await asyncio.wait({_task}, timeout=15.0)
                     if not done:
+                        logger.warning("KEEPALIVE sent")
                         yield SSE_KEEPALIVE
                 outline_response = _task.result()
                 total_cost += outline_response.cost
@@ -159,6 +160,7 @@ async def generate_meditation(
                 while not _task.done():
                     done, _ = await asyncio.wait({_task}, timeout=15.0)
                     if not done:
+                        logger.warning("KEEPALIVE sent")
                         yield SSE_KEEPALIVE
                 script_response = _task.result()
                 total_cost += script_response.cost
@@ -186,6 +188,7 @@ async def generate_meditation(
                 while not _task.done():
                     done, _ = await asyncio.wait({_task}, timeout=15.0)
                     if not done:
+                        logger.warning("KEEPALIVE sent")
                         yield SSE_KEEPALIVE
                 script_response = _task.result()
                 total_cost += script_response.cost
