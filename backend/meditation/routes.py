@@ -1,6 +1,7 @@
 """ZugaLife meditation endpoints."""
 
 import logging
+import struct
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -109,64 +110,69 @@ async def generate_meditation(
     title, transcript = _parse_script(raw_script)
     word_count = len(transcript.split())
     logger.info(
-        "Initial script: title=%r, words=%d, estimated=%.1f min (target=%d min)",
-        title, word_count, _estimate_audio_duration(transcript), body.duration_minutes,
+        "Initial script: title=%r, words=%d (target=%d min)",
+        title, word_count, body.duration_minutes,
     )
 
-    # Duration estimation — retry up to 2 times if the script doesn't
-    # fill the requested time.  Each pass asks the LLM to expand/trim.
+    # Generate-TTS-measure loop: generate audio, measure REAL duration,
+    # retry with scaled word count if too short.  Max 1 retry to keep
+    # cost and latency reasonable.
     target_dur = float(body.duration_minutes)
     dur_min = target_dur * 0.80  # accept 80%+ of target
-    dur_max = target_dur * 1.15
 
+    tts_result = None
     for _attempt in range(2):
-        estimated_dur = _estimate_audio_duration(transcript)
-        if dur_min <= estimated_dur <= dur_max:
-            break  # within range
+        # Convert script to audio via TTS
+        tts_text = _prepare_tts_text(transcript)
+        try:
+            tts_result = await call_openai_tts(
+                text=tts_text,
+                voice=body.voice.value,
+                speed=0.9,
+            )
+        except Exception as e:
+            logger.error("TTS generation failed: %s", e)
+            raise HTTPException(status_code=502, detail="Audio generation failed")
 
-        if estimated_dur < dur_min:
-            shortfall = target_dur - estimated_dur
-            logger.info(
-                "Script too short (attempt %d): estimated %.1f min, target %.0f min (need +%.1f min).",
-                _attempt + 1, estimated_dur, target_dur, shortfall,
-            )
-            fix_prompt = (
-                f"The following meditation script will only produce approximately "
-                f"{estimated_dur:.1f} minutes of audio when read aloud. "
-                f"The target duration is {body.duration_minutes} minutes. "
-                f"You need to add approximately {shortfall:.1f} more minutes of spoken content.\n\n"
-                f"WORD COUNT: The current script is ~{len(transcript.split())} words. "
-                f"You need at least {int(target_dur * 165)} words total.\n\n"
-                f"SPECIFIC INSTRUCTIONS:\n"
-                f"- Add more [PAUSE 5s] markers between sections\n"
-                f"- Expand breathing/body scan/visualization sections with richer sensory detail\n"
-                f"- Add more breath cycles with individually counted breaths\n"
-                f"- Slow down transitions — let moments linger longer\n"
-                f"- Do NOT change the title or overall structure, just deepen and extend\n"
-                f"- Output the COMPLETE expanded script (title + full body), not just additions\n\n"
-                f"Here is the script to expand:\n\n"
-                f"{raw_script}"
-            )
-        else:
-            excess = estimated_dur - target_dur
-            logger.info(
-                "Script too long (attempt %d): estimated %.1f min, target %.0f min (%.1f min over).",
-                _attempt + 1, estimated_dur, target_dur, excess,
-            )
-            fix_prompt = (
-                f"The following meditation script will produce approximately "
-                f"{estimated_dur:.1f} minutes of audio when read aloud. "
-                f"The target duration is {body.duration_minutes} minutes. "
-                f"You need to CUT approximately {excess:.1f} minutes of content.\n\n"
-                f"SPECIFIC INSTRUCTIONS:\n"
-                f"- Remove some [PAUSE 5s] markers or reduce them to [PAUSE 3s]\n"
-                f"- Shorten repetitive sections and consolidate similar ideas\n"
-                f"- Keep the opening, core practice, and closing intact\n"
-                f"- Preserve the title and overall flow — just make it more concise\n"
-                f"- The result should be a complete meditation, not a fragment\n\n"
-                f"Here is the script to trim:\n\n"
-                f"{raw_script}"
-            )
+        total_script_cost += tts_result.cost
+
+        # Measure ACTUAL audio duration from MP3 frames
+        actual_dur = _mp3_duration_seconds(tts_result.audio_bytes) / 60.0
+        logger.info(
+            "Attempt %d: words=%d, actual_audio=%.1f min (target=%.0f min)",
+            _attempt + 1, len(transcript.split()), actual_dur, target_dur,
+        )
+
+        if actual_dur >= dur_min:
+            break  # close enough
+
+        if _attempt >= 1:
+            break  # already retried once
+
+        # Calculate how many words we actually need based on real TTS rate
+        actual_wpm = len(transcript.split()) / max(actual_dur, 0.5)
+        needed_words = int(actual_wpm * target_dur * 1.10)  # 10% buffer
+        logger.info(
+            "Too short — real rate=%.0f wpm, need ~%d words. Regenerating.",
+            actual_wpm, needed_words,
+        )
+
+        # Regenerate with the calibrated word target
+        fix_prompt = (
+            f"The following meditation script produced only {actual_dur:.1f} minutes "
+            f"of audio. The target is {body.duration_minutes} minutes.\n\n"
+            f"You need to rewrite and SIGNIFICANTLY EXPAND this script to "
+            f"approximately {needed_words} words. The current script is only "
+            f"{len(transcript.split())} words.\n\n"
+            f"CRITICAL: Write {needed_words} words minimum. Count carefully.\n\n"
+            f"INSTRUCTIONS:\n"
+            f"- Keep the same title and overall structure\n"
+            f"- Add much more sensory detail, more breath cycles, more pauses\n"
+            f"- Expand each section — don't rush through any part\n"
+            f"- Include generous [PAUSE 5s] markers between sections\n"
+            f"- Output the COMPLETE expanded script (title + full body)\n\n"
+            f"Original script:\n\n{raw_script}"
+        )
         try:
             retry_response = await ai_call(
                 fix_prompt, task="creative", max_tokens=max_tokens,
@@ -176,24 +182,10 @@ async def generate_meditation(
             raw_script = retry_response.content.strip()
             title, transcript = _parse_script(raw_script)
             script_response = retry_response
-            new_dur = _estimate_audio_duration(transcript)
-            logger.info("After adjustment: estimated %.1f min (was %.1f)", new_dur, estimated_dur)
         except Exception:
-            break  # Use whatever we have if retry fails
+            break  # use whatever we have
 
-    # 2. Convert script to audio via TTS
-    # Replace pause markers with SSML-style silence instructions
-    tts_text = _prepare_tts_text(transcript)
-    voice_instruction = _prompts.build_title_system_instruction()
-
-    try:
-        tts_result = await call_openai_tts(
-            text=tts_text,
-            voice=body.voice.value,
-            speed=0.9,
-        )
-    except Exception as e:
-        logger.error("TTS generation failed: %s", e)
+    if tts_result is None:
         raise HTTPException(status_code=502, detail="Audio generation failed")
 
     # 3. Save audio file
@@ -206,7 +198,7 @@ async def generate_meditation(
     audio_path = user_dir / temp_filename
     audio_path.write_bytes(tts_result.audio_bytes)
 
-    total_cost = total_script_cost + tts_result.cost
+    total_cost = total_script_cost  # includes both LLM and TTS costs from loop
 
     # 4. Save session to database
     async with get_session() as session:
@@ -421,29 +413,69 @@ def _parse_script(raw: str) -> tuple[str, str]:
     return title[:200], transcript
 
 
-def _estimate_audio_duration(transcript: str) -> float:
-    """Estimate how many minutes the transcript will produce as audio.
+def _mp3_duration_seconds(data: bytes) -> float:
+    """Calculate MP3 audio duration in seconds by parsing frame headers.
 
-    Calibrated from real TTS output measurements (OpenAI TTS at speed 0.9):
-    - Effective speaking rate: ~165 wpm (faster than natural narration)
-    - Each pause marker produces ~0.6s of actual TTS silence regardless
-      of the labeled duration. OpenAI TTS doesn't support real silence —
-      we fake it with ellipsis/newlines which produce minimal gaps.
-
-    Returns estimated duration in minutes.
+    Walks the MP3 byte stream, decoding each frame header to extract the
+    sample rate and samples-per-frame.  Works with both MPEG1 and MPEG2
+    Layer III (the formats OpenAI TTS produces).  No external dependencies.
     """
-    import re
+    # MPEG1 Layer III bitrate table (kbps, index 0 and 15 are invalid)
+    _BR_V1 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0]
+    # MPEG2/2.5 Layer III bitrate table
+    _BR_V2 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0]
+    _SR_V1 = [44100, 48000, 32000, 0]
+    _SR_V2 = [22050, 24000, 16000, 0]
+    _SR_V25 = [11025, 12000, 8000, 0]
 
-    # Count spoken words (exclude pause markers)
-    text_without_pauses = re.sub(r"\[PAUSE\s*\d+s?\]", "", transcript)
-    word_count = len(text_without_pauses.split())
-    speaking_minutes = word_count / 165.0
+    total_seconds = 0.0
+    pos = 0
+    end = len(data) - 4
 
-    # Count ALL pause markers — each produces ~0.6s actual silence
-    total_pauses = len(re.findall(r"\[PAUSE\s*\d+s?\]", transcript))
-    pause_minutes = (total_pauses * 0.6) / 60.0
+    while pos < end:
+        # Sync word: 11 set bits (0xFFE0)
+        if data[pos] != 0xFF or (data[pos + 1] & 0xE0) != 0xE0:
+            pos += 1
+            continue
 
-    return speaking_minutes + pause_minutes
+        header = struct.unpack(">I", data[pos : pos + 4])[0]
+        version = (header >> 19) & 3   # 3=V1, 2=V2, 0=V2.5
+        layer = (header >> 17) & 3     # 1=Layer III
+        br_idx = (header >> 12) & 0xF
+        sr_idx = (header >> 10) & 3
+        padding = (header >> 9) & 1
+
+        if layer != 1:  # only Layer III
+            pos += 1
+            continue
+
+        if version == 3:  # MPEG1
+            bitrate = _BR_V1[br_idx] * 1000
+            samplerate = _SR_V1[sr_idx]
+            samples = 1152
+            frame_len = (144 * bitrate) // samplerate + padding if bitrate and samplerate else 0
+        elif version == 2:  # MPEG2
+            bitrate = _BR_V2[br_idx] * 1000
+            samplerate = _SR_V2[sr_idx]
+            samples = 576
+            frame_len = (72 * bitrate) // samplerate + padding if bitrate and samplerate else 0
+        elif version == 0:  # MPEG2.5
+            bitrate = _BR_V2[br_idx] * 1000
+            samplerate = _SR_V25[sr_idx]
+            samples = 576
+            frame_len = (72 * bitrate) // samplerate + padding if bitrate and samplerate else 0
+        else:
+            pos += 1
+            continue
+
+        if frame_len < 1 or samplerate < 1:
+            pos += 1
+            continue
+
+        total_seconds += samples / samplerate
+        pos += frame_len
+
+    return total_seconds
 
 
 def _prepare_tts_text(transcript: str) -> str:
