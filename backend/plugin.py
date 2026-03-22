@@ -161,4 +161,19 @@ class ZugaLifePlugin(StudioPlugin):
 
         async with get_engine().begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
+            # Migrate existing tables: add new columns that create_all can't add
+            # to already-existing tables.  Each ALTER is wrapped in try/except
+            # so it's safe to run repeatedly (idempotent).
+            migrations = [
+                "ALTER TABLE life_user_settings ADD COLUMN med_length VARCHAR(10) DEFAULT 'medium'",
+                "ALTER TABLE meditation_sessions ADD COLUMN length VARCHAR(10) DEFAULT 'medium'",
+                "ALTER TABLE meditation_sessions ADD COLUMN duration_seconds INTEGER DEFAULT 0",
+            ]
+            for sql in migrations:
+                try:
+                    await conn.execute(__import__("sqlalchemy").text(sql))
+                except Exception:
+                    pass  # column already exists
+
         logger.info("ZugaLife tables initialized (mood + settings + journal + habits + goals + meditation + therapist)")
