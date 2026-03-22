@@ -134,8 +134,9 @@ async def generate_meditation(
                     user_id=user.id, user_email=user.email,
                 ))
                 while not _task.done():
-                    done, _ = await asyncio.wait({_task}, timeout=15.0)
-                    if not done:
+                    try:
+                        await asyncio.wait_for(asyncio.shield(_task), timeout=15.0)
+                    except asyncio.TimeoutError:
                         logger.warning("KEEPALIVE sent")
                         yield SSE_KEEPALIVE
                 outline_response = _task.result()
@@ -158,8 +159,9 @@ async def generate_meditation(
                     user_id=user.id, user_email=user.email,
                 ))
                 while not _task.done():
-                    done, _ = await asyncio.wait({_task}, timeout=15.0)
-                    if not done:
+                    try:
+                        await asyncio.wait_for(asyncio.shield(_task), timeout=15.0)
+                    except asyncio.TimeoutError:
                         logger.warning("KEEPALIVE sent")
                         yield SSE_KEEPALIVE
                 script_response = _task.result()
@@ -186,8 +188,9 @@ async def generate_meditation(
                     user_id=user.id, user_email=user.email,
                 ))
                 while not _task.done():
-                    done, _ = await asyncio.wait({_task}, timeout=15.0)
-                    if not done:
+                    try:
+                        await asyncio.wait_for(asyncio.shield(_task), timeout=15.0)
+                    except asyncio.TimeoutError:
                         logger.warning("KEEPALIVE sent")
                         yield SSE_KEEPALIVE
                 script_response = _task.result()
