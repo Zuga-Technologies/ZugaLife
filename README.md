@@ -18,15 +18,10 @@ A personal wellness and life-tracking app built with **Vue 3** and **FastAPI**. 
 ## Quick Start
 
 ```bash
-# Clone with ZugaCore (shared auth, database, theme layer)
-git clone --recurse-submodules https://github.com/Zuga-Technologies/ZugaLife.git
+git clone https://github.com/Zuga-Technologies/ZugaLife.git
 cd ZugaLife
-
-# One-command setup — installs all dependencies, creates .env
-bash setup.sh
-
-# Start backend + frontend
-bash start.sh
+bash setup.sh    # pulls ZugaCore, installs deps, creates .env
+bash start.sh    # starts backend + frontend
 ```
 
 Open **http://localhost:5174** and log in with any email (dev mode).
