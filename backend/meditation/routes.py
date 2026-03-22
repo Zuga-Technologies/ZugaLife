@@ -147,6 +147,8 @@ async def generate_meditation(
                     user_id=user.id, user_email=user.email,
                 )
                 total_cost += script_response.cost
+                logger.warning("PASS2 done: model=%s words=%d cost=$%.4f",
+                    script_response.model, len(script_response.content.split()), script_response.cost)
 
             else:
                 # --- Single-pass for short/medium ---
@@ -169,7 +171,9 @@ async def generate_meditation(
                 total_cost += script_response.cost
 
             raw_script = script_response.content.strip()
+            logger.warning("SCRIPT len=%d chars, first100=%r", len(raw_script), raw_script[:100])
             title, transcript = _parse_script(raw_script)
+            logger.warning("PARSED title=%r, transcript_words=%d", title, len(transcript.split()))
 
             # Stage 3: TTS
             yield _sse_event("stage", {"stage": "synthesizing_audio"})
@@ -228,13 +232,15 @@ async def generate_meditation(
                     SessionResponse.model_validate(meditation).model_dump_json()
                 ))
 
-        except (BudgetExhaustedError, CreditBlockedError, InsufficientTokensError):
+        except (BudgetExhaustedError, CreditBlockedError, InsufficientTokensError) as e:
+            logger.warning("MEDITATION BUDGET ERROR: %s", e)
             yield _sse_event("error", {"detail": "AI budget exhausted", "code": 402})
-        except PromptBlockedError:
+        except PromptBlockedError as e:
+            logger.warning("MEDITATION PROMPT BLOCKED: %s", e)
             yield _sse_event("error", {"detail": "Content blocked by security filter", "code": 400})
         except Exception as e:
-            logger.error("Meditation generation failed: %s", e, exc_info=True)
-            yield _sse_event("error", {"detail": f"Generation failed: {str(e)[:150]}", "code": 500})
+            logger.warning("MEDITATION CATCHALL ERROR: %s: %s", type(e).__name__, e)
+            yield _sse_event("error", {"detail": f"Generation failed: {type(e).__name__}: {str(e)[:120]}", "code": 500})
 
     return StreamingResponse(
         _stream(),
