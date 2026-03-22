@@ -101,32 +101,89 @@ async def generate_meditation(
         prev_titles = await _get_previous_titles(user.id)
 
         # Stage 2: Generate script via LLM
-        yield _sse_event("stage", {"stage": "generating_script"})
+        is_long = body.length.value == "long"
 
-        prompt = _prompts.build_meditation_prompt(
-            meditation_type=body.type.value,
-            length=body.length.value,
-            focus=body.focus,
-            mood_context=mood_ctx,
-            habit_context=habit_ctx,
-            journal_context=journal_ctx,
-            previous_titles=prev_titles,
-        )
+        if is_long:
+            # --- Two-pass generation for long meditations ---
 
-        max_tokens = 8192 if body.length.value == "long" else 4096
+            # Pass 1: Generate outline
+            yield _sse_event("stage", {"stage": "generating_outline"})
 
-        try:
-            script_response = await ai_call(
-                prompt, task="creative", max_tokens=max_tokens,
-                user_id=user.id, user_email=user.email,
+            outline_prompt = _prompts.build_outline_prompt(
+                meditation_type=body.type.value,
+                length=body.length.value,
+                focus=body.focus,
+                mood_context=mood_ctx,
+                habit_context=habit_ctx,
+                journal_context=journal_ctx,
+                previous_titles=prev_titles,
             )
-            total_cost += script_response.cost
-        except (BudgetExhaustedError, CreditBlockedError):
-            yield _sse_event("error", {"detail": "Daily AI budget exhausted", "code": 402})
-            return
-        except PromptBlockedError:
-            yield _sse_event("error", {"detail": "Content blocked by security filter", "code": 400})
-            return
+
+            try:
+                outline_response = await ai_call(
+                    outline_prompt, task="creative", max_tokens=4096,
+                    user_id=user.id, user_email=user.email,
+                )
+                total_cost += outline_response.cost
+            except (BudgetExhaustedError, CreditBlockedError):
+                yield _sse_event("error", {"detail": "Daily AI budget exhausted", "code": 402})
+                return
+            except PromptBlockedError:
+                yield _sse_event("error", {"detail": "Content blocked by security filter", "code": 400})
+                return
+
+            outline = outline_response.content.strip()
+            # Count sections in outline (## headers)
+            section_count = outline.count("## ")
+            if section_count < 2:
+                section_count = 6  # fallback assumption
+
+            logger.info("Outline generated: %d sections, %d words", section_count, len(outline.split()))
+
+            # Pass 2: Expand outline into full script
+            yield _sse_event("stage", {"stage": "expanding_script"})
+
+            expansion_prompt = _prompts.build_expansion_prompt(outline, section_count)
+
+            try:
+                script_response = await ai_call(
+                    expansion_prompt, task="creative", max_tokens=8192,
+                    user_id=user.id, user_email=user.email,
+                )
+                total_cost += script_response.cost
+            except (BudgetExhaustedError, CreditBlockedError):
+                yield _sse_event("error", {"detail": "Daily AI budget exhausted", "code": 402})
+                return
+            except PromptBlockedError:
+                yield _sse_event("error", {"detail": "Content blocked by security filter", "code": 400})
+                return
+
+        else:
+            # --- Single-pass for short/medium ---
+            yield _sse_event("stage", {"stage": "generating_script"})
+
+            prompt = _prompts.build_meditation_prompt(
+                meditation_type=body.type.value,
+                length=body.length.value,
+                focus=body.focus,
+                mood_context=mood_ctx,
+                habit_context=habit_ctx,
+                journal_context=journal_ctx,
+                previous_titles=prev_titles,
+            )
+
+            try:
+                script_response = await ai_call(
+                    prompt, task="creative", max_tokens=4096,
+                    user_id=user.id, user_email=user.email,
+                )
+                total_cost += script_response.cost
+            except (BudgetExhaustedError, CreditBlockedError):
+                yield _sse_event("error", {"detail": "Daily AI budget exhausted", "code": 402})
+                return
+            except PromptBlockedError:
+                yield _sse_event("error", {"detail": "Content blocked by security filter", "code": 400})
+                return
 
         raw_script = script_response.content.strip()
         title, transcript = _parse_script(raw_script)

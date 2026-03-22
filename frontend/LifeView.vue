@@ -1346,7 +1346,9 @@ async function fetchMedSessions() {
 
 const _stageLabels: Record<string, string> = {
   validating: 'Personalizing your session...',
+  generating_outline: 'Designing your meditation...',
   generating_script: 'Writing your meditation script...',
+  expanding_script: 'Expanding into full script...',
   synthesizing_audio: 'Generating voice audio...',
   saving: 'Saving session...',
 }

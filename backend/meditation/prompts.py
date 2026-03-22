@@ -359,6 +359,118 @@ PERSONALIZATION CONTEXT (use subtly — don't explicitly reference data, just le
 {block}"""
 
 
+def build_outline_prompt(
+    meditation_type: str,
+    length: str,
+    focus: str | None = None,
+    mood_context: str | None = None,
+    habit_context: str | None = None,
+    journal_context: str | None = None,
+    previous_titles: list[str] | None = None,
+) -> str:
+    """Build a prompt for pass 1: structured outline for long meditations.
+
+    Returns a prompt that asks the LLM to produce a detailed section-by-section
+    outline with timing, content notes, and key phrases — but NOT the full script.
+    """
+    technique = _TECHNIQUE_INSTRUCTIONS.get(
+        meditation_type, _TECHNIQUE_INSTRUCTIONS["breathing"],
+    )
+    time_of_day = _get_time_context()
+    content_mode = _pick_content_mode(previous_titles)
+    personalization = _build_personalization(
+        focus=focus,
+        mood_context=mood_context,
+        habit_context=habit_context,
+        journal_context=journal_context,
+        time_of_day=time_of_day,
+    )
+
+    anti_repetition = ""
+    if previous_titles:
+        titles = ", ".join(f'"{t}"' for t in previous_titles[-5:])
+        anti_repetition = (
+            f"\n\nPrevious session titles (create something COMPLETELY DIFFERENT "
+            f"in tone, theme, and approach): {titles}"
+        )
+
+    return f"""You are a meditation guide designing a detailed OUTLINE for a 15-to-20-minute guided meditation. This outline will be expanded into a full script in a second step.
+
+{content_mode}
+
+TECHNIQUE:
+{technique}
+{personalization}{anti_repetition}
+
+Create a structured outline with exactly 6-8 sections. For each section, provide:
+
+1. **TITLE**: A short name for the section (e.g., "Arrival & Settling")
+2. **DURATION**: Target duration in minutes (total must equal 15-20 minutes)
+3. **WORD TARGET**: How many words the expanded script should have for this section (total must be 3500+)
+4. **CONTENT NOTES**: 3-5 bullet points describing exactly what happens — key imagery, specific phrases to use, sensory details, which pause markers go where
+5. **TONE**: How this section should feel (e.g., "very slow and grounding", "gently uplifting")
+
+FORMAT your outline EXACTLY like this:
+Line 1: SESSION TITLE (a short, evocative name — max 8 words)
+Line 2: (empty)
+Line 3+: The outline sections
+
+Example section format:
+## Section 1: Arrival & Settling (3 min, ~500 words)
+- Guide listener to find comfortable position
+- Notice contact points: back against chair, feet on floor
+- Three deep breaths with [PAUSE 5s] between each
+- Tone: very slow, grounding, permission-giving
+
+Make the outline DETAILED enough that a writer could expand each section independently. Include specific imagery, metaphors, and phrases — not just vague instructions.
+
+The total meditation must fill 15-20 minutes when read aloud at a slow TTS pace (~165 words per minute). Plan for generous silence (40% of the meditation is pause markers)."""
+
+
+def build_expansion_prompt(outline: str, section_count: int) -> str:
+    """Build a prompt for pass 2: expand outline into full meditation script.
+
+    Takes the outline from pass 1 and asks the LLM to write the complete
+    spoken script with all pause markers, sensory details, and pacing.
+    """
+    return f"""You are a meditation guide. Below is a detailed outline for a 15-to-20-minute guided meditation. Your job is to expand it into the COMPLETE spoken script.
+
+OUTLINE:
+{outline}
+
+CRITICAL RULES:
+1. Write EVERYTHING that should be spoken aloud. This goes directly to text-to-speech.
+2. Do NOT include section headers, notes, or metadata — only the spoken meditation.
+3. The title from the outline's first line must be your first line too.
+4. Second line must be empty, then the script begins.
+
+LANGUAGE RULES:
+- Use observation language: "notice", "be aware of", "observe", "allow", "you might"
+- Use permission language: "if you'd like", "when you're ready", "whatever feels right"
+- NEVER use: "you should feel", "let go of your pain", "just relax", "clear your mind completely"
+- NEVER diagnose or give medical advice
+- Write in second person ("you")
+- Warm but not saccharine — genuine, calm, grounded
+
+PAUSE MARKERS (use VERY generously — 40% of the meditation should be silence):
+- [PAUSE 3s] for short pauses (transitions, between sentences) — every 2-3 sentences
+- [PAUSE 5s] for longer pauses (between sections, during breath cycles, reflection)
+
+PACING (this will be read aloud by TTS at slow speed):
+- Write short sentences (8-15 words max)
+- Use "..." for natural hesitation: "And as you breathe in... notice..."
+- Spell out all numbers: one, two, three (NEVER 1, 2, 3)
+- When counting breath cycles, each number gets its own [PAUSE 3s]
+
+LENGTH (NON-NEGOTIABLE):
+- You MUST write at least 3500 words of spoken content.
+- The outline has {section_count} sections — expand EVERY section fully.
+- Do not summarize or abbreviate ANY section. Each section must hit its word target from the outline.
+- If you finish and it feels short, go back and add more sensory detail, more pauses, more gentle repetition.
+
+Write the complete meditation script now. Title on line 1, blank line, then the full spoken script."""
+
+
 def build_title_system_instruction() -> str:
     """TTS voice instruction for meditation narration."""
     return (
