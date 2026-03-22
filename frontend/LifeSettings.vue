@@ -204,9 +204,9 @@ function exportJournal() {
             @change="saveMedSettings"
             class="w-full bg-surface-2 border border-bdr rounded-lg px-3 py-2 text-sm text-txt-primary focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50 transition-colors"
           >
-            <option value="short">Short (~3-5 min)</option>
-            <option value="medium">Medium (~7-10 min)</option>
-            <option value="long">Long (~12+ min)</option>
+            <option value="short">Short</option>
+            <option value="medium">Medium</option>
+            <option value="long">Long</option>
           </select>
         </div>
 

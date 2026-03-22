@@ -1270,9 +1270,9 @@ const ambienceOptions = [
 ]
 
 const lengthOptions = [
-  { key: 'short', label: 'Short', desc: '~3-5 min' },
-  { key: 'medium', label: 'Medium', desc: '~7-10 min' },
-  { key: 'long', label: 'Long', desc: '~12+ min' },
+  { key: 'short', label: 'Short' },
+  { key: 'medium', label: 'Medium' },
+  { key: 'long', label: 'Long' },
 ]
 
 type MedView = 'new' | 'player' | 'history'
@@ -3071,8 +3071,7 @@ onUnmounted(() => {
                 ? 'bg-accent text-white'
                 : 'glass-card text-txt-muted hover:text-txt-primary'"
             >
-              <div>{{ opt.label }}</div>
-              <div class="text-[10px] opacity-70 mt-0.5">{{ opt.desc }}</div>
+              {{ opt.label }}
             </button>
           </div>
         </div>
