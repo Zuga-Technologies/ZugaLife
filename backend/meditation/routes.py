@@ -94,174 +94,147 @@ async def generate_meditation(
 
     async def _stream() -> AsyncGenerator[str, None]:
         """SSE generator — yields events as the pipeline progresses."""
-        try:
-            async for event in _stream_inner():
-                yield event
-        except Exception as e:
-            logger.error("Meditation SSE stream failed: %s", e, exc_info=True)
-            yield _sse_event("error", {"detail": str(e)[:200], "code": 500})
-
-    async def _stream_inner() -> AsyncGenerator[str, None]:
-        """Inner generator — separated so outer can catch unhandled errors."""
         total_cost = 0.0
 
-        # Stage 1: Gather context
-        yield _sse_event("stage", {"stage": "validating"})
+        try:
+            # Stage 1: Gather context
+            yield _sse_event("stage", {"stage": "validating"})
 
-        mood_ctx = await _gather_mood_context(user.id)
-        habit_ctx = await _gather_habit_context(user.id)
-        journal_ctx = await _gather_journal_context(user.id)
-        prev_titles = await _get_previous_titles(user.id)
+            mood_ctx = await _gather_mood_context(user.id)
+            habit_ctx = await _gather_habit_context(user.id)
+            journal_ctx = await _gather_journal_context(user.id)
+            prev_titles = await _get_previous_titles(user.id)
 
-        # Stage 2: Generate script via LLM
-        is_long = body.length.value == "long"
+            # Stage 2: Generate script via LLM
+            is_long = body.length.value == "long"
 
-        if is_long:
-            # --- Two-pass generation for long meditations ---
+            if is_long:
+                # --- Two-pass generation for long meditations ---
 
-            # Pass 1: Generate outline
-            yield _sse_event("stage", {"stage": "generating_outline"})
+                # Pass 1: Generate outline
+                yield _sse_event("stage", {"stage": "generating_outline"})
 
-            outline_prompt = _prompts.build_outline_prompt(
-                meditation_type=body.type.value,
-                length=body.length.value,
-                focus=body.focus,
-                mood_context=mood_ctx,
-                habit_context=habit_ctx,
-                journal_context=journal_ctx,
-                previous_titles=prev_titles,
-            )
+                outline_prompt = _prompts.build_outline_prompt(
+                    meditation_type=body.type.value,
+                    length=body.length.value,
+                    focus=body.focus,
+                    mood_context=mood_ctx,
+                    habit_context=habit_ctx,
+                    journal_context=journal_ctx,
+                    previous_titles=prev_titles,
+                )
 
-            try:
                 outline_response = await ai_call(
                     outline_prompt, task="creative", max_tokens=4096,
                     user_id=user.id, user_email=user.email,
                 )
                 total_cost += outline_response.cost
-            except (BudgetExhaustedError, CreditBlockedError, InsufficientTokensError):
-                yield _sse_event("error", {"detail": "Daily AI budget exhausted", "code": 402})
-                return
-            except PromptBlockedError:
-                yield _sse_event("error", {"detail": "Content blocked by security filter", "code": 400})
-                return
 
-            outline = outline_response.content.strip()
-            # Count sections in outline (## headers)
-            section_count = outline.count("## ")
-            if section_count < 2:
-                section_count = 6  # fallback assumption
+                outline = outline_response.content.strip()
+                section_count = outline.count("## ")
+                if section_count < 2:
+                    section_count = 6
 
-            logger.info("Outline generated: %d sections, %d words", section_count, len(outline.split()))
+                logger.info("Outline generated: %d sections, %d words", section_count, len(outline.split()))
 
-            # Pass 2: Expand outline into full script (Claude Sonnet — reliable at length)
-            yield _sse_event("stage", {"stage": "expanding_script"})
+                # Pass 2: Expand outline into full script (Claude Sonnet)
+                yield _sse_event("stage", {"stage": "expanding_script"})
 
-            expansion_prompt = _prompts.build_expansion_prompt(outline, section_count)
+                expansion_prompt = _prompts.build_expansion_prompt(outline, section_count)
 
-            try:
                 script_response = await ai_call(
                     expansion_prompt, task="creative_long", max_tokens=8192,
                     user_id=user.id, user_email=user.email,
                 )
                 total_cost += script_response.cost
-            except (BudgetExhaustedError, CreditBlockedError, InsufficientTokensError):
-                yield _sse_event("error", {"detail": "Daily AI budget exhausted", "code": 402})
-                return
-            except PromptBlockedError:
-                yield _sse_event("error", {"detail": "Content blocked by security filter", "code": 400})
-                return
 
-        else:
-            # --- Single-pass for short/medium ---
-            yield _sse_event("stage", {"stage": "generating_script"})
+            else:
+                # --- Single-pass for short/medium ---
+                yield _sse_event("stage", {"stage": "generating_script"})
 
-            prompt = _prompts.build_meditation_prompt(
-                meditation_type=body.type.value,
-                length=body.length.value,
-                focus=body.focus,
-                mood_context=mood_ctx,
-                habit_context=habit_ctx,
-                journal_context=journal_ctx,
-                previous_titles=prev_titles,
-            )
+                prompt = _prompts.build_meditation_prompt(
+                    meditation_type=body.type.value,
+                    length=body.length.value,
+                    focus=body.focus,
+                    mood_context=mood_ctx,
+                    habit_context=habit_ctx,
+                    journal_context=journal_ctx,
+                    previous_titles=prev_titles,
+                )
 
-            try:
                 script_response = await ai_call(
                     prompt, task="creative", max_tokens=4096,
                     user_id=user.id, user_email=user.email,
                 )
                 total_cost += script_response.cost
-            except (BudgetExhaustedError, CreditBlockedError, InsufficientTokensError):
-                yield _sse_event("error", {"detail": "Daily AI budget exhausted", "code": 402})
-                return
-            except PromptBlockedError:
-                yield _sse_event("error", {"detail": "Content blocked by security filter", "code": 400})
-                return
 
-        raw_script = script_response.content.strip()
-        title, transcript = _parse_script(raw_script)
+            raw_script = script_response.content.strip()
+            title, transcript = _parse_script(raw_script)
 
-        # Stage 3: TTS
-        yield _sse_event("stage", {"stage": "synthesizing_audio"})
+            # Stage 3: TTS
+            yield _sse_event("stage", {"stage": "synthesizing_audio"})
 
-        tts_text = _prepare_tts_text(transcript)
-        try:
+            tts_text = _prepare_tts_text(transcript)
             tts_result = await call_openai_tts(
                 text=tts_text,
                 voice=body.voice.value,
                 speed=0.9,
             )
-        except Exception as e:
-            logger.error("TTS generation failed: %s", e)
-            yield _sse_event("error", {"detail": "Audio generation failed", "code": 502})
-            return
 
-        total_cost += tts_result.cost
-        actual_seconds = int(_mp3_duration_seconds(tts_result.audio_bytes))
-        logger.info(
-            "Meditation generated: length=%s, words=%d, audio=%ds (%s), title=%r",
-            body.length.value, len(transcript.split()), actual_seconds,
-            f"{actual_seconds // 60}:{actual_seconds % 60:02d}", title,
-        )
-
-        # Stage 4: Save
-        yield _sse_event("stage", {"stage": "saving"})
-
-        user_dir = _AUDIO_DIR / user.id
-        user_dir.mkdir(parents=True, exist_ok=True)
-        temp_filename = f"{int(time.time())}_{body.type.value}.mp3"
-        audio_path = user_dir / temp_filename
-        audio_path.write_bytes(tts_result.audio_bytes)
-
-        async with get_session() as session:
-            meditation = MeditationSession(
-                user_id=user.id,
-                type=body.type.value,
-                length=body.length.value,
-                duration_seconds=actual_seconds,
-                ambience=body.ambience.value,
-                voice=body.voice.value,
-                focus=body.focus,
-                title=title,
-                transcript=transcript,
-                audio_filename=f"{user.id}/{temp_filename}",
-                model_used=script_response.model,
-                tts_model=tts_result.model,
-                cost=total_cost,
-                status="ready",
-            )
-            session.add(meditation)
-            await session.flush()
-            await session.refresh(meditation)
-
+            total_cost += tts_result.cost
+            actual_seconds = int(_mp3_duration_seconds(tts_result.audio_bytes))
             logger.info(
-                "Meditation saved: user=%s type=%s length=%s duration=%ds cost=$%.4f",
-                user.id, body.type.value, body.length.value, actual_seconds, total_cost,
+                "Meditation generated: length=%s, words=%d, audio=%ds (%s), title=%r",
+                body.length.value, len(transcript.split()), actual_seconds,
+                f"{actual_seconds // 60}:{actual_seconds % 60:02d}", title,
             )
 
-            yield _sse_event("session", json.loads(
-                SessionResponse.model_validate(meditation).model_dump_json()
-            ))
+            # Stage 4: Save
+            yield _sse_event("stage", {"stage": "saving"})
+
+            user_dir = _AUDIO_DIR / user.id
+            user_dir.mkdir(parents=True, exist_ok=True)
+            temp_filename = f"{int(time.time())}_{body.type.value}.mp3"
+            audio_path = user_dir / temp_filename
+            audio_path.write_bytes(tts_result.audio_bytes)
+
+            async with get_session() as session:
+                meditation = MeditationSession(
+                    user_id=user.id,
+                    type=body.type.value,
+                    length=body.length.value,
+                    duration_seconds=actual_seconds,
+                    ambience=body.ambience.value,
+                    voice=body.voice.value,
+                    focus=body.focus,
+                    title=title,
+                    transcript=transcript,
+                    audio_filename=f"{user.id}/{temp_filename}",
+                    model_used=script_response.model,
+                    tts_model=tts_result.model,
+                    cost=total_cost,
+                    status="ready",
+                )
+                session.add(meditation)
+                await session.flush()
+                await session.refresh(meditation)
+
+                logger.info(
+                    "Meditation saved: user=%s type=%s length=%s duration=%ds cost=$%.4f",
+                    user.id, body.type.value, body.length.value, actual_seconds, total_cost,
+                )
+
+                yield _sse_event("session", json.loads(
+                    SessionResponse.model_validate(meditation).model_dump_json()
+                ))
+
+        except (BudgetExhaustedError, CreditBlockedError, InsufficientTokensError):
+            yield _sse_event("error", {"detail": "AI budget exhausted", "code": 402})
+        except PromptBlockedError:
+            yield _sse_event("error", {"detail": "Content blocked by security filter", "code": 400})
+        except Exception as e:
+            logger.error("Meditation generation failed: %s", e, exc_info=True)
+            yield _sse_event("error", {"detail": f"Generation failed: {str(e)[:150]}", "code": 500})
 
     return StreamingResponse(
         _stream(),
