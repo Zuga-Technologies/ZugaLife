@@ -189,11 +189,13 @@ async def generate_meditation(
             tts_text = _prepare_tts_text(transcript)
             logger.warning("MEDITATION TTS text prepared, len=%d", len(tts_text))
             yield SSE_KEEPALIVE
+            logger.warning("MEDITATION TTS starting await...")
             tts_result = await call_openai_tts(
                 text=tts_text,
                 voice=body.voice.value,
                 speed=0.9,
             )
+            logger.warning("MEDITATION TTS DONE, audio_bytes=%d", len(tts_result.audio_bytes))
 
             total_cost += tts_result.cost
             actual_seconds = int(_mp3_duration_seconds(tts_result.audio_bytes))
@@ -242,6 +244,8 @@ async def generate_meditation(
                     SessionResponse.model_validate(meditation).model_dump_json()
                 ))
 
+        except GeneratorExit:
+            logger.warning("MEDITATION GENERATOR EXIT — client disconnected")
         except (BudgetExhaustedError, CreditBlockedError, InsufficientTokensError) as e:
             logger.warning("MEDITATION BUDGET ERROR: %s", e)
             yield _sse_event("error", {"detail": "AI budget exhausted", "code": 402})
