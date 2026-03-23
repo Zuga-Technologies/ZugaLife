@@ -1224,6 +1224,8 @@ interface MeditationSession {
   model_used: string
   tts_model: string
   cost: number
+  status: string
+  error_message: string | null
   mood_before: string | null
   mood_after: string | null
   is_favorite: boolean
@@ -1344,15 +1346,6 @@ async function fetchMedSessions() {
   } catch { /* silent */ }
 }
 
-const _stageLabels: Record<string, string> = {
-  validating: 'Personalizing your session...',
-  generating_outline: 'Designing your meditation...',
-  generating_script: 'Writing your meditation script...',
-  expanding_script: 'Expanding into full script...',
-  synthesizing_audio: 'Generating voice audio...',
-  saving: 'Saving session...',
-}
-
 async function generateMeditation() {
   if (medGenerating.value) return
   medGenerating.value = true
@@ -1370,61 +1363,25 @@ async function generateMeditation() {
   }
 
   try {
-    const token = getToken()
-    const res = await fetch('/api/life/meditation/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(payload),
-    })
+    // POST returns immediately with a stub session (status="generating")
+    const stub = await api.post<MeditationSession>('/api/life/meditation/generate', payload)
 
-    // Non-stream error responses (429, 402, 503) come as JSON
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: `Error (${res.status})` }))
-      if (res.status === 402) {
-        medError.value = 'AI budget exhausted for today.'
-      } else if (res.status === 429) {
-        medError.value = err.detail ?? 'Daily meditation limit reached.'
-      } else if (res.status === 503) {
-        medError.value = 'Meditation generation not available.'
-      } else {
-        medError.value = err.detail ?? `Error (${res.status})`
-      }
+    if (stub.status === 'failed') {
+      medError.value = stub.error_message ?? 'Generation failed'
       return
     }
 
-    // Parse SSE stream
-    const reader = res.body!.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
+    // Poll until ready or failed
+    medGenStage.value = 'Generating your meditation...'
+    const sessionId = stub.id
+    const maxPolls = 60  // 60 × 3s = 3 minutes max
+    for (let i = 0; i < maxPolls; i++) {
+      await new Promise(r => setTimeout(r, 3000))
+      try {
+        const session = await api.get<MeditationSession>(`/api/life/meditation/sessions/${sessionId}`)
 
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-
-      // Process complete SSE messages (double newline separated)
-      const parts = buffer.split('\n\n')
-      buffer = parts.pop()!  // keep incomplete tail
-
-      for (const part of parts) {
-        if (!part.trim()) continue
-        const lines = part.split('\n')
-        let eventType = ''
-        let data = ''
-        for (const line of lines) {
-          if (line.startsWith('event: ')) eventType = line.slice(7).trim()
-          else if (line.startsWith('data: ')) data = line.slice(6)
-        }
-        if (!eventType || !data) continue
-
-        if (eventType === 'stage') {
-          const { stage } = JSON.parse(data)
-          medGenStage.value = _stageLabels[stage] ?? stage
-        } else if (eventType === 'session') {
-          medSession.value = JSON.parse(data) as MeditationSession
+        if (session.status === 'ready') {
+          medSession.value = session
           medMoodAfter.value = null
           medView.value = 'player'
           medSuccess.value = 'Meditation generated!'
@@ -1432,18 +1389,40 @@ async function generateMeditation() {
           await fetchMedRemaining()
           await fetchMedSessions()
           setTimeout(() => loadAndPlayAudio(), 300)
-        } else if (eventType === 'error') {
-          const { detail, code } = JSON.parse(data)
-          if (code === 402) {
-            medError.value = 'AI budget exhausted for today.'
-          } else {
-            medError.value = detail ?? `Error (${code})`
-          }
+          return
         }
+
+        if (session.status === 'failed') {
+          medError.value = session.error_message ?? 'Generation failed'
+          return
+        }
+
+        // Still generating — update stage text based on elapsed time
+        if (i < 5) medGenStage.value = 'Writing your meditation script...'
+        else if (i < 15) medGenStage.value = 'Expanding into full script...'
+        else if (i < 25) medGenStage.value = 'Generating voice audio...'
+        else medGenStage.value = 'Almost done...'
+      } catch {
+        // Transient network error — keep polling
       }
     }
-  } catch {
-    medError.value = 'Network error'
+
+    medError.value = 'Generation timed out. Check your session history.'
+  } catch (e) {
+    if (e instanceof ApiError) {
+      const detail = (e.body as Record<string, string>).detail
+      if (e.status === 402) {
+        medError.value = 'AI budget exhausted for today.'
+      } else if (e.status === 429) {
+        medError.value = detail ?? 'Daily meditation limit reached.'
+      } else if (e.status === 503) {
+        medError.value = 'Meditation generation not available.'
+      } else {
+        medError.value = detail ?? `Error (${e.status})`
+      }
+    } else {
+      medError.value = 'Network error'
+    }
   } finally {
     medGenerating.value = false
     medGenStage.value = null
