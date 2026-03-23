@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 # StreamingResponse removed — now using background tasks + polling
-from sqlalchemy import desc, func, select, update
+from sqlalchemy import desc, func, or_, select, update
 
 from core.auth.middleware import get_current_user
 from core.auth.models import CurrentUser
@@ -265,12 +265,18 @@ async def list_sessions(
 ):
     """List past meditation sessions (most recent first). Excludes in-progress."""
     async with get_session() as session:
+        # Show ready + legacy (NULL status) sessions, hide generating/failed
+        ready_filter = or_(
+            MeditationSession.status == "ready",
+            MeditationSession.status.is_(None),
+        )
+
         count_result = await session.execute(
             select(func.count())
             .select_from(MeditationSession)
             .where(
                 MeditationSession.user_id == user.id,
-                MeditationSession.status == "ready",
+                ready_filter,
             )
         )
         total = count_result.scalar_one()
@@ -279,7 +285,7 @@ async def list_sessions(
             select(MeditationSession)
             .where(
                 MeditationSession.user_id == user.id,
-                MeditationSession.status == "ready",
+                ready_filter,
             )
             .order_by(desc(MeditationSession.created_at))
             .limit(50)
