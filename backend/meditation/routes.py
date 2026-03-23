@@ -171,7 +171,7 @@ async def _generate_in_background(
             section_count = outline.count("## ")
             if section_count < 2:
                 section_count = 6
-            logger.info("Meditation %d: outline done, %d sections", session_id, section_count)
+            print(f"[MEDITATION] {session_id} outline done, {section_count} sections", flush=True)
 
             # Pass 2: Expand
             expansion_prompt = _prompts.build_expansion_prompt(outline, section_count)
@@ -180,7 +180,7 @@ async def _generate_in_background(
                 user_id=user_id, user_email=user_email,
             )
             total_cost += script_response.cost
-            logger.info("Meditation %d: expansion done, %d words", session_id, len(script_response.content.split()))
+            print(f"[MEDITATION] {session_id} expansion done, {len(script_response.content.split())} words", flush=True)
         else:
             # Single-pass
             prompt = _prompts.build_meditation_prompt(
@@ -203,14 +203,14 @@ async def _generate_in_background(
 
         # 3. TTS
         tts_text = _prepare_tts_text(transcript)
-        logger.info("Meditation %d: TTS starting, %d chars", session_id, len(tts_text))
+        print(f"[MEDITATION] {session_id} TTS starting, {len(tts_text)} chars", flush=True)
         tts_result = await call_openai_tts(
             text=tts_text,
             voice=body.voice.value,
             speed=0.9,
         )
         total_cost += tts_result.cost
-        logger.info("Meditation %d: TTS done, %d bytes audio", session_id, len(tts_result.audio_bytes))
+        print(f"[MEDITATION] {session_id} TTS done, {len(tts_result.audio_bytes)} bytes", flush=True)
 
         actual_seconds = int(_mp3_duration_seconds(tts_result.audio_bytes))
 
@@ -238,13 +238,10 @@ async def _generate_in_background(
                 )
             )
 
-        logger.info(
-            "Meditation %d ready: type=%s length=%s duration=%ds cost=$%.4f title=%r",
-            session_id, body.type.value, body.length.value, actual_seconds, total_cost, title,
-        )
+        print(f"[MEDITATION] {session_id} READY: {body.type.value} {body.length.value} {actual_seconds}s ${total_cost:.4f} {title!r}", flush=True)
 
     except Exception as e:
-        logger.error("Meditation %d FAILED: %s: %s", session_id, type(e).__name__, e)
+        print(f"[MEDITATION] {session_id} FAILED: {type(e).__name__}: {e}", flush=True)
         try:
             async with get_session() as session:
                 await session.execute(
@@ -255,8 +252,8 @@ async def _generate_in_background(
                         error_message=f"{type(e).__name__}: {str(e)[:400]}",
                     )
                 )
-        except Exception:
-            logger.error("Meditation %d: failed to update status to failed", session_id)
+        except Exception as e2:
+            print(f"[MEDITATION] {session_id} failed to update status: {e2}", flush=True)
 
 
 # --- CRUD ---
