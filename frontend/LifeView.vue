@@ -1371,12 +1371,22 @@ async function generateMeditation() {
       return
     }
 
-    // Poll until ready or failed
-    medGenStage.value = 'Generating your meditation...'
+    // Poll until ready or failed — no timeout, keeps going
     const sessionId = stub.id
-    const maxPolls = 100  // 100 × 3s = 5 minutes max
-    for (let i = 0; i < maxPolls; i++) {
+    const startTime = Date.now()
+    let polls = 0
+
+    while (true) {
       await new Promise(r => setTimeout(r, 3000))
+      polls++
+
+      // Update progress message based on elapsed time
+      const elapsed = Math.floor((Date.now() - startTime) / 1000)
+      if (elapsed < 15) medGenStage.value = 'Writing your meditation script...'
+      else if (elapsed < 60) medGenStage.value = 'Expanding into full script...'
+      else if (elapsed < 180) medGenStage.value = `Generating voice audio... (${Math.floor(elapsed / 60)}m ${elapsed % 60}s)`
+      else medGenStage.value = `Almost done... (${Math.floor(elapsed / 60)}m ${elapsed % 60}s)`
+
       try {
         const session = await api.get<MeditationSession>(`/api/life/meditation/sessions/${sessionId}`)
 
@@ -1396,20 +1406,15 @@ async function generateMeditation() {
           medError.value = session.error_message ?? 'Generation failed'
           return
         }
-
-        // Still generating — update stage text based on elapsed time
-        if (i < 5) medGenStage.value = 'Writing your meditation script...'
-        else if (i < 15) medGenStage.value = 'Expanding into full script...'
-        else if (i < 25) medGenStage.value = 'Generating voice audio...'
-        else medGenStage.value = 'Almost done...'
       } catch {
         // Transient network error — keep polling
+        if (polls > 200) {
+          // Safety valve: 10 min absolute max
+          medError.value = 'Generation is taking unusually long. Check session history later.'
+          return
+        }
       }
     }
-
-    medSuccess.value = 'Still generating — it will appear in your session history shortly.'
-    setTimeout(() => { medSuccess.value = null }, 5000)
-    await fetchMedSessions()
   } catch (e) {
     if (e instanceof ApiError) {
       const detail = (e.body as Record<string, string>).detail
