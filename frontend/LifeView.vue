@@ -1374,7 +1374,7 @@ async function generateMeditation() {
     // Poll until ready or failed
     medGenStage.value = 'Generating your meditation...'
     const sessionId = stub.id
-    const maxPolls = 60  // 60 × 3s = 3 minutes max
+    const maxPolls = 100  // 100 × 3s = 5 minutes max
     for (let i = 0; i < maxPolls; i++) {
       await new Promise(r => setTimeout(r, 3000))
       try {
@@ -1407,7 +1407,9 @@ async function generateMeditation() {
       }
     }
 
-    medError.value = 'Generation timed out. Check your session history.'
+    medSuccess.value = 'Still generating — it will appear in your session history shortly.'
+    setTimeout(() => { medSuccess.value = null }, 5000)
+    await fetchMedSessions()
   } catch (e) {
     if (e instanceof ApiError) {
       const detail = (e.body as Record<string, string>).detail
