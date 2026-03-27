@@ -3483,26 +3483,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Post-session mood (show when audio ends) -->
-        <div v-if="medProgress >= 100" class="glass-card p-5 animate-fade-in">
-          <h3 class="text-sm font-semibold text-txt-primary mb-2">How do you feel?</h3>
-          <p class="text-xs text-txt-muted mb-3">Optional post-session check-in</p>
-          <div class="flex flex-wrap gap-1.5">
-            <button
-              v-for="mood in moods"
-              :key="mood.emoji"
-              @click="setMedMoodAfter(mood.emoji)"
-              class="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150"
-              :class="medMoodAfter === mood.emoji ? 'bg-accent/15 ring-1 ring-accent/50 text-accent' : 'text-txt-muted hover:bg-surface-3 hover:text-txt-primary'"
-              :title="mood.label"
-            >
-              <component :is="moodIcons[mood.emoji]" :size="20" v-if="moodIcons[mood.emoji]" />
-            </button>
-          </div>
-          <p v-if="medMoodAfter" class="text-xs text-accent mt-2 animate-fade-in">
-            {{ moods.find(m => m.emoji === medMoodAfter)?.label ?? '' }}
-          </p>
-        </div>
+        <!-- Post-session mood removed — cluttered the meditation experience -->
       </template>
 
       <!-- ===== HISTORY VIEW ===== -->

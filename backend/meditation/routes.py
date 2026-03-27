@@ -226,7 +226,7 @@ async def _generate_in_background(
             tts_result = await call_cartesia_tts(
                 text=tts_text,
                 voice_id=getattr(_settings, "cartesia_voice_id", "") or "",
-                speed=0.85,
+                speed=0.75,
                 emotion="calm",
             )
         else:
