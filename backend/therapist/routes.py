@@ -25,6 +25,11 @@ _prompts = sys.modules["zugalife.therapist.prompts"]
 _safety = sys.modules["zugalife.therapist.safety"]
 _context = sys.modules["zugalife.therapist.context"]
 
+try:
+    _gam_engine = sys.modules["zugalife.gamification.engine"]
+except KeyError:
+    _gam_engine = None
+
 TherapistSessionNote = _models.TherapistSessionNote
 
 TherapistChatRequest = _schemas.TherapistChatRequest
@@ -122,15 +127,19 @@ async def therapist_chat(
             "Please end this session to save your notes.",
         )
 
-    # Crisis detection on the latest user message
-    latest_user_msg = body.messages[-1].get("content", "")
-    if _safety.detect_crisis(latest_user_msg):
-        return TherapistChatResponse(
-            content=_safety.CRISIS_RESPONSE,
-            message_index=message_count,
-            session_messages_remaining=MAX_MESSAGES_PER_SESSION - (message_count // 2),
-            cost=0.0,
-        )
+    # Crisis detection on last 5 user messages (not just the latest)
+    recent_user_msgs = [
+        m.content for m in body.messages[-10:]
+        if m.role == "user"
+    ][-5:]
+    for msg_text in recent_user_msgs:
+        if _safety.detect_crisis(msg_text):
+            return TherapistChatResponse(
+                content=_safety.CRISIS_RESPONSE,
+                message_index=message_count,
+                session_messages_remaining=MAX_MESSAGES_PER_SESSION - (message_count // 2),
+                cost=0.0,
+            )
 
     # Build context-enriched system prompt
     first_session = await _context.is_first_session(user.id)
@@ -153,7 +162,7 @@ async def therapist_chat(
     # Assemble messages: system + conversation history
     messages = [
         {"role": "system", "content": system_prompt},
-        *body.messages,
+        *[{"role": m.role, "content": m.content} for m in body.messages],
     ]
 
     # Call Venice via gateway (task="therapist" enforces Venice-only routing)
@@ -282,6 +291,16 @@ async def end_session(
         session.add(note)
         await session.flush()
         await session.refresh(note)
+
+        if _gam_engine:
+            try:
+                await _gam_engine.award_xp(
+                    session, user_id=user.id,
+                    source="therapist_session",
+                    description=f"Therapist session ({len(body.messages)} messages)",
+                )
+            except Exception:
+                logger.warning("XP award failed for %s", user.id, exc_info=True)
 
     logger.info(
         "Therapist session saved: user=%s messages=%d cost=$%.4f",
@@ -413,12 +432,12 @@ async def _generate_returning_greeting(user_id: str, user_email: str, context_su
         )
 
 
-def _format_conversation(messages: list[dict]) -> str:
+def _format_conversation(messages) -> str:
     """Format a messages array into readable text for the summary prompt."""
     lines = []
     for msg in messages:
-        role = msg.get("role", "unknown").capitalize()
-        content = msg.get("content", "")
+        role = (msg.role if hasattr(msg, "role") else msg.get("role", "unknown")).capitalize()
+        content = msg.content if hasattr(msg, "content") else msg.get("content", "")
         lines.append(f"{role}: {content}")
     return "\n\n".join(lines)
 

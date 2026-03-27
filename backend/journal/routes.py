@@ -32,6 +32,11 @@ JournalReflectResponse = _schemas.JournalReflectResponse
 _EMOJI_LABELS = _prompts._EMOJI_LABELS
 MAX_REFLECTIONS = _prompts.MAX_REFLECTIONS_PER_ENTRY
 
+try:
+    _gam_engine = sys.modules["zugalife.gamification.engine"]
+except KeyError:
+    _gam_engine = None
+
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/life/journal", tags=["life-journal"])
@@ -98,6 +103,16 @@ async def create_journal_entry(
         await session.refresh(entry)
         response = JournalEntryResponse.model_validate(entry)
         entry_id = entry.id
+
+        if _gam_engine:
+            try:
+                await _gam_engine.award_xp(
+                    session, user_id=user.id,
+                    source="journal_entry",
+                    description=f"Wrote: {(body.title or 'Untitled')[:50]}",
+                )
+            except Exception:
+                log.warning("XP award failed for %s", user.id, exc_info=True)
 
     # Fire background mood inference if user didn't tag manually
     if not body.mood_emoji:
@@ -256,54 +271,54 @@ async def export_journal(
         result = await session.execute(stmt)
         entries = result.scalars().all()
 
-    if not entries:
-        raise HTTPException(404, "No journal entries found for the given range")
+        if not entries:
+            raise HTTPException(404, "No journal entries found for the given range")
 
-    if format == "json":
-        import json as json_lib
+        if format == "json":
+            import json as json_lib
 
-        data = []
-        for e in entries:
-            data.append({
-                "id": e.id,
-                "title": e.title,
-                "content": e.content,
-                "mood_emoji": e.mood_emoji,
-                "mood_label": e.mood_label,
-                "created_at": e.created_at.isoformat(),
-                "updated_at": e.updated_at.isoformat(),
-                "reflections": [
-                    {
-                        "content": r.content,
-                        "model_used": r.model_used,
-                        "created_at": r.created_at.isoformat(),
-                    }
-                    for r in e.reflections
-                ],
-            })
+            data = []
+            for e in entries:
+                data.append({
+                    "id": e.id,
+                    "title": e.title,
+                    "content": e.content,
+                    "mood_emoji": e.mood_emoji,
+                    "mood_label": e.mood_label,
+                    "created_at": e.created_at.isoformat(),
+                    "updated_at": e.updated_at.isoformat(),
+                    "reflections": [
+                        {
+                            "content": r.content,
+                            "model_used": r.model_used,
+                            "created_at": r.created_at.isoformat(),
+                        }
+                        for r in e.reflections
+                    ],
+                })
 
-        json_bytes = json_lib.dumps(data, indent=2, ensure_ascii=False).encode()
-        return StreamingResponse(
-            io.BytesIO(json_bytes),
-            media_type="application/json",
-            headers={
-                "Content-Disposition": "attachment; filename=zugalife-journal.json",
-            },
-        )
+            json_bytes = json_lib.dumps(data, indent=2, ensure_ascii=False).encode()
+            return StreamingResponse(
+                io.BytesIO(json_bytes),
+                media_type="application/json",
+                headers={
+                    "Content-Disposition": "attachment; filename=zugalife-journal.json",
+                },
+            )
 
-    buf = io.BytesIO()
-    seen_filenames: set[str] = set()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for entry in entries:
-            md_content = _entry_to_markdown(entry)
-            filename = _safe_filename(entry.title, entry.created_at, entry.id)
+        buf = io.BytesIO()
+        seen_filenames: set[str] = set()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for entry in entries:
+                md_content = _entry_to_markdown(entry)
+                filename = _safe_filename(entry.title, entry.created_at, entry.id)
 
-            if filename in seen_filenames:
-                base = filename.rsplit(".md", 1)[0]
-                filename = f"{base} ({entry.id}).md"
-            seen_filenames.add(filename)
+                if filename in seen_filenames:
+                    base = filename.rsplit(".md", 1)[0]
+                    filename = f"{base} ({entry.id}).md"
+                seen_filenames.add(filename)
 
-            zf.writestr(f"zugalife-journal/{filename}", md_content)
+                zf.writestr(f"zugalife-journal/{filename}", md_content)
 
     buf.seek(0)
     return StreamingResponse(
@@ -331,36 +346,36 @@ async def export_single_entry(
         if not entry or entry.user_id != user.id:
             raise HTTPException(status_code=404, detail="Entry not found")
 
-    if format == "json":
-        import json as json_lib
+        if format == "json":
+            import json as json_lib
 
-        data = {
-            "id": entry.id,
-            "title": entry.title,
-            "content": entry.content,
-            "mood_emoji": entry.mood_emoji,
-            "mood_label": entry.mood_label,
-            "created_at": entry.created_at.isoformat(),
-            "updated_at": entry.updated_at.isoformat(),
-            "reflections": [
-                {
-                    "content": r.content,
-                    "model_used": r.model_used,
-                    "created_at": r.created_at.isoformat(),
-                }
-                for r in entry.reflections
-            ],
-        }
-        json_bytes = json_lib.dumps(data, indent=2, ensure_ascii=False).encode()
-        filename = _safe_filename(entry.title, entry.created_at, entry.id).replace(".md", ".json")
-        return StreamingResponse(
-            io.BytesIO(json_bytes),
-            media_type="application/json",
-            headers={"Content-Disposition": f"attachment; filename={filename}"},
-        )
+            data = {
+                "id": entry.id,
+                "title": entry.title,
+                "content": entry.content,
+                "mood_emoji": entry.mood_emoji,
+                "mood_label": entry.mood_label,
+                "created_at": entry.created_at.isoformat(),
+                "updated_at": entry.updated_at.isoformat(),
+                "reflections": [
+                    {
+                        "content": r.content,
+                        "model_used": r.model_used,
+                        "created_at": r.created_at.isoformat(),
+                    }
+                    for r in entry.reflections
+                ],
+            }
+            json_bytes = json_lib.dumps(data, indent=2, ensure_ascii=False).encode()
+            filename = _safe_filename(entry.title, entry.created_at, entry.id).replace(".md", ".json")
+            return StreamingResponse(
+                io.BytesIO(json_bytes),
+                media_type="application/json",
+                headers={"Content-Disposition": f"attachment; filename={filename}"},
+            )
 
-    # Markdown
-    md_content = _entry_to_markdown(entry)
+        # Markdown — build inside session so reflections are accessible
+        md_content = _entry_to_markdown(entry)
     filename = _safe_filename(entry.title, entry.created_at, entry.id)
     return StreamingResponse(
         io.BytesIO(md_content.encode()),

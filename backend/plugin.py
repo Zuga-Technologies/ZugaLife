@@ -102,6 +102,13 @@ _f_schemas = _load_submodule("forecasting", "schemas")
 _f_context = _load_submodule("forecasting", "context")
 _f_routes = _load_submodule("forecasting", "routes")
 
+# Load gamification submodule: models → schemas → engine → routes
+# engine must come after schemas (build_badge_response resolves BadgeResponse via sys.modules)
+_gam_models = _load_submodule("gamification", "models")
+_gam_schemas = _load_submodule("gamification", "schemas")
+_gam_engine = _load_submodule("gamification", "engine")
+_gam_routes = _load_submodule("gamification", "routes")
+
 # Load data management (reset endpoints) — must come after all domain modules
 _data_mgmt = _load_sibling("data_management")
 
@@ -118,6 +125,7 @@ _combined_router.include_router(_m_routes.router)
 _combined_router.include_router(_t_routes.router)
 _combined_router.include_router(_s_routes.router)
 _combined_router.include_router(_f_routes.router)
+_combined_router.include_router(_gam_routes.router)
 _combined_router.include_router(_data_mgmt.router)
 _combined_router.include_router(_dashboard.router)
 
@@ -146,6 +154,8 @@ class ZugaLifePlugin(StudioPlugin):
             _g_models.GoalDefinition, _g_models.GoalMilestone, _g_models.GoalHabitLink,
             _m_models.MeditationSession,
             _t_models.TherapistSessionNote,
+            _gam_models.UserXP, _gam_models.XPTransaction,
+            _gam_models.UserBadge, _gam_models.DailyChallenge,
         ]
 
     async def on_startup(self) -> None:
@@ -180,4 +190,4 @@ class ZugaLifePlugin(StudioPlugin):
                 except Exception:
                     pass  # column already exists
 
-        logger.info("ZugaLife tables initialized (mood + settings + journal + habits + goals + meditation + therapist)")
+        logger.info("ZugaLife tables initialized (mood + settings + journal + habits + goals + meditation + therapist + gamification)")

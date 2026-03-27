@@ -8,7 +8,7 @@ import {
   BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle,
   LayoutDashboard, TrendingUp, Target, Clock, CalendarDays, ArrowRight, ArrowLeft,
   ChevronRight, Activity, Flame as FlameIcon, Brain as BrainIcon, Settings,
-  Download,
+  Download, Trophy, Star, Zap, CheckCircle2, Lock,
 } from 'lucide-vue-next'
 import SettingsPanel from './SettingsPanel.vue'
 import BackgroundTheme from './BackgroundTheme.vue'
@@ -95,6 +95,72 @@ async function fetchDashboard() {
     dashboardData.value = res
   } catch (e) {
     console.error('Dashboard fetch failed:', e)
+  }
+}
+
+// ============================
+// GAMIFICATION
+// ============================
+
+interface XPStatus {
+  total_xp: number
+  level: number
+  level_name: string
+  xp_for_next_level: number
+  xp_progress_in_level: number
+  current_streak_days: number
+  longest_streak_days: number
+  streak_multiplier: number
+}
+
+interface Badge {
+  badge_key: string
+  title: string
+  description: string
+  emoji: string
+  earned_at: string | null
+}
+
+interface DailyChallenge {
+  challenge_key: string
+  title: string
+  description: string
+  xp_reward: number
+  is_completed: boolean
+}
+
+interface GamificationData {
+  xp: XPStatus
+  badges: Badge[]
+  recent_xp: Array<{ amount: number; source: string; description: string; created_at: string }>
+  daily_challenges: DailyChallenge[]
+}
+
+const gamificationData = ref<GamificationData | null>(null)
+
+const ALL_BADGES: Array<{ key: string; title: string; emoji: string; description: string }> = [
+  { key: 'first_mood',       title: 'Mood Tracker',        emoji: '🎭', description: 'Log your first mood' },
+  { key: 'first_journal',    title: 'Dear Diary',          emoji: '📝', description: 'Write your first journal entry' },
+  { key: 'first_meditation', title: 'Inner Peace',         emoji: '🧘', description: 'Complete your first meditation' },
+  { key: 'first_therapy',    title: 'Open Mind',           emoji: '💬', description: 'Start your first therapy session' },
+  { key: 'streak_7',         title: 'Week Warrior',        emoji: '🔥', description: '7-day activity streak' },
+  { key: 'streak_30',        title: 'Monthly Master',      emoji: '⚡', description: '30-day activity streak' },
+  { key: 'streak_100',       title: 'Unstoppable',         emoji: '💎', description: '100-day activity streak' },
+  { key: 'all_habits_day',   title: 'Perfect Day',         emoji: '⭐', description: 'Complete all habits in one day' },
+  { key: 'level_5',          title: 'Halfway There',       emoji: '🏔️', description: 'Reach level 5' },
+  { key: 'level_10',         title: 'Enlightened',         emoji: '👑', description: 'Reach level 10' },
+  { key: 'meditation_10',    title: 'Zen Master',          emoji: '🪷', description: 'Complete 10 meditations' },
+  { key: 'journal_10',       title: 'Storyteller',         emoji: '📚', description: 'Write 10 journal entries' },
+  { key: 'mood_30',          title: 'Self Aware',          emoji: '🔮', description: 'Log mood 30 times' },
+  { key: 'goal_complete',    title: 'Goal Getter',         emoji: '🎯', description: 'Complete your first goal' },
+  { key: 'five_challenges',  title: 'Challenge Accepted',  emoji: '🏆', description: 'Complete 5 daily challenges' },
+]
+
+async function fetchGamification() {
+  try {
+    gamificationData.value = await api.get<GamificationData>('/api/life/gamification')
+  } catch (e) {
+    console.error('Gamification fetch failed:', e)
   }
 }
 
@@ -209,7 +275,7 @@ async function logDashMood(emoji: string) {
 
 // Re-fetch dashboard when switching back to overview
 watch(activeTab, (tab) => {
-  if (tab === 'dashboard') fetchDashboard()
+  if (tab === 'dashboard') { fetchDashboard(); fetchGamification() }
   // Clear stale errors when switching tabs
   journalError.value = null
   habitError.value = null
@@ -1903,6 +1969,7 @@ function renderMarkdown(text: string): string {
 onMounted(async () => {
   await Promise.all([
     fetchDashboard(),
+    fetchGamification(),
     fetchJournalEntries(),
     fetchHabitCheckin(), fetchHabitStreaks(), fetchAllHabits(),
     fetchGoals(), fetchGoalTemplates(), fetchWeeklyTargets(),
@@ -1956,12 +2023,23 @@ onUnmounted(() => {
       </button>
       <span class="text-sm font-semibold text-txt-primary">{{ moduleLabels[activeTab] }}</span>
       <div class="flex-1" />
-      <div
-        v-if="habitStreaks && habitStreaks.overall_current > 0"
-        class="flex items-center gap-1.5 text-sm text-txt-secondary"
-      >
-        <FlameIcon :size="14" class="text-amber-400" />
-        <span class="font-medium">{{ habitStreaks.overall_current }}-day streak</span>
+      <!-- Persistent XP + Streak bar (visible on every non-dashboard tab) -->
+      <div v-if="gamificationData" class="flex items-center gap-3">
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <Star :size="12" class="text-amber-400" />
+          <span class="text-xs font-bold text-amber-400">Lv.{{ gamificationData.xp.level }}</span>
+        </div>
+        <div
+          v-if="gamificationData.xp.current_streak_days > 0"
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-500/20"
+        >
+          <FlameIcon :size="12" class="text-orange-400" />
+          <span class="text-xs font-bold text-orange-300">{{ gamificationData.xp.current_streak_days }}</span>
+          <span
+            v-if="gamificationData.xp.streak_multiplier > 1"
+            class="text-[9px] font-bold text-amber-300 bg-amber-500/20 px-1 rounded"
+          >{{ gamificationData.xp.streak_multiplier }}x</span>
+        </div>
       </div>
     </div>
 
@@ -1988,17 +2066,48 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <!-- Streak banner (top) -->
-        <div
-          v-if="habitStreaks && habitStreaks.overall_current > 0"
-          class="mb-4 glass-card p-3 flex items-center gap-3 border-amber-500/20"
-        >
-          <div class="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
-            <FlameIcon :size="18" class="text-amber-400" />
-          </div>
-          <div class="flex-1">
-            <p class="text-sm font-semibold text-txt-primary">{{ habitStreaks.overall_current }}-day streak</p>
-            <p class="text-xs text-txt-muted">Best: {{ habitStreaks.overall_longest }} days</p>
+        <!-- XP + Level + Streak Bar -->
+        <div v-if="gamificationData" class="glass-card p-4 mb-4 animate-fade-in">
+          <div class="flex items-center gap-3">
+            <!-- Level badge -->
+            <div class="flex-shrink-0 flex flex-col items-center gap-0.5">
+              <div class="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+                <span class="text-lg font-bold text-amber-400">{{ gamificationData.xp.level }}</span>
+              </div>
+              <span class="text-[10px] text-txt-muted leading-none">{{ gamificationData.xp.level_name }}</span>
+            </div>
+
+            <!-- XP progress -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center gap-1.5">
+                  <Zap :size="12" class="text-amber-400" />
+                  <span class="text-xs font-semibold text-txt-primary">{{ gamificationData.xp.xp_progress_in_level.toLocaleString() }} / {{ gamificationData.xp.xp_for_next_level.toLocaleString() }} XP</span>
+                </div>
+                <span class="text-[10px] text-txt-muted">{{ gamificationData.xp.total_xp.toLocaleString() }} total</span>
+              </div>
+              <div class="w-full bg-surface-3 rounded-full h-2 overflow-hidden">
+                <div
+                  class="h-2 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-700 ease-out"
+                  :style="{ width: Math.min(100, Math.round((gamificationData.xp.xp_progress_in_level / gamificationData.xp.xp_for_next_level) * 100)) + '%' }"
+                ></div>
+              </div>
+            </div>
+
+            <!-- Streak flame -->
+            <div class="flex-shrink-0 flex flex-col items-center gap-0.5">
+              <div class="flex items-center gap-1">
+                <FlameIcon :size="16" class="text-amber-400" />
+                <span class="text-sm font-bold text-txt-primary">{{ gamificationData.xp.current_streak_days }}</span>
+              </div>
+              <div
+                v-if="gamificationData.xp.streak_multiplier > 1"
+                class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 leading-none"
+              >
+                {{ gamificationData.xp.streak_multiplier }}x
+              </div>
+              <span v-else class="text-[10px] text-txt-muted leading-none">streak</span>
+            </div>
           </div>
         </div>
 
@@ -2046,6 +2155,93 @@ onUnmounted(() => {
               </div>
             </template>
             <span class="text-[10px] text-txt-muted ml-1">recent</span>
+          </div>
+        </div>
+
+        <!-- Daily Challenges -->
+        <div v-if="gamificationData && gamificationData.daily_challenges.length > 0" class="glass-card p-4 mb-4 animate-fade-in">
+          <div class="flex items-center gap-2 mb-3">
+            <Target :size="14" class="text-accent" />
+            <span class="text-sm font-semibold text-txt-primary">Today's Challenges</span>
+            <span class="ml-auto text-xs text-txt-muted">
+              {{ gamificationData.daily_challenges.filter(c => c.is_completed).length }}/{{ gamificationData.daily_challenges.length }} done
+            </span>
+          </div>
+          <div class="space-y-2">
+            <div
+              v-for="challenge in gamificationData.daily_challenges"
+              :key="challenge.challenge_key"
+              class="flex items-center gap-3 py-2 px-3 rounded-xl transition-colors"
+              :class="challenge.is_completed ? 'bg-emerald-500/8' : 'bg-surface-3/60'"
+            >
+              <CheckCircle2
+                v-if="challenge.is_completed"
+                :size="16"
+                class="flex-shrink-0 text-emerald-400"
+              />
+              <div
+                v-else
+                class="flex-shrink-0 w-4 h-4 rounded-full border border-bdr"
+              ></div>
+              <div class="flex-1 min-w-0">
+                <p
+                  class="text-xs font-medium leading-tight"
+                  :class="challenge.is_completed ? 'text-txt-muted line-through' : 'text-txt-primary'"
+                >{{ challenge.title }}</p>
+                <p class="text-[10px] text-txt-muted leading-tight mt-0.5">{{ challenge.description }}</p>
+              </div>
+              <span
+                class="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded leading-none"
+                :class="challenge.is_completed ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'"
+              >+{{ challenge.xp_reward }} XP</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Badge Showcase -->
+        <div v-if="gamificationData" class="glass-card p-4 mb-4 animate-fade-in">
+          <div class="flex items-center gap-2 mb-3">
+            <Trophy :size="14" class="text-accent" />
+            <span class="text-sm font-semibold text-txt-primary">Badges</span>
+            <span class="ml-auto text-xs text-txt-muted">
+              {{ gamificationData.badges.filter(b => b.earned_at !== null).length }}/{{ ALL_BADGES.length }}
+            </span>
+          </div>
+          <div class="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <div
+              v-for="badge in ALL_BADGES"
+              :key="badge.key"
+              class="flex-shrink-0 flex flex-col items-center gap-1 w-16 p-2 rounded-xl border transition-colors"
+              :class="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at)
+                ? 'bg-amber-500/8 border-amber-500/20'
+                : 'bg-surface-3/40 border-bdr/40 opacity-50'"
+              :title="badge.description"
+            >
+              <span
+                v-if="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at)"
+                class="text-xl leading-none"
+              >{{ badge.emoji }}</span>
+              <Lock v-else :size="18" class="text-txt-muted" />
+              <span class="text-[9px] text-txt-muted text-center leading-tight line-clamp-2">{{ badge.title }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- XP Activity Feed -->
+        <div v-if="gamificationData && gamificationData.recent_xp.length > 0" class="glass-card p-4 mb-4 animate-fade-in">
+          <div class="flex items-center gap-2 mb-3">
+            <Star :size="14" class="text-accent" />
+            <span class="text-sm font-semibold text-txt-primary">Recent XP</span>
+          </div>
+          <div class="space-y-1.5">
+            <div
+              v-for="(entry, i) in gamificationData.recent_xp.slice(0, 5)"
+              :key="i"
+              class="flex items-center gap-2"
+            >
+              <span class="text-xs font-semibold text-amber-400 w-14 flex-shrink-0">+{{ entry.amount }} XP</span>
+              <span class="text-xs text-txt-muted truncate">{{ entry.description }}</span>
+            </div>
           </div>
         </div>
 

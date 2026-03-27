@@ -23,6 +23,11 @@ _models = sys.modules["zugalife.meditation.models"]
 _schemas = sys.modules["zugalife.meditation.schemas"]
 _prompts = sys.modules["zugalife.meditation.prompts"]
 
+try:
+    _gam_engine = sys.modules["zugalife.gamification.engine"]
+except KeyError:
+    _gam_engine = None
+
 # Pull into globals for FastAPI annotation resolution
 MeditationSession = _models.MeditationSession
 
@@ -74,7 +79,7 @@ async def generate_meditation(
 
     try:
         from core.ai.gateway import ai_call
-        from core.ai.providers import call_openai_tts
+        from core.ai.providers import call_cartesia_tts, call_openai_tts
     except ImportError:
         raise HTTPException(
             status_code=503,
@@ -112,6 +117,7 @@ async def generate_meditation(
         body=body,
         ai_call=ai_call,
         call_openai_tts=call_openai_tts,
+        call_cartesia_tts=call_cartesia_tts,
     ))
 
     logger.info("Meditation %d queued for user=%s length=%s", session_id, user.id, body.length.value)
@@ -131,6 +137,7 @@ async def _generate_in_background(
     body: GenerateRequest,
     ai_call,
     call_openai_tts,
+    call_cartesia_tts=None,
 ):
     """Run the full LLM + TTS pipeline in a background task.
 
@@ -201,14 +208,35 @@ async def _generate_in_background(
         raw_script = script_response.content.strip()
         title, transcript = _parse_script(raw_script)
 
-        # 3. TTS
+        # 3. TTS — prefer Cartesia when configured (better voice quality for meditation)
         tts_text = _prepare_tts_text(transcript)
         print(f"[MEDITATION] {session_id} TTS starting, {len(tts_text)} chars", flush=True)
-        tts_result = await call_openai_tts(
-            text=tts_text,
-            voice=body.voice.value,
-            speed=0.9,
-        )
+
+        try:
+            from app.config import settings as _settings
+            _use_cartesia = (
+                call_cartesia_tts is not None
+                and getattr(_settings, "cartesia_api_key", "")
+            )
+        except ImportError:
+            _use_cartesia = False
+
+        if _use_cartesia:
+            print(f"[MEDITATION] {session_id} TTS provider=cartesia", flush=True)
+            tts_result = await call_cartesia_tts(
+                text=tts_text,
+                voice_id=getattr(_settings, "cartesia_voice_id", "") or "",
+                speed=0.85,
+                emotion="calm",
+            )
+        else:
+            print(f"[MEDITATION] {session_id} TTS provider=openai", flush=True)
+            tts_result = await call_openai_tts(
+                text=tts_text,
+                voice=body.voice.value,
+                speed=0.9,
+            )
+
         total_cost += tts_result.cost
         print(f"[MEDITATION] {session_id} TTS done, {len(tts_result.audio_bytes)} bytes", flush=True)
 
@@ -239,6 +267,17 @@ async def _generate_in_background(
             )
 
         print(f"[MEDITATION] {session_id} READY: {body.type.value} {body.length.value} {actual_seconds}s ${total_cost:.4f} {title!r}", flush=True)
+
+        if _gam_engine:
+            try:
+                async with get_session() as xp_session:
+                    await _gam_engine.award_xp(
+                        xp_session, user_id=user_id,
+                        source="meditation_complete",
+                        description=f"Completed {body.type.value} meditation ({actual_seconds // 60}min)",
+                    )
+            except Exception:
+                logger.warning("XP award failed for %s", user_id, exc_info=True)
 
     except Exception as e:
         print(f"[MEDITATION] {session_id} FAILED: {type(e).__name__}: {e}", flush=True)

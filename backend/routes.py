@@ -1,5 +1,6 @@
 """ZugaLife mood logging endpoints."""
 
+import logging
 import sys
 from datetime import date, datetime, timedelta, timezone
 
@@ -16,6 +17,11 @@ from core.database.session import get_session
 _models = sys.modules["zugalife.models"]
 _schemas = sys.modules["zugalife.schemas"]
 
+try:
+    _gam_engine = sys.modules["zugalife.gamification.engine"]
+except KeyError:
+    _gam_engine = None
+
 MoodEntry = _models.MoodEntry
 MoodLogRequest = _schemas.MoodLogRequest
 MoodLogResponse = _schemas.MoodLogResponse
@@ -23,6 +29,8 @@ MoodEntryResponse = _schemas.MoodEntryResponse
 MoodHistoryResponse = _schemas.MoodHistoryResponse
 MoodStreakResponse = _schemas.MoodStreakResponse
 EMOJI_TO_LABEL = _schemas.EMOJI_TO_LABEL
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/life", tags=["life"])
 
@@ -101,6 +109,16 @@ async def log_mood(
             streak=streak,
             today_count=today_count,
         )
+
+        if _gam_engine:
+            try:
+                await _gam_engine.award_xp(
+                    session, user_id=user.id,
+                    source="mood_log",
+                    description=f"Logged mood: {entry.emoji} {label}",
+                )
+            except Exception:
+                logger.warning("XP award failed for %s", user.id, exc_info=True)
 
     return response
 

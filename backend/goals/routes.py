@@ -1,5 +1,6 @@
 """ZugaLife life goals endpoints."""
 
+import logging
 import sys
 from datetime import date, datetime, timedelta, timezone
 
@@ -33,6 +34,13 @@ LinkedHabitResponse = _schemas.LinkedHabitResponse
 GoalTemplateResponse = _schemas.GoalTemplateResponse
 
 GOAL_TEMPLATES = _templates_mod.GOAL_TEMPLATES
+
+try:
+    _gam_engine = sys.modules["zugalife.gamification.engine"]
+except KeyError:
+    _gam_engine = None
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/life/goals", tags=["life-goals"])
 
@@ -326,6 +334,16 @@ async def toggle_goal_complete(
         await session.flush()
         await session.refresh(goal)
 
+        if goal.is_completed and _gam_engine:
+            try:
+                await _gam_engine.award_xp(
+                    session, user_id=user.id,
+                    source="goal_milestone",
+                    description=f"Completed goal: {goal.title[:50]}",
+                )
+            except Exception:
+                logger.warning("XP award failed for %s", user.id, exc_info=True)
+
         return await _goal_to_response(session, goal, user.id)
 
 
@@ -451,6 +469,16 @@ async def update_milestone(
 
         await session.flush()
         await session.refresh(milestone)
+
+        if body.is_completed and _gam_engine:
+            try:
+                await _gam_engine.award_xp(
+                    session, user_id=user.id,
+                    source="goal_milestone",
+                    description=f"Completed milestone: {milestone.title[:50]}",
+                )
+            except Exception:
+                logger.warning("XP award failed for %s", user.id, exc_info=True)
 
     return MilestoneResponse.model_validate(milestone)
 

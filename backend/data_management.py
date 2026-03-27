@@ -26,6 +26,7 @@ _h_models = sys.modules["zugalife.habits.models"]
 _g_models = sys.modules["zugalife.goals.models"]
 _m_models = sys.modules["zugalife.meditation.models"]
 _t_models = sys.modules["zugalife.therapist.models"]
+_gam_models = sys.modules["zugalife.gamification.models"]
 
 MoodEntry = _models.MoodEntry
 JournalEntry = _j_models.JournalEntry
@@ -35,6 +36,10 @@ HabitInsight = _h_models.HabitInsight
 GoalDefinition = _g_models.GoalDefinition
 MeditationSession = _m_models.MeditationSession
 TherapistSessionNote = _t_models.TherapistSessionNote
+UserXP = _gam_models.UserXP
+XPTransaction = _gam_models.XPTransaction
+UserBadge = _gam_models.UserBadge
+DailyChallenge = _gam_models.DailyChallenge
 
 router = APIRouter(prefix="/api/life/data", tags=["life-data-management"])
 
@@ -173,6 +178,41 @@ async def reset_therapist(
     return {"deleted": count}
 
 
+@router.delete("/reset/gamification", status_code=200)
+async def reset_gamification(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Delete all gamification data (XP, transactions, badges, challenges) for this user."""
+    async with get_session() as session:
+        xp_result = await session.execute(
+            delete(UserXP)
+            .where(UserXP.user_id == user.id)
+            .returning(UserXP.id)
+        )
+        tx_result = await session.execute(
+            delete(XPTransaction)
+            .where(XPTransaction.user_id == user.id)
+            .returning(XPTransaction.id)
+        )
+        badges_result = await session.execute(
+            delete(UserBadge)
+            .where(UserBadge.user_id == user.id)
+            .returning(UserBadge.id)
+        )
+        challenges_result = await session.execute(
+            delete(DailyChallenge)
+            .where(DailyChallenge.user_id == user.id)
+            .returning(DailyChallenge.id)
+        )
+        count = (
+            len(xp_result.all())
+            + len(tx_result.all())
+            + len(badges_result.all())
+            + len(challenges_result.all())
+        )
+    return {"deleted": count}
+
+
 # ---------------------------------------------------------------------------
 # Full reset (all modules except settings)
 # ---------------------------------------------------------------------------
@@ -246,6 +286,33 @@ async def reset_all(
         )
         therapist_count = len(therapist_result.all())
 
+        gam_xp_result = await session.execute(
+            delete(UserXP)
+            .where(UserXP.user_id == user.id)
+            .returning(UserXP.id)
+        )
+        gam_tx_result = await session.execute(
+            delete(XPTransaction)
+            .where(XPTransaction.user_id == user.id)
+            .returning(XPTransaction.id)
+        )
+        gam_badges_result = await session.execute(
+            delete(UserBadge)
+            .where(UserBadge.user_id == user.id)
+            .returning(UserBadge.id)
+        )
+        gam_challenges_result = await session.execute(
+            delete(DailyChallenge)
+            .where(DailyChallenge.user_id == user.id)
+            .returning(DailyChallenge.id)
+        )
+        gamification_count = (
+            len(gam_xp_result.all())
+            + len(gam_tx_result.all())
+            + len(gam_badges_result.all())
+            + len(gam_challenges_result.all())
+        )
+
     # Remove meditation audio after DB transaction commits
     audio_dir = _AUDIO_BASE / user.id
     if audio_dir.is_dir():
@@ -258,6 +325,7 @@ async def reset_all(
         + journal_count
         + meditation_count
         + therapist_count
+        + gamification_count
     )
 
     return {
@@ -268,6 +336,7 @@ async def reset_all(
             "journal": journal_count,
             "meditation": meditation_count,
             "therapist": therapist_count,
+            "gamification": gamification_count,
             "total": total,
         }
     }

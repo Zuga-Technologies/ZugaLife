@@ -33,6 +33,9 @@ class AmbienceType(str, Enum):
 
 
 class VoiceType(str, Enum):
+    # These are OpenAI voice names, used as the fallback when Cartesia is not configured.
+    # When CARTESIA_API_KEY is set, the voice_id from CARTESIA_VOICE_ID env var is used
+    # instead and this field is ignored for TTS purposes (still stored on the session row).
     shimmer = "shimmer"
     nova = "nova"
 
@@ -72,7 +75,7 @@ class SessionResponse(BaseModel):
     tts_model: str
     cost: float
     status: str = "ready"
-    error_message: str | None = None
+    error_message: str | None = Field(None, exclude=True)  # internal only, never sent to client
     mood_before: str | None
     mood_after: str | None
     is_favorite: bool

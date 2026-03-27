@@ -1,5 +1,6 @@
 """ZugaLife habit tracking endpoints."""
 
+import logging
 import sys
 from datetime import date, datetime, timedelta, timezone
 
@@ -18,6 +19,13 @@ _prompts = sys.modules["zugalife.habits.prompts"]
 
 # Also need journal model for AI insights (mood source)
 _journal_models = sys.modules["zugalife.journal.models"]
+
+try:
+    _gam_engine = sys.modules["zugalife.gamification.engine"]
+except KeyError:
+    _gam_engine = None
+
+logger = logging.getLogger(__name__)
 
 # Pull into globals for FastAPI annotation resolution
 HabitDefinition = _models.HabitDefinition
@@ -356,6 +364,16 @@ async def log_habit(
             await session.flush()
 
         await session.refresh(log)
+
+        if _gam_engine and body.completed:
+            try:
+                await _gam_engine.award_xp(
+                    session, user_id=user.id,
+                    source="habit_check",
+                    description=f"Completed {habit.name}",
+                )
+            except Exception:
+                logger.warning("XP award failed for %s", user.id, exc_info=True)
 
     return HabitLogResponse.model_validate(log)
 
