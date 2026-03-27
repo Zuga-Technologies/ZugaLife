@@ -2211,7 +2211,7 @@ onUnmounted(() => {
               {{ gamificationData.badges.filter(b => b.earned_at !== null).length }}/{{ ALL_BADGES.length }}
             </span>
           </div>
-          <div class="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <div class="flex gap-2 overflow-x-auto pb-2 badge-scroll">
             <div
               v-for="badge in ALL_BADGES"
               :key="badge.key"
@@ -3994,3 +3994,23 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.badge-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255 255 255 / 0.12) transparent;
+}
+.badge-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+.badge-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.badge-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255 255 255 / 0.12);
+  border-radius: 9999px;
+}
+.badge-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255 255 255 / 0.25);
+}
+</style>
