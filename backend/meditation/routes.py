@@ -40,6 +40,21 @@ RemainingResponse = _schemas.RemainingResponse
 
 DAILY_LIMIT = _prompts.DAILY_SESSION_LIMIT
 
+# Cartesia voice UUID map — maps user-facing voice names to Cartesia voice IDs.
+# Browse voices at https://play.cartesia.ai/
+CARTESIA_VOICE_MAP: dict[str, str] = {
+    "serene": "cd17ff2d-5ea4-4695-be8f-42193949b946",   # Meditation Lady
+    "gentle": "00a77add-48d5-4ef6-8157-71e5437b282d",   # Calm Lady
+    "whisper": "03496517-369a-4db1-8236-3d3ae459ddf7",   # ASMR Lady
+}
+
+# OpenAI fallback map (when Cartesia is not configured)
+OPENAI_VOICE_MAP: dict[str, str] = {
+    "serene": "shimmer",
+    "gentle": "shimmer",
+    "whisper": "nova",
+}
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/life/meditation", tags=["life-meditation"])
@@ -222,18 +237,20 @@ async def _generate_in_background(
             _use_cartesia = False
 
         if _use_cartesia:
-            print(f"[MEDITATION] {session_id} TTS provider=cartesia", flush=True)
+            cartesia_voice_id = CARTESIA_VOICE_MAP.get(body.voice.value, CARTESIA_VOICE_MAP["serene"])
+            print(f"[MEDITATION] {session_id} TTS provider=cartesia voice={body.voice.value} id={cartesia_voice_id[:8]}", flush=True)
             tts_result = await call_cartesia_tts(
                 text=tts_text,
-                voice_id=getattr(_settings, "cartesia_voice_id", "") or "",
+                voice_id=cartesia_voice_id,
                 speed=0.75,
                 emotion="calm",
             )
         else:
-            print(f"[MEDITATION] {session_id} TTS provider=openai", flush=True)
+            openai_voice = OPENAI_VOICE_MAP.get(body.voice.value, "shimmer")
+            print(f"[MEDITATION] {session_id} TTS provider=openai voice={openai_voice}", flush=True)
             tts_result = await call_openai_tts(
                 text=tts_text,
-                voice=body.voice.value,
+                voice=openai_voice,
                 speed=0.9,
             )
 

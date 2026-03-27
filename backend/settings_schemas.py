@@ -10,7 +10,7 @@ VALID_THEMES = {
     "misty-forest", "soft-bokeh", "custom",
 }
 
-VALID_VOICES = {"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
+VALID_VOICES = {"serene", "gentle", "whisper", "alloy", "echo", "fable", "onyx", "nova", "shimmer"}
 
 VALID_AMBIENCES = {"rain", "ocean", "forest", "bowls", "silence"}
 
@@ -21,7 +21,7 @@ class LifeSettingsResponse(BaseModel):
     theme: str
     theme_opacity: float
     med_length: str = "medium"
-    med_voice: str = "nova"
+    med_voice: str = "serene"
     med_ambience: str = "rain"
 
     model_config = {"from_attributes": True}

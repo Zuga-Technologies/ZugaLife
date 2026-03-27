@@ -1350,7 +1350,7 @@ const medView = ref<MedView>('new')
 const medType = ref('breathing')
 const medLength = ref('medium')
 const medAmbience = ref('rain')
-const medVoice = ref('shimmer')
+const medVoice = ref('serene')
 const medFocus = ref('')
 
 // Generation
@@ -3345,24 +3345,34 @@ onUnmounted(() => {
           <h3 class="text-sm font-semibold text-txt-primary mb-3">Voice</h3>
           <div class="flex gap-2">
             <button
-              @click="medVoice = 'shimmer'"
+              @click="medVoice = 'serene'"
               class="flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-              :class="medVoice === 'shimmer'
+              :class="medVoice === 'serene'
                 ? 'bg-accent/15 ring-1 ring-accent/50 text-accent'
                 : 'glass-card text-txt-muted hover:text-txt-primary'"
             >
-              Shimmer
-              <span class="block text-xs opacity-70">Warm &amp; gentle</span>
+              Serene
+              <span class="block text-xs opacity-70">Calm &amp; soothing</span>
             </button>
             <button
-              @click="medVoice = 'nova'"
+              @click="medVoice = 'gentle'"
               class="flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-              :class="medVoice === 'nova'
+              :class="medVoice === 'gentle'
                 ? 'bg-accent/15 ring-1 ring-accent/50 text-accent'
                 : 'glass-card text-txt-muted hover:text-txt-primary'"
             >
-              Nova
-              <span class="block text-xs opacity-70">Clear &amp; bright</span>
+              Gentle
+              <span class="block text-xs opacity-70">Warm &amp; nurturing</span>
+            </button>
+            <button
+              @click="medVoice = 'whisper'"
+              class="flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+              :class="medVoice === 'whisper'
+                ? 'bg-accent/15 ring-1 ring-accent/50 text-accent'
+                : 'glass-card text-txt-muted hover:text-txt-primary'"
+            >
+              Whisper
+              <span class="block text-xs opacity-70">Soft &amp; breathy</span>
             </button>
           </div>
         </div>

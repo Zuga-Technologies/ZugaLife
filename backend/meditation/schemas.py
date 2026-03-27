@@ -33,11 +33,12 @@ class AmbienceType(str, Enum):
 
 
 class VoiceType(str, Enum):
-    # These are OpenAI voice names, used as the fallback when Cartesia is not configured.
-    # When CARTESIA_API_KEY is set, the voice_id from CARTESIA_VOICE_ID env var is used
-    # instead and this field is ignored for TTS purposes (still stored on the session row).
-    shimmer = "shimmer"
-    nova = "nova"
+    # Meditation voice options. When Cartesia is active, these map to Cartesia voice UUIDs
+    # via CARTESIA_VOICE_MAP in meditation/routes.py. When Cartesia is not configured,
+    # "serene" and "gentle" fall back to OpenAI shimmer, "whisper" falls back to nova.
+    serene = "serene"      # Meditation Lady — calm, soothing (default)
+    gentle = "gentle"      # Calm Lady — warm, gentle
+    whisper = "whisper"    # ASMR Lady — very soft, breathy
 
 
 # --- Requests ---
@@ -47,7 +48,7 @@ class GenerateRequest(BaseModel):
     type: MeditationType
     length: MeditationLength = MeditationLength.medium
     ambience: AmbienceType = AmbienceType.rain
-    voice: VoiceType = VoiceType.shimmer
+    voice: VoiceType = VoiceType.serene
     focus: str | None = Field(None, max_length=200)
 
 
