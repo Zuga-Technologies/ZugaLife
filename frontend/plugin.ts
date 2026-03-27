@@ -6,6 +6,7 @@ const routes: RouteRecordRaw[] = [
     path: '/life',
     name: 'life',
     component: () => import('./LifeView.vue'),
+    props: { embedded: true },
   },
 ]
 

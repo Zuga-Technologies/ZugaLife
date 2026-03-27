@@ -14,6 +14,8 @@ import SettingsPanel from './SettingsPanel.vue'
 import BackgroundTheme from './BackgroundTheme.vue'
 import AnalyticsDashboard from './AnalyticsDashboard.vue'
 
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+
 // --- Settings ---
 const showSettings = ref(false)
 
@@ -2050,13 +2052,14 @@ onUnmounted(() => {
       </div>
 
       <template v-else-if="dashboardData">
-        <!-- Greeting + settings gear -->
+        <!-- Greeting + settings gear (hidden when embedded in ZugaApp — dashboard already greets) -->
         <div class="flex items-start justify-between mb-8 animate-fade-in">
-          <div class="inline-block px-5 py-3 rounded-2xl bg-surface-0/60 backdrop-blur-md">
+          <div v-if="!props.embedded" class="inline-block px-5 py-3 rounded-2xl bg-surface-0/60 backdrop-blur-md">
             <p class="text-sm text-txt-muted mb-1">{{ formatDashboardDate(dashboardData.date) }}</p>
             <h2 class="text-2xl font-bold text-txt-primary tracking-tight">{{ dashboardData.greeting }}</h2>
             <p class="text-sm text-txt-secondary mt-1.5">Here's your week at a glance.</p>
           </div>
+          <div v-else></div>
           <button
             @click="showSettings = true"
             class="p-2.5 rounded-xl bg-surface-0/60 backdrop-blur-md border border-bdr text-txt-secondary transition-colors hover:text-txt-primary hover:bg-surface-3/70"
