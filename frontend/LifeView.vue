@@ -291,7 +291,7 @@ onMounted(() => document.addEventListener('zugalife-go-home', handleLogoHome))
 onUnmounted(() => document.removeEventListener('zugalife-go-home', handleLogoHome))
 
 // Listen for settings open from ZugaApp dropdown
-function handleOpenSettings() { showSettings.value = true }
+function handleOpenSettings() { if (!props.embedded) showSettings.value = true }
 onMounted(() => document.addEventListener('zugalife-open-settings', handleOpenSettings))
 onUnmounted(() => document.removeEventListener('zugalife-open-settings', handleOpenSettings))
 
@@ -2061,6 +2061,7 @@ onUnmounted(() => {
           </div>
           <div v-else></div>
           <button
+            v-if="!props.embedded"
             @click="showSettings = true"
             class="p-2.5 rounded-xl bg-surface-0/60 backdrop-blur-md border border-bdr text-txt-secondary transition-colors hover:text-txt-primary hover:bg-surface-3/70"
             title="Settings"
