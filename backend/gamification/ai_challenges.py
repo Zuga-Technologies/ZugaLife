@@ -269,7 +269,7 @@ async def generate_challenges(
         )
 
         # Parse JSON from response
-        text = response.text.strip()
+        text = response.content.strip()
         # Strip markdown code fences if present
         if text.startswith("```"):
             text = text.split("\n", 1)[1] if "\n" in text else text[3:]
