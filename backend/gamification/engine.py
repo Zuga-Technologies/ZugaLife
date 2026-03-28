@@ -550,13 +550,24 @@ async def ensure_daily_challenges(
     rows = result.scalars().all()
     if rows:
         # If rows have empty titles (from failed AI generation), delete and regenerate
-        if all(r.title for r in rows):
-            logger.info("Returning %d existing challenges for %s", len(rows), user_id[:8])
+        if not all(r.title for r in rows):
+            logger.warning("Deleting %d malformed challenge rows for %s", len(rows), user_id[:8])
+            for r in rows:
+                await session.delete(r)
+            await session.flush()
+        else:
+            # Backfill missing completion_source from static source map
+            _ai_mod = sys.modules.get("zugalife.gamification.ai_challenges")
+            src_map = getattr(_ai_mod, "STATIC_CHALLENGE_SOURCES", {}) if _ai_mod else {}
+            repaired = False
+            for r in rows:
+                if not r.completion_source and r.challenge_key in src_map:
+                    r.completion_source = src_map[r.challenge_key]
+                    repaired = True
+            if repaired:
+                await session.flush()
+                logger.info("Backfilled completion_source for %s", user_id[:8])
             return rows
-        logger.warning("Deleting %d malformed challenge rows for %s", len(rows), user_id[:8])
-        for r in rows:
-            await session.delete(r)
-        await session.flush()
 
     # Try AI generation first
     ai_picks = None
