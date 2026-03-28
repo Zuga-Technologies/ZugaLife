@@ -1664,11 +1664,21 @@ async function loadAndPlayAudio() {
       medPlaying.value = false
       medProgress.value = 100
       stopAmbient()
-      // Mark session as completed — awards XP
+      // Mark session as completed — awards XP with celebration
       if (medSession.value) {
+        // Optimistic: mark matching challenge as done instantly
+        if (gamificationData.value) {
+          for (const c of gamificationData.value.daily_challenges) {
+            if (!c.is_completed && c.challenge_key.includes('meditat')) {
+              c.is_completed = true
+              break
+            }
+          }
+        }
         try {
-          await api.post(`/api/life/meditation/sessions/${medSession.value.id}/complete`)
-          await fetchGamification()
+          await withCelebration(() =>
+            api.post(`/api/life/meditation/sessions/${medSession.value!.id}/complete`)
+          )
         } catch { /* non-critical */ }
       }
     })
