@@ -108,7 +108,14 @@ async def _goal_to_response(
     session, goal: GoalDefinition, user_id: str,
 ) -> GoalResponse:
     """Convert a GoalDefinition ORM instance to a response with milestone counts and linked habits."""
-    milestones = goal.milestones or []
+    # Deduplicate milestones by ID — selectin loading with async sessions
+    # can occasionally return duplicates when multiple eager relationships exist.
+    seen_ids: set[int] = set()
+    milestones = []
+    for m in (goal.milestones or []):
+        if m.id not in seen_ids:
+            seen_ids.add(m.id)
+            milestones.append(m)
     linked_habits = await _build_linked_habits(session, goal, user_id)
 
     return GoalResponse(
@@ -187,24 +194,22 @@ async def create_from_template(
         )
         next_order = (max_order.scalar_one() or 0) + 1
 
+        # Build milestones from template
+        seed_milestones = [
+            GoalMilestone(title=ms_title, sort_order=i)
+            for i, ms_title in enumerate(tmpl.get("milestones", []))
+        ]
+
         goal = GoalDefinition(
             user_id=user.id,
             title=tmpl["title"],
             description=tmpl["description"],
             template_key=body.template_key,
             sort_order=next_order,
+            milestones=seed_milestones,
         )
         session.add(goal)
         await session.flush()
-
-        # Seed milestones from template
-        for i, ms_title in enumerate(tmpl.get("milestones", [])):
-            milestone = GoalMilestone(
-                goal_id=goal.id,
-                title=ms_title,
-                sort_order=i,
-            )
-            session.add(milestone)
 
         # Auto-link matching habits
         habit_mod = _get_habit_models()
@@ -217,11 +222,9 @@ async def create_from_template(
             )
         )
         for habit in habits_result.scalars().all():
-            link = GoalHabitLink(goal_id=goal.id, habit_id=habit.id)
-            session.add(link)
+            goal.habit_links.append(GoalHabitLink(habit_id=habit.id))
 
         await session.flush()
-        await session.refresh(goal)
 
         return await _goal_to_response(session, goal, user.id)
 
