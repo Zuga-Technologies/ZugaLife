@@ -47,7 +47,7 @@ class DailyChallengeResponse(BaseModel):
     description: str
     xp_reward: int
     is_completed: bool
-    is_ai_generated: bool = False
+    is_ai_generated: bool | None = False
 
 
 class WeeklyQuestResponse(BaseModel):
