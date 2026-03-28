@@ -546,7 +546,12 @@ async def ensure_daily_challenges(
     )
     rows = result.scalars().all()
     if rows:
-        return rows
+        # If rows have empty titles (from failed AI generation), delete and regenerate
+        if all(r.title for r in rows):
+            return rows
+        for r in rows:
+            await session.delete(r)
+        await session.flush()
 
     # Try AI generation first
     ai_picks = None
