@@ -403,13 +403,15 @@ async def complete_session(
         await db.flush()
 
         gam = _get_gam_engine()
+        logger.info("Meditation complete: session=%d gam_engine=%s", session_id, gam is not None)
         if gam:
             try:
-                await gam.award_xp(
+                result = await gam.award_xp(
                     db, user_id=user.id,
                     source="meditation_complete",
                     description=f"Completed {meditation.type} meditation ({meditation.duration_seconds // 60}min)",
                 )
+                logger.info("Meditation XP awarded: %s", result)
             except Exception:
                 logger.warning("XP award failed for %s", user.id, exc_info=True)
 
