@@ -236,6 +236,13 @@ STATIC_CHALLENGE_SOURCES: dict[str, str] = {
 # AI generation
 # ---------------------------------------------------------------------------
 
+import asyncio as _asyncio
+import time as _time
+
+# Circuit breaker: skip AI for 5 minutes after a failure
+_last_ai_failure: float = 0.0
+_AI_COOLDOWN = 300  # seconds
+
 async def generate_challenges(
     session,
     user_id: str,
@@ -243,16 +250,23 @@ async def generate_challenges(
     user_email: str | None = None,
 ) -> list[dict] | None:
     """Generate AI-powered challenges. Returns list of challenge dicts or None on failure."""
+    global _last_ai_failure
+
+    # Circuit breaker: skip AI if it failed recently
+    if _time.time() - _last_ai_failure < _AI_COOLDOWN:
+        logger.info("AI challenge generation skipped (cooldown active)")
+        return None
+
     try:
         _gateway = sys.modules.get("zugalife.ai.gateway") or __import__(
             "core.ai.gateway", fromlist=["ai_call"]
         )
         ai_call = getattr(_gateway, "ai_call", None)
         if ai_call is None:
-            # Try the standalone gateway
             from core.ai.gateway import ai_call
     except Exception:
         logger.warning("AI gateway not available, falling back to static challenges")
+        _last_ai_failure = _time.time()
         return None
 
     context = await _gather_user_context(session, user_id)
@@ -260,12 +274,15 @@ async def generate_challenges(
     prompt = _build_challenge_prompt(context, challenge_type)
 
     try:
-        response = await ai_call(
-            prompt=prompt,
-            task=f"challenge_gen_{challenge_type}",
-            max_tokens=512,
-            user_id=user_id,
-            user_email=user_email,
+        response = await _asyncio.wait_for(
+            ai_call(
+                prompt=prompt,
+                task=f"challenge_gen_{challenge_type}",
+                max_tokens=512,
+                user_id=user_id,
+                user_email=user_email,
+            ),
+            timeout=8.0,  # 8 second hard timeout
         )
 
         # Parse JSON from response
@@ -329,7 +346,9 @@ async def generate_challenges(
 
     except json.JSONDecodeError as e:
         logger.warning("AI challenge JSON parse failed: %s", e)
+        _last_ai_failure = _time.time()
         return None
     except Exception as e:
         logger.warning("AI challenge generation failed: %s: %s", type(e).__name__, e)
+        _last_ai_failure = _time.time()
         return None
