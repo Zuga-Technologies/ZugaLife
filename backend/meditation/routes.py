@@ -495,7 +495,11 @@ async def _get_user_session(db, session_id: int, user_id: str) -> MeditationSess
 
 
 async def _sessions_today(user_id: str) -> int:
-    """Count how many sessions a user has generated today."""
+    """Count how many sessions a user has successfully generated today.
+
+    Only counts sessions with status 'ready' — stuck or failed
+    generations don't count against the daily limit.
+    """
     today_start = datetime.now(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0,
     )
@@ -506,6 +510,7 @@ async def _sessions_today(user_id: str) -> int:
             .where(
                 MeditationSession.user_id == user_id,
                 MeditationSession.created_at >= today_start,
+                MeditationSession.status == "ready",
             )
         )
         return result.scalar_one()
