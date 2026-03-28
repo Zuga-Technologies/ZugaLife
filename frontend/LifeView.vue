@@ -3,21 +3,53 @@ import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { api, ApiError, getToken } from '@core/api/client'
 import { startAmbience, stopAmbience, pauseAmbience, resumeAmbience, setAmbienceVolume } from './ambience'
-import { moodIcons, meditationTypeIcons, ambienceIcons, habitIcons, habitIconPicker, getIcon, BrandIcon } from './icons'
+import { moodIcons, meditationTypeIcons, ambienceIcons, habitIcons, habitIconPicker, habitIconCategories, getIcon, BrandIcon } from './icons'
 import {
   BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle,
   LayoutDashboard, TrendingUp, Target, Clock, CalendarDays, ArrowRight, ArrowLeft,
-  ChevronRight, Activity, Flame as FlameIcon, Brain as BrainIcon, Settings,
+  ChevronRight, ChevronDown, ChevronUp, Activity, Flame as FlameIcon, Brain as BrainIcon, Settings,
   Download, Trophy, Star, Zap, CheckCircle2, Lock,
 } from 'lucide-vue-next'
 import SettingsPanel from './SettingsPanel.vue'
 import BackgroundTheme from './BackgroundTheme.vue'
 import AnalyticsDashboard from './AnalyticsDashboard.vue'
+import CelebrationOverlay from './components/CelebrationOverlay.vue'
+import { useCelebration } from './composables/useCelebration'
+import { playXpSound, playBadgeSound, playLevelUpSound, playStreakSound, playPrestigeSound } from './composables/useCelebrationSounds'
 
 const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 // --- Settings ---
 const showSettings = ref(false)
+
+// --- Celebration System ---
+const celebration = useCelebration()
+
+/**
+ * Wrap any XP-awarding action: snapshot before, re-fetch after, celebrate diff.
+ * Usage: await withCelebration(() => api.post('/api/life/mood', { ... }))
+ */
+async function withCelebration<T>(action: () => Promise<T>): Promise<T> {
+  if (gamificationData.value) {
+    celebration.takeSnapshot(gamificationData.value)
+  }
+  const result = await action()
+  // Re-fetch gamification data and celebrate changes
+  try {
+    const newData = await api.get<GamificationData>('/api/life/gamification')
+    if (gamificationData.value) {
+      celebration.celebrateChanges(newData, ALL_BADGES.value)
+      // Play sounds based on what changed
+      if (celebration.soundEnabled.value) {
+        if (celebration.activeLevelUp.value) playLevelUpSound()
+        else if (celebration.activeBadge.value) playBadgeSound()
+        else if (newData.xp.total_xp !== (gamificationData.value?.xp.total_xp ?? 0)) playXpSound()
+      }
+    }
+    gamificationData.value = newData
+  } catch { /* gamification fetch is non-critical */ }
+  return result
+}
 
 // --- Tabs ---
 
@@ -113,6 +145,9 @@ interface XPStatus {
   current_streak_days: number
   longest_streak_days: number
   streak_multiplier: number
+  prestige_level: number
+  prestige_multiplier: number
+  can_prestige: boolean
 }
 
 interface Badge {
@@ -129,6 +164,15 @@ interface DailyChallenge {
   description: string
   xp_reward: number
   is_completed: boolean
+  is_ai_generated?: boolean
+}
+
+interface WeeklyQuest {
+  quest_key: string
+  title: string
+  description: string
+  xp_reward: number
+  is_completed: boolean
 }
 
 interface GamificationData {
@@ -136,11 +180,12 @@ interface GamificationData {
   badges: Badge[]
   recent_xp: Array<{ amount: number; source: string; description: string; created_at: string }>
   daily_challenges: DailyChallenge[]
+  weekly_quests: WeeklyQuest[]
 }
 
 const gamificationData = ref<GamificationData | null>(null)
 
-const ALL_BADGES: Array<{ key: string; title: string; emoji: string; description: string }> = [
+const STATIC_BADGES: Array<{ key: string; title: string; emoji: string; description: string }> = [
   { key: 'first_mood',       title: 'Mood Tracker',        emoji: '🎭', description: 'Log your first mood' },
   { key: 'first_journal',    title: 'Dear Diary',          emoji: '📝', description: 'Write your first journal entry' },
   { key: 'first_meditation', title: 'Inner Peace',         emoji: '🧘', description: 'Complete your first meditation' },
@@ -151,12 +196,61 @@ const ALL_BADGES: Array<{ key: string; title: string; emoji: string; description
   { key: 'all_habits_day',   title: 'Perfect Day',         emoji: '⭐', description: 'Complete all habits in one day' },
   { key: 'level_5',          title: 'Halfway There',       emoji: '🏔️', description: 'Reach level 5' },
   { key: 'level_10',         title: 'Enlightened',         emoji: '👑', description: 'Reach level 10' },
+  { key: 'level_25',         title: 'Transcended',         emoji: '🌟', description: 'Reach level 25' },
   { key: 'meditation_10',    title: 'Zen Master',          emoji: '🪷', description: 'Complete 10 meditations' },
   { key: 'journal_10',       title: 'Storyteller',         emoji: '📚', description: 'Write 10 journal entries' },
   { key: 'mood_30',          title: 'Self Aware',          emoji: '🔮', description: 'Log mood 30 times' },
   { key: 'goal_complete',    title: 'Goal Getter',         emoji: '🎯', description: 'Complete your first goal' },
   { key: 'five_challenges',  title: 'Challenge Accepted',  emoji: '🏆', description: 'Complete 5 daily challenges' },
 ]
+
+// Dynamically include earned prestige badges in the display list
+const ALL_BADGES = computed(() => {
+  const prestigeBadges: Array<{ key: string; title: string; emoji: string; description: string }> = []
+  if (gamificationData.value) {
+    const prestigeEmojis = ['🌟', '💫', '✨', '🔱', '👑', '💎', '🌠', '🏅']
+    for (const b of gamificationData.value.badges) {
+      if (b.badge_key.startsWith('prestige_') && b.earned_at) {
+        const tier = parseInt(b.badge_key.split('_')[1])
+        const titles = ['First Ascension', 'Second Ascension', 'Third Ascension']
+        prestigeBadges.push({
+          key: b.badge_key,
+          title: titles[tier - 1] || `Ascension ${tier}`,
+          emoji: prestigeEmojis[(tier - 1) % prestigeEmojis.length],
+          description: `Prestiged ${tier} time${tier > 1 ? 's' : ''}`,
+        })
+      }
+    }
+  }
+  return [...STATIC_BADGES, ...prestigeBadges]
+})
+
+// Prestige action
+const prestigeLoading = ref(false)
+async function doPrestige() {
+  if (!gamificationData.value?.xp.can_prestige || prestigeLoading.value) return
+  prestigeLoading.value = true
+  try {
+    if (gamificationData.value) {
+      celebration.takeSnapshot(gamificationData.value)
+    }
+    await api.post('/api/life/gamification/prestige')
+    const newData = await api.get<GamificationData>('/api/life/gamification')
+    if (gamificationData.value) {
+      celebration.celebratePrestige(
+        gamificationData.value.xp.prestige_level + 1,
+        newData,
+        ALL_BADGES.value,
+      )
+      if (celebration.soundEnabled.value) playPrestigeSound()
+    }
+    gamificationData.value = newData
+  } catch (e: any) {
+    console.error('Prestige failed:', e)
+  } finally {
+    prestigeLoading.value = false
+  }
+}
 
 async function fetchGamification() {
   try {
@@ -250,10 +344,12 @@ async function logDashMood(emoji: string) {
   dashMoodError.value = null
   dashMoodSuccess.value = null
   try {
-    const res = await api.post<{ entry: { emoji: string; label: string }; streak: number; today_count: number }>('/api/life/mood', {
-      emoji,
-      note: dashMoodNote.value.trim() || null,
-    })
+    const res = await withCelebration(() =>
+      api.post<{ entry: { emoji: string; label: string }; streak: number; today_count: number }>('/api/life/mood', {
+        emoji,
+        note: dashMoodNote.value.trim() || null,
+      })
+    )
     dashMoodSuccess.value = `${res.entry.label} logged! (${res.today_count}/4 today)`
     dashMoodNote.value = ''
     setTimeout(() => { dashMoodSuccess.value = null }, 3000)
@@ -466,11 +562,13 @@ async function saveEntry() {
   journalError.value = null
 
   try {
-    const res = await api.post<JournalEntryFull>('/api/life/journal', {
-      title: composeTitle.value.trim() || null,
-      content: composeContent.value.trim(),
-      mood_emoji: composeMood.value,
-    })
+    const res = await withCelebration(() =>
+      api.post<JournalEntryFull>('/api/life/journal', {
+        title: composeTitle.value.trim() || null,
+        content: composeContent.value.trim(),
+        mood_emoji: composeMood.value,
+      })
+    )
     journalSuccess.value = 'Journal entry saved!'
     setTimeout(() => { journalSuccess.value = null }, 2000)
     await fetchJournalEntries()
@@ -658,6 +756,7 @@ const newHabitIcon = ref('')  // Stores a Lucide icon name (e.g. 'dumbbell')
 const newHabitUnit = ref('')
 const newHabitTarget = ref<number | null>(null)
 const showNewHabitForm = ref(false)
+const showMoreIcons = ref(false)
 
 // Temp amount inputs keyed by habit_id
 const amountInputs = ref<Record<number, string>>({})
@@ -714,16 +813,19 @@ async function toggleHabit(item: HabitCheckInItem) {
       const serverDate = habitCheckin.value?.date
       if (!serverDate) return
       await api.delete(`/api/life/habits/log/${item.habit.id}/${serverDate}`)
+      await fetchHabitCheckin()
     } else {
-      // Check
+      // Check — celebrate XP gain
       const amt = amountInputs.value[item.habit.id]
-      await api.post('/api/life/habits/log', {
-        habit_id: item.habit.id,
-        completed: true,
-        amount: amt ? parseFloat(amt) : null,
-      })
+      await withCelebration(() =>
+        api.post('/api/life/habits/log', {
+          habit_id: item.habit.id,
+          completed: true,
+          amount: amt ? parseFloat(amt) : null,
+        })
+      )
+      await fetchHabitCheckin()
     }
-    await fetchHabitCheckin()
   } catch (e) {
     if (e instanceof ApiError) {
       habitError.value = (e.body as Record<string, string>).detail ?? `Error (${(e as ApiError).status})`
@@ -1213,9 +1315,19 @@ async function addMilestone(goalId: number) {
 async function toggleMilestone(goalId: number, milestone: GoalMilestone) {
   goalError.value = null
   try {
-    await api.patch(`/api/life/goals/${goalId}/milestones/${milestone.id}`, {
-      is_completed: !milestone.is_completed,
-    })
+    if (!milestone.is_completed) {
+      // Completing a milestone — celebrate XP
+      await withCelebration(() =>
+        api.patch(`/api/life/goals/${goalId}/milestones/${milestone.id}`, {
+          is_completed: true,
+        })
+      )
+    } else {
+      // Unchecking — no celebration
+      await api.patch(`/api/life/goals/${goalId}/milestones/${milestone.id}`, {
+        is_completed: false,
+      })
+    }
     await fetchGoals()
   } catch (e) {
     if (e instanceof ApiError) {
@@ -1466,6 +1578,20 @@ async function generateMeditation() {
           setTimeout(() => { medSuccess.value = null }, 2000)
           await fetchMedRemaining()
           await fetchMedSessions()
+          // Celebrate XP gain from meditation completion
+          if (gamificationData.value) {
+            celebration.takeSnapshot(gamificationData.value)
+            try {
+              const newGam = await api.get<GamificationData>('/api/life/gamification')
+              celebration.celebrateChanges(newGam, ALL_BADGES.value)
+              if (celebration.soundEnabled.value) {
+                if (celebration.activeLevelUp.value) playLevelUpSound()
+                else if (celebration.activeBadge.value) playBadgeSound()
+                else playXpSound()
+              }
+              gamificationData.value = newGam
+            } catch { /* non-critical */ }
+          }
           setTimeout(() => loadAndPlayAudio(), 300)
           return
         }
@@ -1881,7 +2007,9 @@ async function endTherapistSession() {
 
   try {
     const apiMessages = therapistMessages.value.map(m => ({ role: m.role, content: m.content }))
-    const savedNote = await api.post<TherapistSessionNote>('/api/life/therapist/end-session', { messages: apiMessages })
+    const savedNote = await withCelebration(() =>
+      api.post<TherapistSessionNote>('/api/life/therapist/end-session', { messages: apiMessages })
+    )
     therapistSessionActive.value = false
     therapistMessages.value = []
     await fetchTherapistStatus()
@@ -1996,6 +2124,8 @@ onUnmounted(() => {
   <div>
     <!-- Animated background layer (fixed position, z-0 renders behind content) -->
     <BackgroundTheme />
+    <!-- Celebration overlay (toasts, confetti, modals) -->
+    <CelebrationOverlay />
 
     <div
       class="relative z-10 max-w-2xl mx-auto py-10 animate-fade-in"
@@ -2030,6 +2160,8 @@ onUnmounted(() => {
         <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
           <Star :size="12" class="text-amber-400" />
           <span class="text-xs font-bold text-amber-400">Lv.{{ gamificationData.xp.level }}</span>
+          <span v-if="gamificationData.xp.prestige_level > 0"
+            class="text-[9px] font-bold text-purple-300 bg-purple-500/20 px-1 rounded">P{{ gamificationData.xp.prestige_level }}</span>
         </div>
         <div
           v-if="gamificationData.xp.current_streak_days > 0"
@@ -2073,10 +2205,21 @@ onUnmounted(() => {
         <!-- XP + Level + Streak Bar -->
         <div v-if="gamificationData" class="glass-card p-4 mb-4 animate-fade-in">
           <div class="flex items-center gap-3">
-            <!-- Level badge -->
+            <!-- Level badge + prestige stars -->
             <div class="flex-shrink-0 flex flex-col items-center gap-0.5">
-              <div class="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
-                <span class="text-lg font-bold text-amber-400">{{ gamificationData.xp.level }}</span>
+              <div class="relative">
+                <div class="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center"
+                  :class="{ 'prestige-glow': gamificationData.xp.prestige_level > 0 }">
+                  <span class="text-lg font-bold text-amber-400">{{ gamificationData.xp.level }}</span>
+                </div>
+                <!-- Prestige stars -->
+                <div v-if="gamificationData.xp.prestige_level > 0"
+                  class="absolute -top-1.5 -right-1.5 flex items-center gap-px">
+                  <span v-for="i in Math.min(gamificationData.xp.prestige_level, 5)" :key="i"
+                    class="text-[8px] prestige-star">&#11088;</span>
+                  <span v-if="gamificationData.xp.prestige_level > 5"
+                    class="text-[7px] font-bold text-amber-300">+{{ gamificationData.xp.prestige_level - 5 }}</span>
+                </div>
               </div>
               <span class="text-[10px] text-txt-muted leading-none">{{ gamificationData.xp.level_name }}</span>
             </div>
@@ -2088,11 +2231,20 @@ onUnmounted(() => {
                   <Zap :size="12" class="text-amber-400" />
                   <span class="text-xs font-semibold text-txt-primary">{{ gamificationData.xp.xp_progress_in_level.toLocaleString() }} / {{ gamificationData.xp.xp_for_next_level.toLocaleString() }} XP</span>
                 </div>
-                <span class="text-[10px] text-txt-muted">{{ gamificationData.xp.total_xp.toLocaleString() }} total</span>
+                <div class="flex items-center gap-1.5">
+                  <span v-if="gamificationData.xp.prestige_multiplier > 1"
+                    class="text-[9px] font-bold text-purple-300 bg-purple-500/20 px-1 rounded multiplier-pulse">
+                    P{{ gamificationData.xp.prestige_level }} +{{ Math.round((gamificationData.xp.prestige_multiplier - 1) * 100) }}%
+                  </span>
+                  <span class="text-[10px] text-txt-muted">{{ gamificationData.xp.total_xp.toLocaleString() }} total</span>
+                </div>
               </div>
               <div class="w-full bg-surface-3 rounded-full h-2 overflow-hidden">
                 <div
-                  class="h-2 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-700 ease-out"
+                  class="h-2 rounded-full transition-all duration-700 ease-out"
+                  :class="gamificationData.xp.can_prestige
+                    ? 'bg-gradient-to-r from-purple-500 via-amber-400 to-purple-500 prestige-bar-shimmer'
+                    : 'bg-gradient-to-r from-amber-500 to-yellow-400'"
                   :style="{ width: Math.min(100, Math.round((gamificationData.xp.xp_progress_in_level / gamificationData.xp.xp_for_next_level) * 100)) + '%' }"
                 ></div>
               </div>
@@ -2106,11 +2258,29 @@ onUnmounted(() => {
               </div>
               <div
                 v-if="gamificationData.xp.streak_multiplier > 1"
-                class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 leading-none"
+                class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 leading-none multiplier-pulse"
               >
                 {{ gamificationData.xp.streak_multiplier }}x
               </div>
               <span v-else class="text-[10px] text-txt-muted leading-none">streak</span>
+            </div>
+          </div>
+
+          <!-- Prestige Available Banner -->
+          <div v-if="gamificationData.xp.can_prestige"
+            class="mt-3 pt-3 border-t border-bdr/50">
+            <div class="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-purple-500/10 via-amber-500/10 to-purple-500/10 border border-purple-500/20 prestige-banner-glow">
+              <div class="flex-1">
+                <p class="text-sm font-bold text-purple-300">Prestige Available!</p>
+                <p class="text-[10px] text-txt-muted mt-0.5">Reset to Lv.1 for a permanent +5% XP bonus and a unique badge</p>
+              </div>
+              <button
+                @click="doPrestige"
+                :disabled="prestigeLoading"
+                class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 transition-all active:scale-95 disabled:opacity-50 min-h-[36px]"
+              >
+                {{ prestigeLoading ? 'Ascending...' : 'Prestige' }}
+              </button>
             </div>
           </div>
         </div>
@@ -2198,6 +2368,46 @@ onUnmounted(() => {
                 class="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded leading-none"
                 :class="challenge.is_completed ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'"
               >+{{ challenge.xp_reward }} XP</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Weekly Quests -->
+        <div v-if="gamificationData && gamificationData.weekly_quests && gamificationData.weekly_quests.length > 0" class="glass-card p-4 mb-4 animate-fade-in">
+          <div class="flex items-center gap-2 mb-3">
+            <Star :size="14" class="text-purple-400" />
+            <span class="text-sm font-semibold text-txt-primary">Weekly Quests</span>
+            <span class="ml-auto text-xs text-txt-muted">
+              {{ gamificationData.weekly_quests.filter(q => q.is_completed).length }}/{{ gamificationData.weekly_quests.length }} done
+            </span>
+          </div>
+          <div class="space-y-2">
+            <div
+              v-for="quest in gamificationData.weekly_quests"
+              :key="quest.quest_key"
+              class="flex items-center gap-3 py-2.5 px-3 rounded-xl transition-colors"
+              :class="quest.is_completed ? 'bg-purple-500/8' : 'bg-surface-3/60 border border-purple-500/10'"
+            >
+              <CheckCircle2
+                v-if="quest.is_completed"
+                :size="16"
+                class="flex-shrink-0 text-purple-400"
+              />
+              <div
+                v-else
+                class="flex-shrink-0 w-4 h-4 rounded-full border-2 border-purple-400/40"
+              ></div>
+              <div class="flex-1 min-w-0">
+                <p
+                  class="text-xs font-semibold leading-tight"
+                  :class="quest.is_completed ? 'text-txt-muted line-through' : 'text-txt-primary'"
+                >{{ quest.title }}</p>
+                <p class="text-[10px] text-txt-muted leading-tight mt-0.5">{{ quest.description }}</p>
+              </div>
+              <span
+                class="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded leading-none"
+                :class="quest.is_completed ? 'bg-purple-500/15 text-purple-400' : 'bg-purple-500/15 text-purple-300'"
+              >+{{ quest.xp_reward }} XP</span>
             </div>
           </div>
         </div>
@@ -2708,6 +2918,32 @@ onUnmounted(() => {
               >
                 <component :is="opt.icon" :size="18" />
               </button>
+            </div>
+            <!-- Expand arrow -->
+            <button
+              @click="showMoreIcons = !showMoreIcons"
+              class="mt-2 flex items-center gap-1 text-xs text-txt-muted hover:text-accent transition-colors"
+            >
+              <component :is="showMoreIcons ? ChevronUp : ChevronDown" :size="14" />
+              {{ showMoreIcons ? 'Fewer icons' : 'More icons' }}
+            </button>
+            <!-- Expanded categories -->
+            <div v-if="showMoreIcons" class="mt-2 space-y-2.5 max-h-60 overflow-y-auto pr-1">
+              <div v-for="cat in habitIconCategories" :key="cat.label">
+                <p class="text-[11px] text-txt-muted uppercase tracking-wider mb-1">{{ cat.label }}</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <button
+                    v-for="opt in cat.icons"
+                    :key="opt.name"
+                    @click="newHabitIcon = opt.name"
+                    class="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150"
+                    :class="newHabitIcon === opt.name ? 'bg-accent/15 ring-1 ring-accent/50 text-accent' : 'bg-surface-3 text-txt-muted hover:text-txt-primary'"
+                    :title="opt.label"
+                  >
+                    <component :is="opt.icon" :size="18" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           <div class="flex gap-2">
@@ -4012,5 +4248,51 @@ onUnmounted(() => {
 }
 .badge-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(255 255 255 / 0.25);
+}
+
+/* Prestige animations */
+.prestige-glow {
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.3), 0 0 4px rgba(245, 158, 11, 0.2);
+}
+
+.prestige-star {
+  animation: star-twinkle 2s ease-in-out infinite;
+}
+.prestige-star:nth-child(2) { animation-delay: 0.4s; }
+.prestige-star:nth-child(3) { animation-delay: 0.8s; }
+.prestige-star:nth-child(4) { animation-delay: 1.2s; }
+.prestige-star:nth-child(5) { animation-delay: 1.6s; }
+
+@keyframes star-twinkle {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.3); }
+}
+
+.multiplier-pulse {
+  animation: mult-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes mult-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+.prestige-bar-shimmer {
+  background-size: 200% 100%;
+  animation: bar-shimmer 2s linear infinite;
+}
+
+@keyframes bar-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.prestige-banner-glow {
+  animation: banner-glow 3s ease-in-out infinite;
+}
+
+@keyframes banner-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(168, 85, 247, 0.1); }
+  50% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.25), 0 0 8px rgba(245, 158, 11, 0.15); }
 }
 </style>
