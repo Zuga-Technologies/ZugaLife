@@ -282,7 +282,7 @@ async def generate_challenges(
                 user_id=user_id,
                 user_email=user_email,
             ),
-            timeout=8.0,  # 8 second hard timeout
+            timeout=3.0,  # 3 second hard timeout
         )
 
         # Parse JSON from response
