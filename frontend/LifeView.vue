@@ -1660,10 +1660,17 @@ async function loadAndPlayAudio() {
         medProgress.value = (audio.currentTime / audio.duration) * 100
       }
     })
-    audio.addEventListener('ended', () => {
+    audio.addEventListener('ended', async () => {
       medPlaying.value = false
       medProgress.value = 100
       stopAmbient()
+      // Mark session as completed — awards XP
+      if (medSession.value) {
+        try {
+          await api.post(`/api/life/meditation/sessions/${medSession.value.id}/complete`)
+          await fetchGamification()
+        } catch { /* non-critical */ }
+      }
     })
 
     // Start voice + ambience together

@@ -80,6 +80,7 @@ class SessionResponse(BaseModel):
     mood_before: str | None
     mood_after: str | None
     is_favorite: bool
+    completed_at: datetime | None = None
     created_at: datetime
 
     @field_validator("length", mode="before")

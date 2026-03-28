@@ -284,17 +284,7 @@ async def _generate_in_background(
             )
 
         print(f"[MEDITATION] {session_id} READY: {body.type.value} {body.length.value} {actual_seconds}s ${total_cost:.4f} {title!r}", flush=True)
-
-        if _gam_engine:
-            try:
-                async with get_session() as xp_session:
-                    await _gam_engine.award_xp(
-                        xp_session, user_id=user_id,
-                        source="meditation_complete",
-                        description=f"Completed {body.type.value} meditation ({actual_seconds // 60}min)",
-                    )
-            except Exception:
-                logger.warning("XP award failed for %s", user_id, exc_info=True)
+        # XP is awarded when the user finishes listening (POST /sessions/{id}/complete)
 
     except Exception as e:
         print(f"[MEDITATION] {session_id} FAILED: {type(e).__name__}: {e}", flush=True)
@@ -390,6 +380,39 @@ async def set_mood_after(
         meditation = await _get_user_session(db, session_id, user.id)
         meditation.mood_after = body.emoji
         await db.flush()
+        await db.refresh(meditation)
+    return SessionResponse.model_validate(meditation)
+
+
+@router.post("/sessions/{session_id}/complete", response_model=SessionResponse)
+async def complete_session(
+    session_id: int,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Mark a meditation session as completed (user listened through).
+
+    Awards XP and triggers challenge completion. Idempotent — calling
+    again on an already-completed session returns it without re-awarding.
+    """
+    async with get_session() as db:
+        meditation = await _get_user_session(db, session_id, user.id)
+
+        if meditation.completed_at:
+            return SessionResponse.model_validate(meditation)
+
+        meditation.completed_at = datetime.now(timezone.utc)
+        await db.flush()
+
+        if _gam_engine:
+            try:
+                await _gam_engine.award_xp(
+                    db, user_id=user.id,
+                    source="meditation_complete",
+                    description=f"Completed {meditation.type} meditation ({meditation.duration_seconds // 60}min)",
+                )
+            except Exception:
+                logger.warning("XP award failed for %s", user.id, exc_info=True)
+
         await db.refresh(meditation)
     return SessionResponse.model_validate(meditation)
 
