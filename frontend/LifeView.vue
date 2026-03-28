@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { api, ApiError, getToken } from '@core/api/client'
 import { startAmbience, stopAmbience, pauseAmbience, resumeAmbience, setAmbienceVolume } from './ambience'
-import { moodIcons, meditationTypeIcons, ambienceIcons, habitIcons, habitIconPicker, habitIconCategories, getIcon, BrandIcon } from './icons'
+import { moodIcons, meditationTypeIcons, ambienceIcons, habitIcons, habitIconPicker, habitIconCategories, badgeIcons, getIcon, BrandIcon } from './icons'
 import {
   BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle,
   LayoutDashboard, TrendingUp, Target, Clock, CalendarDays, ArrowRight, ArrowLeft,
@@ -2448,8 +2448,14 @@ onUnmounted(() => {
                 : 'bg-surface-3/40 border-bdr/40 opacity-50'"
               :title="badge.description"
             >
+              <component
+                v-if="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at) && badgeIcons[badge.key]"
+                :is="badgeIcons[badge.key]"
+                :size="22"
+                class="text-amber-400"
+              />
               <span
-                v-if="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at)"
+                v-else-if="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at)"
                 class="text-xl leading-none"
               >{{ badge.emoji }}</span>
               <Lock v-else :size="18" class="text-txt-muted" />

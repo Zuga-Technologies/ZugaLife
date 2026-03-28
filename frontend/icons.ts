@@ -128,6 +128,8 @@ import {
   Rocket,
   Atom,
   Infinity,
+  Crown,
+  Gem,
   type LucideIcon,
 } from 'lucide-vue-next'
 
@@ -415,6 +417,26 @@ export const habitIconCategories: IconCategory[] = [
     ],
   },
 ]
+
+// --- Badge icons (keyed by badge_key from gamification) ---
+export const badgeIcons: Record<string, LucideIcon> = {
+  first_mood:       Smile,
+  first_journal:    Pencil,
+  first_meditation: Brain,
+  first_therapy:    MessageCircle,
+  streak_7:         Flame,
+  streak_30:        Zap,
+  streak_100:       Gem,
+  all_habits_day:   Star,
+  level_5:          Mountain,
+  level_10:         Crown,
+  level_25:         Sparkles,
+  meditation_10:    Flower2,
+  journal_10:       BookOpen,
+  mood_30:          Eye,
+  goal_complete:    Target,
+  five_challenges:  Trophy,
+}
 
 // --- Generic fallback: try habit map, then mood map, then null ---
 export function getIcon(emoji: string): LucideIcon | null {
