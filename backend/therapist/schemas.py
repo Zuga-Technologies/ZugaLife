@@ -1,6 +1,7 @@
 """ZugaLife therapist request/response schemas."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -8,12 +9,18 @@ from pydantic import BaseModel, Field
 # --- Requests ---
 
 
+class TherapistMessage(BaseModel):
+    """A single message in therapist conversation. Only user/assistant roles allowed."""
+    role: Literal["user", "assistant"]
+    content: str = Field(..., max_length=10_000)
+
+
 class TherapistChatRequest(BaseModel):
-    messages: list[dict] = Field(..., min_length=1)
+    messages: list[TherapistMessage] = Field(..., min_length=1)
 
 
 class TherapistEndSessionRequest(BaseModel):
-    messages: list[dict] = Field(..., min_length=1)
+    messages: list[TherapistMessage] = Field(..., min_length=1)
 
 
 class SessionNoteUpdateRequest(BaseModel):
