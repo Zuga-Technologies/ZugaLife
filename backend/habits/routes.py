@@ -328,6 +328,7 @@ async def log_habit(
             )
         )
         log = existing.scalar_one_or_none()
+        was_already_completed = log.completed if log else False
 
         if log:
             # Update existing
@@ -365,7 +366,7 @@ async def log_habit(
         await session.refresh(log)
 
         gam = _get_gam_engine()
-        if gam and body.completed:
+        if gam and body.completed and not was_already_completed:
             try:
                 await gam.award_xp(
                     session, user_id=user.id,
