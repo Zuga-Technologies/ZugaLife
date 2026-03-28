@@ -12,11 +12,14 @@ Usage from another ZugaLife route:
 """
 
 import hashlib
+import logging
 import sys
 from datetime import date, datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Static lookup tables
