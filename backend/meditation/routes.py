@@ -23,10 +23,9 @@ _models = sys.modules["zugalife.meditation.models"]
 _schemas = sys.modules["zugalife.meditation.schemas"]
 _prompts = sys.modules["zugalife.meditation.prompts"]
 
-try:
-    _gam_engine = sys.modules["zugalife.gamification.engine"]
-except KeyError:
-    _gam_engine = None
+def _get_gam_engine():
+    """Lazy lookup — gamification loads after meditation in plugin.py."""
+    return sys.modules.get("zugalife.gamification.engine")
 
 # Pull into globals for FastAPI annotation resolution
 MeditationSession = _models.MeditationSession
@@ -403,9 +402,10 @@ async def complete_session(
         meditation.completed_at = datetime.now(timezone.utc)
         await db.flush()
 
-        if _gam_engine:
+        gam = _get_gam_engine()
+        if gam:
             try:
-                await _gam_engine.award_xp(
+                await gam.award_xp(
                     db, user_id=user.id,
                     source="meditation_complete",
                     description=f"Completed {meditation.type} meditation ({meditation.duration_seconds // 60}min)",
