@@ -102,11 +102,12 @@ _f_schemas = _load_submodule("forecasting", "schemas")
 _f_context = _load_submodule("forecasting", "context")
 _f_routes = _load_submodule("forecasting", "routes")
 
-# Load gamification submodule: models → schemas → engine → routes
+# Load gamification submodule: models → schemas → engine → ai_challenges → routes
 # engine must come after schemas (build_badge_response resolves BadgeResponse via sys.modules)
 _gam_models = _load_submodule("gamification", "models")
 _gam_schemas = _load_submodule("gamification", "schemas")
 _gam_engine = _load_submodule("gamification", "engine")
+_gam_ai = _load_submodule("gamification", "ai_challenges")
 _gam_routes = _load_submodule("gamification", "routes")
 
 # Load data management (reset endpoints) — must come after all domain modules
@@ -156,6 +157,7 @@ class ZugaLifePlugin(StudioPlugin):
             _t_models.TherapistSessionNote,
             _gam_models.UserXP, _gam_models.XPTransaction,
             _gam_models.UserBadge, _gam_models.DailyChallenge,
+            _gam_models.WeeklyQuest,
         ]
 
     async def on_startup(self) -> None:
@@ -183,6 +185,11 @@ class ZugaLifePlugin(StudioPlugin):
                 "ALTER TABLE meditation_sessions ADD COLUMN error_message VARCHAR(500)",
                 # Drop legacy column that blocks inserts (NOT NULL, no default, not in model)
                 "ALTER TABLE meditation_sessions DROP COLUMN duration_minutes",
+                # Gamification: AI challenges + auto-completion
+                "ALTER TABLE life_daily_challenges ADD COLUMN is_ai_generated BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE life_daily_challenges ADD COLUMN completion_source VARCHAR(50)",
+                # Gamification: prestige system
+                "ALTER TABLE life_user_xp ADD COLUMN prestige_level INTEGER DEFAULT 0",
             ]
             for sql in migrations:
                 try:

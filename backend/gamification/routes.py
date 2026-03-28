@@ -19,12 +19,15 @@ UserXP = _models.UserXP
 XPTransaction = _models.XPTransaction
 UserBadge = _models.UserBadge
 DailyChallenge = _models.DailyChallenge
+WeeklyQuest = _models.WeeklyQuest
 
 GamificationDashboard = _schemas.GamificationDashboard
 XPStatusResponse = _schemas.XPStatusResponse
 XPGainResponse = _schemas.XPGainResponse
+PrestigeResponse = _schemas.PrestigeResponse
 BadgeResponse = _schemas.BadgeResponse
 DailyChallengeResponse = _schemas.DailyChallengeResponse
+WeeklyQuestResponse = _schemas.WeeklyQuestResponse
 AwardXPRequest = _schemas.AwardXPRequest
 
 router = APIRouter(prefix="/api/life/gamification", tags=["life-gamification"])
@@ -68,8 +71,10 @@ async def get_gamification_dashboard(
             for tx in tx_rows
         ]
 
-        # Daily challenges — ensure generated, then fetch
-        challenge_rows = await _engine.ensure_daily_challenges(session, user.id)
+        # Daily challenges — ensure generated (AI first, static fallback), then fetch
+        challenge_rows = await _engine.ensure_daily_challenges(
+            session, user.id, user_email=getattr(user, "email", None),
+        )
         challenges = [
             DailyChallengeResponse(
                 challenge_key=c.challenge_key,
@@ -77,8 +82,24 @@ async def get_gamification_dashboard(
                 description=c.description,
                 xp_reward=c.xp_reward,
                 is_completed=c.is_completed,
+                is_ai_generated=getattr(c, "is_ai_generated", False),
             )
             for c in challenge_rows
+        ]
+
+        # Weekly quests — AI-generated, optional
+        quest_rows = await _engine.ensure_weekly_quests(
+            session, user.id, user_email=getattr(user, "email", None),
+        )
+        weekly_quests = [
+            WeeklyQuestResponse(
+                quest_key=q.quest_key,
+                title=q.title,
+                description=q.description,
+                xp_reward=q.xp_reward,
+                is_completed=q.is_completed,
+            )
+            for q in quest_rows
         ]
 
     return GamificationDashboard(
@@ -86,6 +107,7 @@ async def get_gamification_dashboard(
         badges=badges,
         recent_xp=recent_xp,
         daily_challenges=challenges,
+        weekly_quests=weekly_quests,
     )
 
 
@@ -120,9 +142,11 @@ async def get_badges(
 async def get_daily_challenges(
     user: CurrentUser = Depends(get_current_user),
 ):
-    """Today's daily challenges for this user (generated on first request)."""
+    """Today's daily challenges for this user (AI-generated on first request, static fallback)."""
     async with get_session() as session:
-        rows = await _engine.ensure_daily_challenges(session, user.id)
+        rows = await _engine.ensure_daily_challenges(
+            session, user.id, user_email=getattr(user, "email", None),
+        )
     return [
         DailyChallengeResponse(
             challenge_key=c.challenge_key,
@@ -130,8 +154,30 @@ async def get_daily_challenges(
             description=c.description,
             xp_reward=c.xp_reward,
             is_completed=c.is_completed,
+            is_ai_generated=getattr(c, "is_ai_generated", False),
         )
         for c in rows
+    ]
+
+
+@router.get("/weekly-quests", response_model=list[WeeklyQuestResponse])
+async def get_weekly_quests(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """This week's quests for this user (AI-generated on first request)."""
+    async with get_session() as session:
+        rows = await _engine.ensure_weekly_quests(
+            session, user.id, user_email=getattr(user, "email", None),
+        )
+    return [
+        WeeklyQuestResponse(
+            quest_key=q.quest_key,
+            title=q.title,
+            description=q.description,
+            xp_reward=q.xp_reward,
+            is_completed=q.is_completed,
+        )
+        for q in rows
     ]
 
 
@@ -163,4 +209,20 @@ async def award_xp(
             description=body.description,
             base_amount=body.base_amount,
         )
+    return result
+
+
+@router.post("/prestige", response_model=PrestigeResponse)
+async def prestige(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Prestige: reset level/XP to 1, gain permanent XP multiplier and unique badge.
+
+    Requires reaching the prestige level (25). Streaks and badges are kept.
+    """
+    async with get_session() as session:
+        try:
+            result = await _engine.perform_prestige(session, user.id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     return result

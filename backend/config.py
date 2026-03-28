@@ -12,11 +12,12 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "ZugaLife"
-    debug: bool = True
+    debug: bool = False
     host: str = "0.0.0.0"
     port: int = 8001
     database_url: str = "sqlite+aiosqlite:///data/zugalife.db"
     allowed_origins: list[str] = [
+        "https://zugabot.ai",
         "http://localhost:5174",
         "http://localhost:5176",
         "http://192.168.1.200:5174",

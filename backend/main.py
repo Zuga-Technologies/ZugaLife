@@ -90,6 +90,10 @@ def create_app() -> FastAPI:
     async def health_live():
         return {"status": "ok", "service": settings.app_name, "mode": "standalone"}
 
+    # Lifecycle support (drain middleware + orchestrator shutdown endpoint)
+    from core.lifecycle import add_lifecycle_support
+    add_lifecycle_support(app, prefix="/api/life")
+
     return app
 
 

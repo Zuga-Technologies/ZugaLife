@@ -49,12 +49,15 @@ async def ai_call(
 
     credit_client = get_credit_client()
 
-    # Pre-flight token check (only if user context available)
+    model = "kimi-k2-5"
+
+    # Pre-flight token check with estimated cost (only if user context available)
     if user_id and user_email:
-        if not await credit_client.can_spend(user_id, user_email):
+        estimated_cost = _estimate_call_cost(max_tokens)
+        estimated_tokens = dollars_to_tokens(estimated_cost)
+        if not await credit_client.can_spend(user_id, user_email, estimated_tokens):
             raise CreditBlockedError("Insufficient ZugaTokens")
 
-    model = "kimi-k2-5"
     logger.info("AI call: task=%s model=%s user=%s", task, model, user_id or "anonymous")
 
     kwargs = {"prompt": prompt, "model": model, "max_tokens": max_tokens}
@@ -83,3 +86,10 @@ async def ai_call(
         )
 
     return response
+
+
+def _estimate_call_cost(max_tokens: int) -> float:
+    """Rough cost estimate for Venice calls before making them."""
+    # Venice pricing: ~$0.50/M input, ~$2.50/M output (kimi-k2-5)
+    input_rate, output_rate = 0.5, 2.5
+    return (500 * input_rate + max_tokens * output_rate) / 1_000_000

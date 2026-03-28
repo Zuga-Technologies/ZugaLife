@@ -26,6 +26,7 @@ class UserXP(Base):
     user_id: Mapped[str] = mapped_column(String(64), index=True, unique=True)
     total_xp: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     level: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    prestige_level: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     current_streak_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     longest_streak_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_active_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -85,3 +86,25 @@ class DailyChallenge(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    is_ai_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    completion_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+
+class WeeklyQuest(Base):
+    """A weekly quest assigned to a user for a specific week (Mon-Sun)."""
+
+    __tablename__ = "life_weekly_quests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)
+    quest_key: Mapped[str] = mapped_column(String(50), nullable=False)
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    xp_reward: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_ai_generated: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    completion_source: Mapped[str | None] = mapped_column(String(50), nullable=True)

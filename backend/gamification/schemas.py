@@ -22,6 +22,9 @@ class XPStatusResponse(BaseModel):
     current_streak_days: int
     longest_streak_days: int
     streak_multiplier: float
+    prestige_level: int = 0
+    prestige_multiplier: float = 1.0
+    can_prestige: bool = False
 
 
 class XPGainResponse(BaseModel):
@@ -32,8 +35,23 @@ class XPGainResponse(BaseModel):
     new_badges: list[BadgeResponse]
 
 
+class PrestigeResponse(BaseModel):
+    new_prestige_level: int
+    prestige_multiplier: float
+    badge: BadgeResponse
+
+
 class DailyChallengeResponse(BaseModel):
     challenge_key: str
+    title: str
+    description: str
+    xp_reward: int
+    is_completed: bool
+    is_ai_generated: bool = False
+
+
+class WeeklyQuestResponse(BaseModel):
+    quest_key: str
     title: str
     description: str
     xp_reward: int
@@ -51,3 +69,4 @@ class GamificationDashboard(BaseModel):
     badges: list[BadgeResponse]
     recent_xp: list[dict]
     daily_challenges: list[DailyChallengeResponse]
+    weekly_quests: list[WeeklyQuestResponse]
