@@ -365,8 +365,22 @@ async def log_habit(
 
         await session.refresh(log)
 
+        # Only award XP once per habit per day — check XP transaction log
         gam = _get_gam_engine()
-        if gam and body.completed and not was_already_completed:
+        already_awarded = False
+        if gam and body.completed:
+            _gam_models = sys.modules.get("zugalife.gamification.models")
+            if _gam_models:
+                xp_check = await session.execute(
+                    select(_gam_models.XPTransaction.id).where(
+                        _gam_models.XPTransaction.user_id == user.id,
+                        _gam_models.XPTransaction.source == "habit_check",
+                        _gam_models.XPTransaction.description == f"Completed {habit.name}",
+                        func.date(_gam_models.XPTransaction.created_at) == log_date,
+                    ).limit(1)
+                )
+                already_awarded = xp_check.scalar_one_or_none() is not None
+        if gam and body.completed and not already_awarded:
             try:
                 await gam.award_xp(
                     session, user_id=user.id,
