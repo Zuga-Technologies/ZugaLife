@@ -155,7 +155,7 @@ async def create_habit(
             user_id=user.id,
             name=body.name,
             emoji=body.emoji,
-            unit=body.unit.value if body.unit else None,
+            unit=body.unit or None,
             default_target=body.default_target,
             is_preset=False,
             is_active=True,
