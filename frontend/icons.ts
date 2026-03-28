@@ -209,7 +209,7 @@ const _iconNameMap: Record<string, LucideIcon> = {
 
 export const habitIcons: Record<string, LucideIcon> = {
   // Legacy emoji keys (preset habits stored as emoji in DB)
-  '😴': Moon, '\uD83C\uDFCB': Dumbbell, '🏋': Dumbbell, '💧': Droplets,
+  '😴': Moon, '🏋': Dumbbell, '💧': Droplets,
   '🧘': Brain, '📖': BookOpen, '🥗': Salad, '📵': MonitorOff,
   '🙏': HandHeart, '🚶': Footprints,
   // All icon name keys
