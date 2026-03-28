@@ -548,7 +548,9 @@ async def ensure_daily_challenges(
     if rows:
         # If rows have empty titles (from failed AI generation), delete and regenerate
         if all(r.title for r in rows):
+            logger.info("Returning %d existing challenges for %s", len(rows), user_id[:8])
             return rows
+        logger.warning("Deleting %d malformed challenge rows for %s", len(rows), user_id[:8])
         for r in rows:
             await session.delete(r)
         await session.flush()
@@ -561,16 +563,18 @@ async def ensure_daily_challenges(
             ai_picks = await _ai.generate_challenges(
                 session, user_id, challenge_type="daily", user_email=user_email,
             )
-    except Exception:
-        pass  # AI failure is non-critical
+    except Exception as exc:
+        logger.warning("AI challenge generation error: %s", exc)
 
     if ai_picks:
         picks = ai_picks
         is_ai = True
+        logger.info("AI generated %d daily challenges for %s", len(ai_picks), user_id[:8])
     else:
         # Fallback to static deterministic pool
         picks = select_daily_challenges(user_id, for_date)
         is_ai = False
+        logger.info("Static fallback: %d daily challenges for %s", len(picks), user_id[:8])
 
     # Get source mapping for static challenges
     _ai_mod = sys.modules.get("zugalife.gamification.ai_challenges")
