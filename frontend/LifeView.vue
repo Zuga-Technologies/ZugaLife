@@ -987,20 +987,20 @@ async function generateHabitInsight() {
 }
 
 const habitUnits = [
-  { value: 'hours', label: 'Hours' },
-  { value: 'minutes', label: 'Minutes' },
-  { value: 'glasses', label: 'Glasses' },
-  { value: 'steps', label: 'Steps' },
-  { value: 'servings', label: 'Servings' },
-  { value: 'pages', label: 'Pages' },
-  { value: 'count', label: 'Count' },
-  { value: 'sessions', label: 'Sessions' },
-  { value: 'reps', label: 'Reps' },
-  { value: 'miles', label: 'Miles' },
-  { value: 'km', label: 'Km' },
-  { value: 'calories', label: 'Calories' },
-  { value: 'sets', label: 'Sets' },
-  { value: 'chapters', label: 'Chapters' },
+  { value: 'minutes', label: '(time)' },
+  { value: 'hours', label: '(time)' },
+  { value: 'glasses', label: '(volume)' },
+  { value: 'steps', label: '(distance)' },
+  { value: 'miles', label: '(distance)' },
+  { value: 'km', label: '(distance)' },
+  { value: 'calories', label: '(energy)' },
+  { value: 'servings', label: '(food)' },
+  { value: 'pages', label: '(reading)' },
+  { value: 'chapters', label: '(reading)' },
+  { value: 'reps', label: '(exercise)' },
+  { value: 'sets', label: '(exercise)' },
+  { value: 'sessions', label: '(count)' },
+  { value: 'count', label: '(general)' },
 ]
 
 // ============================
@@ -2957,7 +2957,7 @@ onUnmounted(() => {
                 maxlength="20"
               />
               <datalist id="habit-unit-suggestions">
-                <option v-for="u in habitUnits" :key="u.value" :value="u.value">{{ u.label }}</option>
+                <option v-for="u in habitUnits" :key="u.value" :value="u.value" :label="`${u.value} ${u.label}`" />
               </datalist>
             </div>
             <input
