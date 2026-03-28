@@ -17,10 +17,9 @@ from core.database.session import get_session
 _models = sys.modules["zugalife.models"]
 _schemas = sys.modules["zugalife.schemas"]
 
-try:
-    _gam_engine = sys.modules["zugalife.gamification.engine"]
-except KeyError:
-    _gam_engine = None
+def _get_gam_engine():
+    """Lazy lookup — gamification loads after mood routes in plugin.py."""
+    return sys.modules.get("zugalife.gamification.engine")
 
 MoodEntry = _models.MoodEntry
 MoodLogRequest = _schemas.MoodLogRequest
@@ -110,9 +109,10 @@ async def log_mood(
             today_count=today_count,
         )
 
-        if _gam_engine:
+        gam = _get_gam_engine()
+        if gam:
             try:
-                await _gam_engine.award_xp(
+                await gam.award_xp(
                     session, user_id=user.id,
                     source="mood_log",
                     description=f"Logged mood: {entry.emoji} {label}",

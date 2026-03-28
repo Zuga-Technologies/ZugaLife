@@ -32,10 +32,9 @@ JournalReflectResponse = _schemas.JournalReflectResponse
 _EMOJI_LABELS = _prompts._EMOJI_LABELS
 MAX_REFLECTIONS = _prompts.MAX_REFLECTIONS_PER_ENTRY
 
-try:
-    _gam_engine = sys.modules["zugalife.gamification.engine"]
-except KeyError:
-    _gam_engine = None
+def _get_gam_engine():
+    """Lazy lookup — gamification loads after journal in plugin.py."""
+    return sys.modules.get("zugalife.gamification.engine")
 
 log = logging.getLogger(__name__)
 
@@ -104,9 +103,10 @@ async def create_journal_entry(
         response = JournalEntryResponse.model_validate(entry)
         entry_id = entry.id
 
-        if _gam_engine:
+        gam = _get_gam_engine()
+        if gam:
             try:
-                await _gam_engine.award_xp(
+                await gam.award_xp(
                     session, user_id=user.id,
                     source="journal_entry",
                     description=f"Wrote: {(body.title or 'Untitled')[:50]}",

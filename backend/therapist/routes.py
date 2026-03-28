@@ -25,10 +25,9 @@ _prompts = sys.modules["zugalife.therapist.prompts"]
 _safety = sys.modules["zugalife.therapist.safety"]
 _context = sys.modules["zugalife.therapist.context"]
 
-try:
-    _gam_engine = sys.modules["zugalife.gamification.engine"]
-except KeyError:
-    _gam_engine = None
+def _get_gam_engine():
+    """Lazy lookup — gamification loads after therapist in plugin.py."""
+    return sys.modules.get("zugalife.gamification.engine")
 
 TherapistSessionNote = _models.TherapistSessionNote
 
@@ -292,9 +291,10 @@ async def end_session(
         await session.flush()
         await session.refresh(note)
 
-        if _gam_engine:
+        gam = _get_gam_engine()
+        if gam:
             try:
-                await _gam_engine.award_xp(
+                await gam.award_xp(
                     session, user_id=user.id,
                     source="therapist_session",
                     description=f"Therapist session ({len(body.messages)} messages)",

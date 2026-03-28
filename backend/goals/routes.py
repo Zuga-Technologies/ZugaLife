@@ -35,10 +35,9 @@ GoalTemplateResponse = _schemas.GoalTemplateResponse
 
 GOAL_TEMPLATES = _templates_mod.GOAL_TEMPLATES
 
-try:
-    _gam_engine = sys.modules["zugalife.gamification.engine"]
-except KeyError:
-    _gam_engine = None
+def _get_gam_engine():
+    """Lazy lookup — gamification loads after goals in plugin.py."""
+    return sys.modules.get("zugalife.gamification.engine")
 
 logger = logging.getLogger(__name__)
 
@@ -337,9 +336,9 @@ async def toggle_goal_complete(
         await session.flush()
         await session.refresh(goal)
 
-        if goal.is_completed and _gam_engine:
+        if goal.is_completed and _get_gam_engine():
             try:
-                await _gam_engine.award_xp(
+                await _get_gam_engine().award_xp(
                     session, user_id=user.id,
                     source="goal_milestone",
                     description=f"Completed goal: {goal.title[:50]}",
@@ -473,9 +472,9 @@ async def update_milestone(
         await session.flush()
         await session.refresh(milestone)
 
-        if body.is_completed and _gam_engine:
+        if body.is_completed and _get_gam_engine():
             try:
-                await _gam_engine.award_xp(
+                await _get_gam_engine().award_xp(
                     session, user_id=user.id,
                     source="goal_milestone",
                     description=f"Completed milestone: {milestone.title[:50]}",

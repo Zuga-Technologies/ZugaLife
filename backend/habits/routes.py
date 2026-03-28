@@ -20,10 +20,9 @@ _prompts = sys.modules["zugalife.habits.prompts"]
 # Also need journal model for AI insights (mood source)
 _journal_models = sys.modules["zugalife.journal.models"]
 
-try:
-    _gam_engine = sys.modules["zugalife.gamification.engine"]
-except KeyError:
-    _gam_engine = None
+def _get_gam_engine():
+    """Lazy lookup — gamification loads after habits in plugin.py."""
+    return sys.modules.get("zugalife.gamification.engine")
 
 logger = logging.getLogger(__name__)
 
@@ -365,9 +364,10 @@ async def log_habit(
 
         await session.refresh(log)
 
-        if _gam_engine and body.completed:
+        gam = _get_gam_engine()
+        if gam and body.completed:
             try:
-                await _gam_engine.award_xp(
+                await gam.award_xp(
                     session, user_id=user.id,
                     source="habit_check",
                     description=f"Completed {habit.name}",
