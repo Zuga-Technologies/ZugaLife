@@ -115,7 +115,7 @@ async def log_mood(
                 await gam.award_xp(
                     session, user_id=user.id,
                     source="mood_log",
-                    description=f"Logged mood: {entry.emoji} {label}",
+                    description=f"Logged mood: {label}",
                 )
             except Exception:
                 logger.warning("XP award failed for %s", user.id, exc_info=True)

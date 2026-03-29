@@ -16,7 +16,7 @@ import logging
 import sys
 from datetime import date, datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
@@ -461,11 +461,55 @@ async def award_xp(
     )
 
 
+def _is_all_habits_challenge(challenge) -> bool:
+    """Return True if this challenge requires ALL habits to be completed."""
+    key = (challenge.challenge_key or "").lower()
+    if "all_habits" in key:
+        return True
+    title = (challenge.title or "").lower()
+    return "perfect day" in title or "all habits" in title
+
+
+async def _all_habits_completed_today(session, user_id: str) -> bool:
+    """Return True only if every active habit has a completed log for today."""
+    HabitDefinition = sys.modules["zugalife.habits.models"].HabitDefinition
+    HabitLog = sys.modules["zugalife.habits.models"].HabitLog
+
+    today = date.today()
+
+    # Count active habits
+    active_result = await session.execute(
+        select(func.count()).where(
+            HabitDefinition.user_id == user_id,
+            HabitDefinition.is_active == True,
+        )
+    )
+    active_count = active_result.scalar() or 0
+
+    if active_count == 0:
+        return False  # No habits = can't complete "all habits"
+
+    # Count habits completed today
+    completed_result = await session.execute(
+        select(func.count(func.distinct(HabitLog.habit_id))).where(
+            HabitLog.user_id == user_id,
+            HabitLog.log_date == today,
+            HabitLog.completed == True,
+        )
+    )
+    completed_count = completed_result.scalar() or 0
+
+    return completed_count >= active_count
+
+
 async def _check_challenge_completion(session, user_id: str, source: str) -> int:
     """Check if any uncompleted daily challenge or weekly quest matches this action source.
 
     Auto-completes matching challenges and returns total bonus XP awarded.
     Records XP transactions for each completed challenge.
+
+    Threshold challenges (e.g. "all_habits") require additional validation
+    beyond simple source matching — they verify the actual condition is met.
     """
     _models = sys.modules["zugalife.gamification.models"]
     DailyChallenge = _models.DailyChallenge
@@ -487,6 +531,11 @@ async def _check_challenge_completion(session, user_id: str, source: str) -> int
     daily_matches = result.scalars().all()
 
     for challenge in daily_matches:
+        # Threshold check: "all_habits" requires ALL active habits completed today
+        if _is_all_habits_challenge(challenge):
+            if not await _all_habits_completed_today(session, user_id):
+                continue
+
         challenge.is_completed = True
         challenge.completed_at = datetime.now(tz=timezone.utc)
         total_bonus += challenge.xp_reward
@@ -510,6 +559,10 @@ async def _check_challenge_completion(session, user_id: str, source: str) -> int
     weekly_matches = result.scalars().all()
 
     for quest in weekly_matches:
+        if _is_all_habits_challenge(quest):
+            if not await _all_habits_completed_today(session, user_id):
+                continue
+
         quest.is_completed = True
         quest.completed_at = datetime.now(tz=timezone.utc)
         total_bonus += quest.xp_reward
@@ -549,12 +602,18 @@ async def ensure_daily_challenges(
     )
     rows = result.scalars().all()
     if rows:
-        # If rows have empty titles (from failed AI generation), delete and regenerate
-        if not all(r.title for r in rows):
-            logger.warning("Deleting %d malformed challenge rows for %s", len(rows), user_id[:8])
-            for r in rows:
+        # Only delete malformed (empty-title) rows that are NOT completed
+        malformed = [r for r in rows if not r.title and not r.is_completed]
+        if malformed:
+            logger.warning("Deleting %d malformed challenge rows for %s", len(malformed), user_id[:8])
+            for r in malformed:
                 await session.delete(r)
             await session.flush()
+            # Keep any completed/valid rows — only regenerate if we have fewer than 3
+            remaining = [r for r in rows if r not in malformed]
+            if len(remaining) >= 3:
+                return remaining
+            # Fall through to generate missing challenges (will add only what's needed)
         else:
             # Backfill missing completion_source from static source map
             _ai_mod = sys.modules.get("zugalife.gamification.ai_challenges")
@@ -568,6 +627,17 @@ async def ensure_daily_challenges(
                 await session.flush()
                 logger.info("Backfilled completion_source for %s", user_id[:8])
             return rows
+
+    # Count how many valid rows survived (completed ones we preserved)
+    existing_count = 0
+    existing_rows = []
+    if rows:
+        existing_rows = [r for r in rows if r.title]
+        existing_count = len(existing_rows)
+
+    slots_needed = 3 - existing_count
+    if slots_needed <= 0:
+        return existing_rows[:3]
 
     # Try AI generation first
     ai_picks = None
@@ -594,8 +664,15 @@ async def ensure_daily_challenges(
     _ai_mod = sys.modules.get("zugalife.gamification.ai_challenges")
     static_sources = getattr(_ai_mod, "STATIC_CHALLENGE_SOURCES", {}) if _ai_mod else {}
 
+    # Skip picks that duplicate existing challenge keys
+    existing_keys = {r.challenge_key for r in existing_rows}
+
     new_rows = []
-    for pick in picks[:3]:  # Always cap at 3
+    for pick in picks:
+        if len(new_rows) >= slots_needed:
+            break
+        if pick["key"] in existing_keys:
+            continue
         source = pick.get("source") or static_sources.get(pick["key"])
         challenge = DailyChallenge(
             user_id=user_id,
@@ -611,7 +688,7 @@ async def ensure_daily_challenges(
         new_rows.append(challenge)
 
     await session.flush()
-    return new_rows
+    return existing_rows + new_rows
 
 
 async def ensure_weekly_quests(

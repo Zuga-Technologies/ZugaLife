@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { api, ApiError, getToken } from '@core/api/client'
 import { startAmbience, stopAmbience, pauseAmbience, resumeAmbience, setAmbienceVolume } from './ambience'
-import { moodIcons, meditationTypeIcons, ambienceIcons, habitIcons, habitIconPicker, habitIconCategories, badgeIcons, getIcon, BrandIcon } from './icons'
+import { moodIcons, meditationTypeIcons, ambienceIcons, habitIcons, habitIconPicker, habitIconCategories, badgeIcons, xpSourceIcons, prestigeIcons, getIcon, BrandIcon } from './icons'
 import {
   BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle,
   LayoutDashboard, TrendingUp, Target, Clock, CalendarDays, ArrowRight, ArrowLeft,
@@ -185,30 +185,29 @@ interface GamificationData {
 
 const gamificationData = ref<GamificationData | null>(null)
 
-const STATIC_BADGES: Array<{ key: string; title: string; emoji: string; description: string }> = [
-  { key: 'first_mood',       title: 'Mood Tracker',        emoji: '🎭', description: 'Log your first mood' },
-  { key: 'first_journal',    title: 'Dear Diary',          emoji: '📝', description: 'Write your first journal entry' },
-  { key: 'first_meditation', title: 'Inner Peace',         emoji: '🧘', description: 'Complete your first meditation' },
-  { key: 'first_therapy',    title: 'Open Mind',           emoji: '💬', description: 'Start your first therapy session' },
-  { key: 'streak_7',         title: 'Week Warrior',        emoji: '🔥', description: '7-day activity streak' },
-  { key: 'streak_30',        title: 'Monthly Master',      emoji: '⚡', description: '30-day activity streak' },
-  { key: 'streak_100',       title: 'Unstoppable',         emoji: '💎', description: '100-day activity streak' },
-  { key: 'all_habits_day',   title: 'Perfect Day',         emoji: '⭐', description: 'Complete all habits in one day' },
-  { key: 'level_5',          title: 'Halfway There',       emoji: '🏔️', description: 'Reach level 5' },
-  { key: 'level_10',         title: 'Enlightened',         emoji: '👑', description: 'Reach level 10' },
-  { key: 'level_25',         title: 'Transcended',         emoji: '🌟', description: 'Reach level 25' },
-  { key: 'meditation_10',    title: 'Zen Master',          emoji: '🪷', description: 'Complete 10 meditations' },
-  { key: 'journal_10',       title: 'Storyteller',         emoji: '📚', description: 'Write 10 journal entries' },
-  { key: 'mood_30',          title: 'Self Aware',          emoji: '🔮', description: 'Log mood 30 times' },
-  { key: 'goal_complete',    title: 'Goal Getter',         emoji: '🎯', description: 'Complete your first goal' },
-  { key: 'five_challenges',  title: 'Challenge Accepted',  emoji: '🏆', description: 'Complete 5 daily challenges' },
+const STATIC_BADGES: Array<{ key: string; title: string; description: string }> = [
+  { key: 'first_mood',       title: 'Mood Tracker',        description: 'Log your first mood' },
+  { key: 'first_journal',    title: 'Dear Diary',          description: 'Write your first journal entry' },
+  { key: 'first_meditation', title: 'Inner Peace',         description: 'Complete your first meditation' },
+  { key: 'first_therapy',    title: 'Open Mind',           description: 'Start your first therapy session' },
+  { key: 'streak_7',         title: 'Week Warrior',        description: '7-day activity streak' },
+  { key: 'streak_30',        title: 'Monthly Master',      description: '30-day activity streak' },
+  { key: 'streak_100',       title: 'Unstoppable',         description: '100-day activity streak' },
+  { key: 'all_habits_day',   title: 'Perfect Day',         description: 'Complete all habits in one day' },
+  { key: 'level_5',          title: 'Halfway There',       description: 'Reach level 5' },
+  { key: 'level_10',         title: 'Enlightened',         description: 'Reach level 10' },
+  { key: 'level_25',         title: 'Transcended',         description: 'Reach level 25' },
+  { key: 'meditation_10',    title: 'Zen Master',          description: 'Complete 10 meditations' },
+  { key: 'journal_10',       title: 'Storyteller',         description: 'Write 10 journal entries' },
+  { key: 'mood_30',          title: 'Self Aware',          description: 'Log mood 30 times' },
+  { key: 'goal_complete',    title: 'Goal Getter',         description: 'Complete your first goal' },
+  { key: 'five_challenges',  title: 'Challenge Accepted',  description: 'Complete 5 daily challenges' },
 ]
 
 // Dynamically include earned prestige badges in the display list
 const ALL_BADGES = computed(() => {
-  const prestigeBadges: Array<{ key: string; title: string; emoji: string; description: string }> = []
+  const prestigeBadges: Array<{ key: string; title: string; description: string }> = []
   if (gamificationData.value) {
-    const prestigeEmojis = ['🌟', '💫', '✨', '🔱', '👑', '💎', '🌠', '🏅']
     for (const b of gamificationData.value.badges) {
       if (b.badge_key.startsWith('prestige_') && b.earned_at) {
         const tier = parseInt(b.badge_key.split('_')[1])
@@ -216,7 +215,6 @@ const ALL_BADGES = computed(() => {
         prestigeBadges.push({
           key: b.badge_key,
           title: titles[tier - 1] || `Ascension ${tier}`,
-          emoji: prestigeEmojis[(tier - 1) % prestigeEmojis.length],
           description: `Prestiged ${tier} time${tier > 1 ? 's' : ''}`,
         })
       }
@@ -825,6 +823,7 @@ async function toggleHabit(item: HabitCheckInItem) {
         })
       )
       await fetchHabitCheckin()
+      fetchGamification()
     }
   } catch (e) {
     if (e instanceof ApiError) {
@@ -1664,21 +1663,13 @@ async function loadAndPlayAudio() {
       medPlaying.value = false
       medProgress.value = 100
       stopAmbient()
-      // Mark session as completed — awards XP with celebration
+      // Mark session as completed — awards XP with celebration, then refresh challenges
       if (medSession.value) {
-        // Optimistic: mark matching challenge as done instantly
-        if (gamificationData.value) {
-          for (const c of gamificationData.value.daily_challenges) {
-            if (!c.is_completed && c.challenge_key.includes('meditat')) {
-              c.is_completed = true
-              break
-            }
-          }
-        }
         try {
           await withCelebration(() =>
             api.post(`/api/life/meditation/sessions/${medSession.value!.id}/complete`)
           )
+          await fetchGamification()
         } catch { /* non-critical */ }
       }
     })
@@ -2113,22 +2104,27 @@ function renderMarkdown(text: string): string {
 
 // --- Init ---
 
-onMounted(async () => {
-  await Promise.all([
-    fetchDashboard(),
-    fetchGamification(),
-    fetchJournalEntries(),
-    fetchHabitCheckin(), fetchHabitStreaks(), fetchAllHabits(),
-    fetchGoals(), fetchGoalTemplates(), fetchWeeklyTargets(),
-    fetchMedRemaining(), fetchMedSessions(),
-    fetchTherapistStatus(), fetchTherapistNotes(),
-  ])
-  loadingDashboard.value = false
-  loadingJournal.value = false
-  loadingHabits.value = false
-  loadingGoals.value = false
-  loadingMeditation.value = false
-  loadingTherapist.value = false
+onMounted(() => {
+  // Tier 1 — critical: unblock dashboard as soon as these two resolve
+  Promise.all([fetchDashboard(), fetchGamification()])
+    .finally(() => { loadingDashboard.value = false })
+
+  // Tier 2 — per-section: each group unblocks its own tab independently
+  Promise.all([fetchHabitCheckin(), fetchHabitStreaks(), fetchAllHabits()])
+    .finally(() => { loadingHabits.value = false })
+
+  Promise.all([fetchGoals(), fetchGoalTemplates(), fetchWeeklyTargets()])
+    .finally(() => { loadingGoals.value = false })
+
+  Promise.all([fetchMedRemaining(), fetchMedSessions()])
+    .finally(() => { loadingMeditation.value = false })
+
+  fetchJournalEntries()
+    .finally(() => { loadingJournal.value = false })
+
+  Promise.all([fetchTherapistStatus(), fetchTherapistNotes()])
+    .finally(() => { loadingTherapist.value = false })
+
   // Greeting fetched on-demand in startTherapistSession() — don't block page load
 })
 
@@ -2449,15 +2445,11 @@ onUnmounted(() => {
               :title="badge.description"
             >
               <component
-                v-if="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at) && badgeIcons[badge.key]"
-                :is="badgeIcons[badge.key]"
+                v-if="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at) && (badgeIcons[badge.key] || (badge.key.startsWith('prestige_') && prestigeIcons[(parseInt(badge.key.split('_')[1]) - 1) % prestigeIcons.length]))"
+                :is="badgeIcons[badge.key] || prestigeIcons[(parseInt(badge.key.split('_')[1]) - 1) % prestigeIcons.length]"
                 :size="22"
-                class="text-amber-400"
+                :class="badge.key.startsWith('prestige_') ? 'text-purple-400' : 'text-amber-400'"
               />
-              <span
-                v-else-if="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at)"
-                class="text-xl leading-none"
-              >{{ badge.emoji }}</span>
               <Lock v-else :size="18" class="text-txt-muted" />
               <span class="text-[9px] text-txt-muted text-center leading-tight line-clamp-2">{{ badge.title }}</span>
             </div>
@@ -2476,6 +2468,12 @@ onUnmounted(() => {
               :key="i"
               class="flex items-center gap-2"
             >
+              <component
+                v-if="xpSourceIcons[entry.source]"
+                :is="xpSourceIcons[entry.source]"
+                :size="12"
+                class="flex-shrink-0 text-txt-muted"
+              />
               <span class="text-xs font-semibold text-amber-400 w-14 flex-shrink-0">+{{ entry.amount }} XP</span>
               <span class="text-xs text-txt-muted truncate">{{ entry.description }}</span>
             </div>

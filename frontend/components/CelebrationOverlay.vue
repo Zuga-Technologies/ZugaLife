@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useCelebration } from '../composables/useCelebration'
-import { X, Trophy, Star } from 'lucide-vue-next'
+import { X, Trophy, Star, Zap, Flame } from 'lucide-vue-next'
+import { badgeIcons, prestigeIcons } from '../icons'
+
+// Map toast type to Lucide icon
+const toastIcons: Record<string, any> = { xp: Zap, streak: Flame, challenge: Trophy, info: Star }
 
 const {
   toasts,
@@ -49,7 +53,7 @@ const levelNames: Record<number, string> = {
           @click="dismissToast(toast.id)"
           role="status"
         >
-          <span v-if="toast.icon" class="cel-toast__icon">{{ toast.icon }}</span>
+          <component v-if="toastIcons[toast.type]" :is="toastIcons[toast.type]" :size="18" class="cel-toast__icon" />
           <span class="cel-toast__msg">{{ toast.message }}</span>
         </div>
       </TransitionGroup>
@@ -82,7 +86,9 @@ const levelNames: Record<number, string> = {
             <X :size="18" />
           </button>
           <div class="cel-modal__shine" />
-          <div class="cel-badge-icon">{{ activeBadge.emoji }}</div>
+          <div class="cel-badge-icon">
+            <component v-if="badgeIcons[activeBadge.badge_key]" :is="badgeIcons[activeBadge.badge_key]" :size="48" class="text-purple-400" />
+          </div>
           <div class="cel-modal__label">Badge Earned!</div>
           <div class="cel-modal__title">{{ activeBadge.title }}</div>
           <div class="cel-modal__desc">{{ activeBadge.description }}</div>
@@ -123,7 +129,9 @@ const levelNames: Record<number, string> = {
             <X :size="18" />
           </button>
           <div class="cel-modal__shine cel-modal__shine--prestige" />
-          <div class="cel-prestige-badge">{{ activePrestige.badgeEmoji }}</div>
+          <div class="cel-prestige-badge">
+            <component :is="prestigeIcons[(activePrestige.newPrestigeLevel - 1) % prestigeIcons.length]" :size="56" class="text-purple-400" />
+          </div>
           <div class="cel-prestige-tier">Prestige {{ activePrestige.newPrestigeLevel }}</div>
           <div class="cel-modal__label cel-modal__label--prestige">Ascension Complete</div>
           <div class="cel-modal__title">{{ activePrestige.badgeTitle }}</div>
@@ -201,9 +209,14 @@ const levelNames: Record<number, string> = {
 }
 
 .cel-toast__icon {
-  font-size: 1.25rem;
   flex-shrink: 0;
+  color: currentColor;
 }
+
+.cel-toast--xp .cel-toast__icon { color: #f59e0b; }
+.cel-toast--streak .cel-toast__icon { color: #ef4444; }
+.cel-toast--challenge .cel-toast__icon { color: #22c55e; }
+.cel-toast--info .cel-toast__icon { color: #8b5cf6; }
 
 .cel-toast__msg {
   flex: 1;

@@ -130,6 +130,7 @@ import {
   Infinity,
   Crown,
   Gem,
+  CheckCircle2,
   type LucideIcon,
 } from 'lucide-vue-next'
 
@@ -416,6 +417,23 @@ export const habitIconCategories: IconCategory[] = [
       { name: 'hand-metal', icon: HandMetal, label: 'Rock' },
     ],
   },
+]
+
+// --- XP source icons (keyed by XP transaction source) ---
+export const xpSourceIcons: Record<string, LucideIcon> = {
+  mood_log:            Smile,
+  habit_check:         CheckCircle2,
+  journal_entry:       Pencil,
+  meditation_complete: Brain,
+  therapist_session:   MessageCircle,
+  goal_milestone:      Target,
+  daily_challenge:     Trophy,
+  streak_bonus:        Flame,
+}
+
+// --- Prestige tier icons (indexed 0-7, cycles) ---
+export const prestigeIcons: LucideIcon[] = [
+  Sparkles, Star, Gem, Crown, Rocket, Infinity, Atom, Medal,
 ]
 
 // --- Badge icons (keyed by badge_key from gamification) ---

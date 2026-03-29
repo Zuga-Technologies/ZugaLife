@@ -15,7 +15,6 @@ export interface Toast {
   type: 'xp' | 'streak' | 'challenge' | 'info'
   message: string
   xp?: number
-  icon?: string
   duration: number // ms
 }
 
@@ -23,7 +22,6 @@ export interface BadgePopup {
   badge_key: string
   title: string
   description: string
-  emoji: string
 }
 
 export interface LevelUp {
@@ -35,7 +33,6 @@ export interface LevelUp {
 export interface PrestigeUp {
   newPrestigeLevel: number
   prestigeMultiplier: number
-  badgeEmoji: string
   badgeTitle: string
 }
 
@@ -124,7 +121,6 @@ function celebrateChanges(
       type: 'xp',
       message: `+${xpGained} XP${multiplierNote}`,
       xp: xpGained,
-      icon: '⚡',
       duration: 3000,
     })
   }
@@ -137,7 +133,6 @@ function celebrateChanges(
       pushToast({
         type: 'streak',
         message: `${days}-day streak!`,
-        icon: '🔥',
         duration: 4000,
       })
     }
@@ -155,7 +150,6 @@ function celebrateChanges(
       badge_key: first.badge_key,
       title: first.title,
       description: first.description,
-      emoji: first.emoji,
     }
     triggerConfetti()
 
@@ -165,7 +159,6 @@ function celebrateChanges(
       pushToast({
         type: 'info',
         message: `Badge earned: ${b.title}`,
-        icon: b.emoji,
         duration: 4000,
       })
     }
@@ -214,17 +207,15 @@ function celebratePrestige(
   newPrestigeLevel: number,
   newData: {
     xp: { total_xp: number; level: number; level_name: string; current_streak_days: number; streak_multiplier: number; prestige_level: number; prestige_multiplier: number }
-    badges: Array<{ badge_key: string; title: string; description: string; emoji: string; earned_at: string | null }>
+    badges: Array<{ badge_key: string; title: string; description: string; earned_at: string | null }>
   },
-  allBadges: Array<{ key: string; title: string; emoji: string; description: string }>,
+  allBadges: Array<{ key: string; title: string; description: string }>,
 ) {
-  const prestigeEmojis = ['🌟', '💫', '✨', '🔱', '👑', '💎', '🌠', '🏅']
   const titles = ['First Ascension', 'Second Ascension', 'Third Ascension']
 
   activePrestige.value = {
     newPrestigeLevel,
     prestigeMultiplier: 1.0 + newPrestigeLevel * 0.05,
-    badgeEmoji: prestigeEmojis[(newPrestigeLevel - 1) % prestigeEmojis.length],
     badgeTitle: titles[newPrestigeLevel - 1] || `Ascension ${newPrestigeLevel}`,
   }
   triggerConfetti(5000) // Longer confetti for prestige
