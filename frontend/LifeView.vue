@@ -8,7 +8,7 @@ import {
   BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle,
   LayoutDashboard, TrendingUp, Target, Clock, CalendarDays, ArrowRight, ArrowLeft,
   ChevronRight, ChevronDown, ChevronUp, Activity, Flame as FlameIcon, Brain as BrainIcon, Settings,
-  Download, Trophy, Star, Zap, CheckCircle2, Lock,
+  Download, Trophy, Star, Zap, CheckCircle2, Lock, CircleDot, Meh,
 } from 'lucide-vue-next'
 import SettingsPanel from './SettingsPanel.vue'
 import BackgroundTheme from './BackgroundTheme.vue'
@@ -396,6 +396,12 @@ const moduleLabels: Record<Exclude<Tab, 'dashboard'>, string> = {
   goals: 'Goals',
   meditate: 'Meditate',
   therapist: 'Therapist',
+}
+
+// Strip emoji characters from strings (backend embeds emojis in descriptions)
+const emojiRe = /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu
+function stripEmoji(s: string): string {
+  return s.replace(emojiRe, '').replace(/\s{2,}/g, ' ').trim()
 }
 
 // ============================
@@ -2316,7 +2322,7 @@ onUnmounted(() => {
               :title="m.label"
             >
               <component :is="moodIcons[m.emoji]" :size="22" class="text-amber-400" v-if="moodIcons[m.emoji]" />
-              <span v-else class="text-lg">{{ m.emoji }}</span>
+              <Meh v-else :size="22" class="text-amber-400" />
               <span class="text-[10px] text-txt-muted">{{ m.label }}</span>
             </button>
           </div>
@@ -2338,7 +2344,7 @@ onUnmounted(() => {
                 :title="entry.label + ' — ' + timeAgo(entry.date)"
               >
                 <component :is="moodIcons[entry.emoji]" :size="14" class="text-amber-400" v-if="moodIcons[entry.emoji]" />
-                <span v-else class="text-xs">{{ entry.emoji }}</span>
+                <Meh v-else :size="14" class="text-amber-400" />
               </div>
             </template>
             <span class="text-[10px] text-txt-muted ml-1">recent</span>
@@ -2475,7 +2481,7 @@ onUnmounted(() => {
                 class="flex-shrink-0 text-txt-muted"
               />
               <span class="text-xs font-semibold text-amber-400 w-14 flex-shrink-0">+{{ entry.amount }} XP</span>
-              <span class="text-xs text-txt-muted truncate">{{ entry.description }}</span>
+              <span class="text-xs text-txt-muted truncate">{{ stripEmoji(entry.description) }}</span>
             </div>
           </div>
         </div>
@@ -2699,7 +2705,7 @@ onUnmounted(() => {
                   :title="entry.label + ' — ' + timeAgo(entry.date)"
                 >
                   <component :is="moodIcons[entry.emoji]" :size="14" class="text-amber-400" v-if="moodIcons[entry.emoji]" />
-                  <span v-else class="text-xs">{{ entry.emoji }}</span>
+                  <Meh v-else :size="14" class="text-amber-400" />
                 </div>
               </template>
               <span class="text-xs text-txt-muted ml-1">recent moods</span>
@@ -2771,7 +2777,7 @@ onUnmounted(() => {
                 <span v-if="item.logged" class="text-xs">&#10003;</span>
               </button>
               <component :is="getIcon(item.habit.emoji)" :size="22" class="flex-shrink-0 text-accent" v-if="getIcon(item.habit.emoji)" />
-              <span v-else class="text-xl flex-shrink-0">{{ item.habit.emoji }}</span>
+              <CircleDot v-else :size="22" class="flex-shrink-0 text-accent" />
               <div class="flex-1 min-w-0">
                 <span class="text-sm font-medium text-txt-primary">{{ item.habit.name }}</span>
               </div>
@@ -2866,7 +2872,7 @@ onUnmounted(() => {
             <div v-if="day.habits_done.length > 0" class="flex gap-1 flex-wrap">
               <template v-for="(emoji, i) in day.habits_done" :key="i">
                 <component :is="getIcon(emoji)" :size="14" class="text-accent" v-if="getIcon(emoji)" />
-                <span v-else class="text-sm">{{ emoji }}</span>
+                <CircleDot v-else :size="14" class="text-accent" />
               </template>
             </div>
           </div>
@@ -3008,7 +3014,7 @@ onUnmounted(() => {
             :class="!habit.is_active ? 'opacity-50' : ''"
           >
             <component :is="getIcon(habit.emoji)" :size="22" class="text-accent flex-shrink-0" v-if="getIcon(habit.emoji)" />
-            <span v-else class="text-xl">{{ habit.emoji }}</span>
+            <CircleDot v-else :size="22" class="text-accent flex-shrink-0" />
             <div class="flex-1 min-w-0">
               <span class="text-sm font-medium text-txt-primary">{{ habit.name }}</span>
               <div class="flex items-center gap-2">
@@ -3260,7 +3266,7 @@ onUnmounted(() => {
                 <p class="text-xs font-semibold text-txt-muted uppercase tracking-wide">Linked Habits</p>
                 <div v-for="lh in goal.linked_habits" :key="lh.habit_id" class="flex items-center gap-2 group">
                   <component :is="getIcon(lh.habit_emoji)" :size="16" class="text-accent flex-shrink-0" v-if="getIcon(lh.habit_emoji)" />
-                  <span v-else class="text-sm">{{ lh.habit_emoji }}</span>
+                  <CircleDot v-else :size="16" class="text-accent flex-shrink-0" />
                   <span class="text-sm text-txt-primary flex-1">{{ lh.habit_name }}</span>
                   <div class="flex gap-0.5">
                     <div
@@ -3288,7 +3294,7 @@ onUnmounted(() => {
                     @click="linkHabit(goal.id, h.id)"
                     class="text-xs bg-surface-3 hover:bg-accent/15 text-txt-primary px-2 py-1 rounded transition-colors"
                   >
-                    <component :is="getIcon(h.emoji)" :size="14" class="inline-block" v-if="getIcon(h.emoji)" /><span v-else>{{ h.emoji }}</span> {{ h.name }}
+                    <component :is="getIcon(h.emoji)" :size="14" class="inline-block" v-if="getIcon(h.emoji)" /><CircleDot v-else :size="14" class="inline-block" /> {{ h.name }}
                   </button>
                   <span v-if="availableHabitsForGoal(goal).length === 0" class="text-xs text-txt-muted">No unlinked habits available</span>
                 </div>
@@ -3429,7 +3435,7 @@ onUnmounted(() => {
               class="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-2"
             >
               <component :is="getIcon(habit.emoji)" :size="20" class="text-accent flex-shrink-0" v-if="getIcon(habit.emoji)" />
-              <span v-else class="text-lg">{{ habit.emoji }}</span>
+              <CircleDot v-else :size="20" class="text-accent flex-shrink-0" />
               <span class="text-sm text-txt-primary flex-1">{{ habit.name }}</span>
               <template v-if="editingTargetFor === habit.id">
                 <select
@@ -3461,7 +3467,7 @@ onUnmounted(() => {
           >
             <div class="flex items-center gap-3 mb-2">
               <component :is="getIcon(item.habit_emoji)" :size="22" class="text-accent flex-shrink-0" v-if="getIcon(item.habit_emoji)" />
-              <span v-else class="text-xl">{{ item.habit_emoji }}</span>
+              <CircleDot v-else :size="22" class="text-accent flex-shrink-0" />
               <div class="flex-1 min-w-0">
                 <span class="text-sm font-medium text-txt-primary">{{ item.habit_name }}</span>
               </div>
@@ -3491,7 +3497,7 @@ onUnmounted(() => {
                 class="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-2"
               >
                 <component :is="getIcon(habit.emoji)" :size="18" class="text-accent flex-shrink-0" v-if="getIcon(habit.emoji)" />
-                <span v-else>{{ habit.emoji }}</span>
+                <CircleDot v-else :size="18" class="text-accent flex-shrink-0" />
                 <span class="text-sm text-txt-muted flex-1">{{ habit.name }}</span>
                 <template v-if="editingTargetFor === habit.id">
                   <select
@@ -4084,7 +4090,7 @@ onUnmounted(() => {
                 class="glass-card px-4 py-3 w-full text-left flex items-start gap-3 animate-slide-up transition-colors hover:bg-surface-2"
               >
                 <component :is="moodIcons[entry.mood_emoji]" v-if="entry.mood_emoji && moodIcons[entry.mood_emoji]" :size="24" class="text-accent flex-shrink-0" />
-                <span v-else-if="entry.mood_emoji" class="text-2xl flex-shrink-0">{{ entry.mood_emoji }}</span>
+                <Meh v-else-if="entry.mood_emoji" :size="24" class="text-accent flex-shrink-0" />
                 <BookOpen v-else :size="24" class="text-txt-muted flex-shrink-0" />
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
@@ -4153,7 +4159,7 @@ onUnmounted(() => {
                   <span>{{ formatDate(currentEntry.created_at) }}</span>
                   <span v-if="currentEntry.mood_emoji" class="flex items-center gap-1">
                     <component :is="moodIcons[currentEntry.mood_emoji]" :size="14" class="text-accent" v-if="moodIcons[currentEntry.mood_emoji]" />
-                    <span v-else>{{ currentEntry.mood_emoji }}</span>
+                    <Meh v-else :size="14" class="text-accent" />
                     <span>{{ currentEntry.mood_label }}</span>
                   </span>
                 </div>
