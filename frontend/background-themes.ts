@@ -16,6 +16,7 @@ export type ThemeId =
   | 'golden-sunset'
   | 'misty-forest'
   | 'soft-bokeh'
+  | 'ai-ambient'
   | 'custom'
 
 export interface ThemeDefinition {
@@ -127,12 +128,39 @@ export const THEMES: ThemeDefinition[] = [
     fallbackBg: 'linear-gradient(135deg, #0a0a0a, #1a1a1a)',
   },
   {
+    id: 'ai-ambient',
+    name: 'AI Ambient',
+    description: 'AI-generated wallpapers that evolve over time ($0.003/image)',
+    preview: 'linear-gradient(135deg, #7c3aed, #3b82f6, #06b6d4)',
+    overlay: 0.25,
+    fallbackBg: 'linear-gradient(135deg, #0f0a1a, #1a1a2e)',
+  },
+  {
     id: 'custom',
     name: 'Custom',
     description: 'Your own image or video background',
     preview: 'linear-gradient(135deg, #333, #555, #333)',
   },
 ]
+
+// --- AI Ambient helpers ---
+
+const AI_AMBIENT_KEY = 'zugalife-bg-ai-theme'
+const AI_AMBIENT_INTERVAL_KEY = 'zugalife-bg-ai-interval'
+
+export function getAIAmbientTheme(): string {
+  return localStorage.getItem(AI_AMBIENT_KEY) || 'cyberpunk'
+}
+export function saveAIAmbientTheme(theme: string) {
+  localStorage.setItem(AI_AMBIENT_KEY, theme)
+}
+export function getAIAmbientInterval(): number {
+  const val = localStorage.getItem(AI_AMBIENT_INTERVAL_KEY)
+  return val ? parseInt(val) : 30
+}
+export function saveAIAmbientInterval(minutes: number) {
+  localStorage.setItem(AI_AMBIENT_INTERVAL_KEY, String(minutes))
+}
 
 // --- Storage helpers ---
 

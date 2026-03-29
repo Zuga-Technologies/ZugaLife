@@ -9,6 +9,8 @@ import {
   getCustomVideo,
   getCustomVideoSpeed,
   getCustomMediaType,
+  getAIAmbientTheme,
+  getAIAmbientInterval,
 } from './background-themes'
 
 const currentTheme = ref<ThemeId>(getSavedTheme())
@@ -26,6 +28,13 @@ const videoLoaded = ref(false)
 const customVideoRef = ref<HTMLVideoElement | null>(null)
 const customVideoSrc = ref<string | null>(null)
 const isCustomVideo = computed(() => currentTheme.value === 'custom' && getCustomMediaType() === 'video')
+
+// AI Ambient wallpaper state
+const aiCurrentImage = ref<string | null>(null)
+const aiPreviousImage = ref<string | null>(null)
+const aiShowCurrent = ref(true)
+let aiPollTimer: ReturnType<typeof setInterval> | null = null
+const isAIAmbient = computed(() => currentTheme.value === 'ai-ambient')
 
 // Prefers-reduced-motion
 const prefersReducedMotion = ref(false)
@@ -110,12 +119,70 @@ async function loadCustomVideo() {
   }
 }
 
+// AI Ambient: start/stop scheduler and poll for new wallpapers
+async function startAIAmbient() {
+  const ambientTheme = getAIAmbientTheme()
+  const interval = getAIAmbientInterval()
+
+  try {
+    // Start the ambient scheduler in ZugaVideo
+    const res = await fetch('/api/video/ambient/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        theme: ambientTheme,
+        interval_minutes: interval,
+        size: '1920x1080',
+        provider: 'flux_schnell',
+      }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data.current_wallpaper_data) {
+        aiCurrentImage.value = data.current_wallpaper_data
+      }
+    }
+  } catch { /* ZugaVideo may not be loaded */ }
+
+  // Poll for updates
+  aiPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch('/api/video/ambient/status')
+      if (!res.ok) return
+      const data = await res.json()
+      const newImage = data.current_wallpaper_data || data.current_wallpaper_url
+      if (newImage && newImage !== aiCurrentImage.value) {
+        // Crossfade: current becomes previous, new becomes current
+        aiPreviousImage.value = aiCurrentImage.value
+        aiCurrentImage.value = newImage
+        aiShowCurrent.value = false
+        // Trigger crossfade
+        requestAnimationFrame(() => { aiShowCurrent.value = true })
+      }
+    } catch { /* silent */ }
+  }, 15000)
+}
+
+function stopAIAmbient() {
+  if (aiPollTimer) {
+    clearInterval(aiPollTimer)
+    aiPollTimer = null
+  }
+  // Don't stop the scheduler — other tabs may be using it
+}
+
 watch(currentTheme, (id) => {
   const t = getTheme(id)
-  if (id === 'custom') {
+  if (id === 'ai-ambient') {
+    startAIAmbient()
+  } else if (id === 'custom') {
+    stopAIAmbient()
     loadCustomVideo()
-  } else if (t.video && !prefersReducedMotion.value) {
-    loadVideo(t.video)
+  } else {
+    stopAIAmbient()
+    if (t.video && !prefersReducedMotion.value) {
+      loadVideo(t.video)
+    }
   }
 }, { immediate: false })
 
@@ -128,11 +195,17 @@ watch(videoA, (el) => {
 })
 
 onMounted(() => {
-  if (currentTheme.value === 'custom') {
+  if (currentTheme.value === 'ai-ambient') {
+    startAIAmbient()
+  } else if (currentTheme.value === 'custom') {
     loadCustomVideo()
   } else if (theme.value.video && !prefersReducedMotion.value && videoA.value) {
     loadVideo(theme.value.video)
   }
+})
+
+onUnmounted(() => {
+  stopAIAmbient()
 })
 
 // Listen for theme change events from settings panel
@@ -187,6 +260,27 @@ onUnmounted(() => document.removeEventListener('zugalife-theme-change', handleTh
       class="absolute inset-0"
       :style="{ background: `rgba(0, 0, 0, ${theme.overlay})` }"
     />
+
+    <!-- AI Ambient wallpaper (crossfade between two images) -->
+    <template v-if="isAIAmbient">
+      <div
+        v-if="aiPreviousImage"
+        class="absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-[3000ms]"
+        :class="aiShowCurrent ? 'opacity-0' : 'opacity-100'"
+        :style="{ backgroundImage: `url(${aiPreviousImage})` }"
+      />
+      <div
+        v-if="aiCurrentImage"
+        class="absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-[3000ms]"
+        :class="aiShowCurrent ? 'opacity-100' : 'opacity-0'"
+        :style="{ backgroundImage: `url(${aiCurrentImage})` }"
+      />
+      <!-- Dark overlay for AI wallpapers -->
+      <div
+        class="absolute inset-0"
+        :style="{ background: `rgba(0, 0, 0, ${theme.overlay || 0.25})` }"
+      />
+    </template>
 
     <!-- Custom Image -->
     <div
