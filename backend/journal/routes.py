@@ -468,6 +468,18 @@ async def reflect_on_entry(
         await session.flush()
         await session.refresh(reflection)
 
+        # Award XP + check daily challenge completion for reflections
+        gam = _get_gam_engine()
+        if gam:
+            try:
+                await gam.award_xp(
+                    session, user_id=user.id,
+                    source="journal_entry",
+                    description=f"AI reflection on: {(entry.title or 'Untitled')[:50]}",
+                )
+            except Exception:
+                log.warning("XP award failed for reflection %s", user.id, exc_info=True)
+
         new_total = len(entry.reflections) + 1  # +1 for the one just created
         remaining = MAX_REFLECTIONS - new_total
 

@@ -725,33 +725,18 @@ interface HabitHistoryResponse {
   period_days: number
 }
 
-interface HabitInsight {
-  id: number
-  content: string
-  model_used: string
-  cost: number
-  week_start: string
-  created_at: string
-}
 
-interface HabitInsightListResponse {
-  insights: HabitInsight[]
-  total: number
-}
-
-type HabitView = 'checkin' | 'history' | 'insights' | 'manage'
+type HabitView = 'checkin' | 'history' | 'manage'
 const habitView = ref<HabitView>('checkin')
 
 const habitCheckin = ref<DailyCheckInResponse | null>(null)
 const habitStreaks = ref<AllStreaksResponse | null>(null)
 const habitHistory = ref<HabitHistoryResponse | null>(null)
-const habitInsights = ref<HabitInsight[]>([])
 const allHabits = ref<HabitDefinition[]>([])
 const loadingHabits = ref(true)
 const habitError = ref<string | null>(null)
 const habitSuccess = ref<string | null>(null)
 const habitSubmitting = ref(false)
-const insightGenerating = ref(false)
 const historyDays = ref(7)
 
 // New custom habit form
@@ -802,12 +787,6 @@ async function fetchHabitHistory() {
   } catch { /* silent */ }
 }
 
-async function fetchHabitInsights() {
-  try {
-    const res = await api.get<HabitInsightListResponse>('/api/life/habits/insights')
-    habitInsights.value = res.insights
-  } catch { /* silent */ }
-}
 
 async function toggleHabit(item: HabitCheckInItem) {
   habitError.value = null
@@ -959,36 +938,6 @@ async function resetSingleHabit(habitId: number) {
     resettingHabit.value = null
     await Promise.all([fetchHabitCheckin(), fetchHabitStreaks()])
   } catch { habitError.value = 'Reset failed.' }
-}
-
-async function generateHabitInsight() {
-  if (insightGenerating.value) return
-  insightGenerating.value = true
-  habitError.value = null
-
-  try {
-    await api.post('/api/life/habits/insight')
-    habitSuccess.value = 'Insight generated!'
-    setTimeout(() => { habitSuccess.value = null }, 2000)
-    await fetchHabitInsights()
-  } catch (e) {
-    if (e instanceof ApiError) {
-      const body = e.body as Record<string, string>
-      if (e.status === 402) {
-        habitError.value = 'AI budget exhausted for today. Try again tomorrow.'
-      } else if (e.status === 429) {
-        habitError.value = body.detail ?? 'Insight cooldown active.'
-      } else if (e.status === 503) {
-        habitError.value = 'AI insights not available in standalone mode.'
-      } else {
-        habitError.value = body.detail ?? `Error (${e.status})`
-      }
-    } else {
-      habitError.value = 'Network error'
-    }
-  } finally {
-    insightGenerating.value = false
-  }
 }
 
 const habitUnits = [
@@ -2779,11 +2728,10 @@ onUnmounted(() => {
           v-for="view in [
             { key: 'checkin', label: 'Check-in' },
             { key: 'history', label: 'History' },
-            { key: 'insights', label: 'Insights' },
             { key: 'manage', label: 'Manage' },
           ] as { key: HabitView; label: string }[]"
           :key="view.key"
-          @click="habitView = view.key; if (view.key === 'history') fetchHabitHistory(); if (view.key === 'insights') fetchHabitInsights()"
+          @click="habitView = view.key; if (view.key === 'history') fetchHabitHistory()"
           class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
           :class="habitView === view.key ? 'bg-accent/15 text-accent' : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
         >
@@ -2930,37 +2878,6 @@ onUnmounted(() => {
                 <CircleDot v-else :size="14" class="text-accent" />
               </template>
             </div>
-          </div>
-        </div>
-      </template>
-
-      <!-- ===== INSIGHTS VIEW ===== -->
-      <template v-if="habitView === 'insights'">
-        <div class="mb-6">
-          <button
-            @click="generateHabitInsight"
-            :disabled="insightGenerating"
-            class="btn-primary w-full"
-          >
-            <span v-if="insightGenerating" class="inline-flex items-center gap-2">
-              <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-              Analyzing patterns...
-            </span>
-            <span v-else>Get Weekly Insight</span>
-          </button>
-          <p class="text-xs text-txt-muted text-center mt-2">Correlates your habits with mood data (7-day cooldown)</p>
-        </div>
-        <div v-if="habitInsights.length === 0" class="glass-card p-6 text-center">
-          <p class="text-txt-muted text-sm">No insights yet. Generate your first weekly analysis!</p>
-        </div>
-        <div v-else class="space-y-3">
-          <div v-for="insight in habitInsights" :key="insight.id" class="glass-card p-4 animate-slide-up">
-            <div class="flex items-center gap-2 mb-2">
-              <span class="text-xs font-medium text-accent">Week of {{ new Date(insight.week_start + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}</span>
-              <span class="text-xs text-txt-muted">{{ formatDate(insight.created_at) }}</span>
-              <span class="text-xs text-txt-muted ml-auto">${{ insight.cost.toFixed(4) }}</span>
-            </div>
-            <p class="text-sm text-txt-secondary leading-relaxed whitespace-pre-wrap">{{ insight.content }}</p>
           </div>
         </div>
       </template>
