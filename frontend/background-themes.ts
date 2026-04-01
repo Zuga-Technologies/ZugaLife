@@ -130,7 +130,7 @@ export const THEMES: ThemeDefinition[] = [
   {
     id: 'ai-ambient',
     name: 'AI Ambient',
-    description: 'AI-generated wallpapers that evolve over time ($0.003/image)',
+    description: 'AI-generated wallpapers that evolve over time (~1 token/image)',
     preview: 'linear-gradient(135deg, #7c3aed, #3b82f6, #06b6d4)',
     overlay: 0.25,
     fallbackBg: 'linear-gradient(135deg, #0f0a1a, #1a1a2e)',

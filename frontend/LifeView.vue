@@ -19,6 +19,13 @@ import { playXpSound, playBadgeSound, playLevelUpSound, playStreakSound, playPre
 
 const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
+// --- Token conversion (matches ZugaCore/credits/manager.py constants) ---
+const ZUGATOKENS_PER_DOLLAR = 100
+const MARKUP_MULTIPLIER = 3
+function costToTokens(usd: number): number {
+  return Math.ceil(usd * MARKUP_MULTIPLIER * ZUGATOKENS_PER_DOLLAR)
+}
+
 // --- Settings ---
 const showSettings = ref(false)
 
@@ -2185,8 +2192,63 @@ onUnmounted(() => {
 
     <!-- ===== DASHBOARD TAB ===== -->
     <template v-if="activeTab === 'dashboard'">
-      <div v-if="loadingDashboard" class="flex items-center justify-center py-20">
-        <div class="w-8 h-8 border-2 border-accent/30 border-t-accent rounded-full animate-spin"></div>
+      <div v-if="loadingDashboard" class="animate-fade-in">
+        <!-- Skeleton: Greeting -->
+        <div class="flex items-start justify-between mb-8">
+          <div class="inline-block px-5 py-3 rounded-2xl bg-surface-0/60 backdrop-blur-md">
+            <div class="skeleton-pulse h-3 w-32 rounded mb-2"></div>
+            <div class="skeleton-pulse h-7 w-56 rounded mb-2"></div>
+            <div class="skeleton-pulse h-3 w-44 rounded"></div>
+          </div>
+          <div class="skeleton-pulse w-10 h-10 rounded-xl"></div>
+        </div>
+
+        <!-- Skeleton: XP bar -->
+        <div class="glass-card p-4 mb-4">
+          <div class="flex items-center gap-3">
+            <div class="skeleton-pulse w-12 h-12 rounded-2xl flex-shrink-0"></div>
+            <div class="flex-1">
+              <div class="flex justify-between mb-1">
+                <div class="skeleton-pulse h-3 w-28 rounded"></div>
+                <div class="skeleton-pulse h-3 w-16 rounded"></div>
+              </div>
+              <div class="skeleton-pulse w-full h-2 rounded-full"></div>
+            </div>
+            <div class="skeleton-pulse w-10 h-10 rounded-lg flex-shrink-0"></div>
+          </div>
+        </div>
+
+        <!-- Skeleton: Mood + Challenges row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          <div class="glass-card p-4">
+            <div class="skeleton-pulse h-4 w-36 rounded mb-3"></div>
+            <div class="grid grid-cols-6 gap-2 mb-3">
+              <div v-for="i in 6" :key="i" class="skeleton-pulse h-12 rounded-xl"></div>
+            </div>
+            <div class="skeleton-pulse h-3 w-24 rounded"></div>
+          </div>
+          <div class="glass-card p-4">
+            <div class="skeleton-pulse h-4 w-32 rounded mb-3"></div>
+            <div class="space-y-2">
+              <div v-for="i in 3" :key="i" class="skeleton-pulse h-10 rounded-xl"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Skeleton: Module Cards Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+          <div v-for="i in 3" :key="i" class="glass-card p-5">
+            <div class="flex items-center gap-2.5 mb-4">
+              <div class="skeleton-pulse w-9 h-9 rounded-xl"></div>
+              <div class="skeleton-pulse h-4 w-20 rounded"></div>
+            </div>
+            <div class="skeleton-pulse h-7 w-16 rounded mb-3"></div>
+            <div class="skeleton-pulse h-2 w-full rounded-full mb-3"></div>
+            <div class="flex gap-1.5">
+              <div v-for="j in 3" :key="j" class="skeleton-pulse h-5 w-16 rounded-md"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <template v-else-if="dashboardData">
@@ -3658,7 +3720,7 @@ onUnmounted(() => {
               <div class="flex items-center gap-2 mt-1">
                 <span class="text-xs text-txt-muted">{{ getMedTypeLabel(medSession.type) }}</span>
                 <span class="text-xs text-txt-muted">{{ Math.floor(medSession.duration_seconds / 60) }}:{{ String(medSession.duration_seconds % 60).padStart(2, '0') }}</span>
-                <span class="text-xs text-txt-muted">${{ medSession.cost.toFixed(4) }}</span>
+                <span class="text-xs text-txt-muted">{{ costToTokens(medSession.cost) }} tokens</span>
               </div>
             </div>
             <button
@@ -3958,7 +4020,7 @@ onUnmounted(() => {
               <p v-if="note.follow_up" class="text-xs text-txt-muted line-clamp-2">{{ note.follow_up }}</p>
               <div class="flex items-center gap-3 mt-2 text-xs text-txt-muted">
                 <span>{{ note.message_count }} messages</span>
-                <span>${{ note.cost.toFixed(4) }}</span>
+                <span>{{ costToTokens(note.cost) }} tokens</span>
               </div>
             </div>
           </div>
@@ -4043,7 +4105,7 @@ onUnmounted(() => {
             <div class="flex items-center gap-3 pt-3 border-t border-bdr text-xs text-txt-muted">
               <span>{{ therapistCurrentNote.message_count }} messages</span>
               <span>{{ therapistCurrentNote.provider }}</span>
-              <span>${{ therapistCurrentNote.cost.toFixed(4) }}</span>
+              <span>{{ costToTokens(therapistCurrentNote.cost) }} tokens</span>
             </div>
           </div>
         </template>
@@ -4181,7 +4243,7 @@ onUnmounted(() => {
                 <div class="flex items-center gap-2 mb-2">
                   <span class="text-xs font-medium text-accent">Reflection {{ i + 1 }}</span>
                   <span class="text-xs text-txt-muted">{{ formatDate(reflection.created_at) }}</span>
-                  <span class="text-xs text-txt-muted ml-auto">${{ reflection.cost.toFixed(4) }}</span>
+                  <span class="text-xs text-txt-muted ml-auto">{{ costToTokens(reflection.cost) }} tokens</span>
                 </div>
                 <p class="text-sm text-txt-secondary leading-relaxed whitespace-pre-wrap">{{ reflection.content }}</p>
               </div>
@@ -4304,5 +4366,17 @@ onUnmounted(() => {
 @keyframes banner-glow {
   0%, 100% { box-shadow: 0 0 8px rgba(168, 85, 247, 0.1); }
   50% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.25), 0 0 8px rgba(245, 158, 11, 0.15); }
+}
+
+/* Skeleton loading placeholders */
+.skeleton-pulse {
+  background: linear-gradient(90deg, rgba(255 255 255 / 0.06) 25%, rgba(255 255 255 / 0.12) 50%, rgba(255 255 255 / 0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@core/auth/store'
 import { getToken } from '@core/api/client'
 import { Settings, Leaf, LogOut, ChevronDown } from 'lucide-vue-next'
@@ -13,9 +13,20 @@ const showSettings = ref(false)
 const showDropdown = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
 
-onMounted(async () => {
-  if (getToken()) {
-    await auth.checkAuth()
+// Optimistic auth: if token exists, assume authenticated immediately.
+// The background checkAuth() will redirect to login if the token is invalid.
+const hasToken = ref(!!getToken())
+
+// When auth finishes loading and user is null, token was invalid — show login
+watch(() => auth.loading, (loading) => {
+  if (!loading && !auth.isAuthenticated) {
+    hasToken.value = false
+  }
+})
+
+onMounted(() => {
+  if (hasToken.value) {
+    auth.checkAuth()
   }
   document.addEventListener('click', handleClickOutside)
 })
@@ -62,8 +73,8 @@ function goHome() {
     <!-- Animated background layer (includes base color) -->
     <BackgroundTheme />
 
-    <!-- Authenticated: nav + router-view -->
-    <template v-if="auth.isAuthenticated">
+    <!-- Authenticated (or optimistically assumed via token): nav + router-view -->
+    <template v-if="auth.isAuthenticated || (hasToken && auth.loading)">
       <nav class="fixed top-0 left-0 right-0 z-50 h-14 bg-surface-0/80 backdrop-blur-md border-b border-bdr flex items-center px-6">
         <button
           @click="goHome"
@@ -74,8 +85,8 @@ function goHome() {
         </button>
         <div class="flex-1" />
 
-        <!-- User dropdown -->
-        <div ref="dropdownRef" class="relative">
+        <!-- User dropdown (hidden during optimistic load before user data arrives) -->
+        <div v-if="auth.user" ref="dropdownRef" class="relative">
           <button
             @click="showDropdown = !showDropdown"
             class="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors hover:bg-surface-3/50"
@@ -118,8 +129,8 @@ function goHome() {
       </main>
     </template>
 
-    <!-- Not authenticated: login form -->
-    <template v-else-if="!auth.loading">
+    <!-- Not authenticated: login form (only after auth check completes or no token) -->
+    <template v-else-if="!auth.loading && !hasToken">
       <div class="min-h-screen flex items-center justify-center px-4">
         <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div class="w-[600px] h-[600px] rounded-full bg-accent/[0.03] blur-3xl" />
