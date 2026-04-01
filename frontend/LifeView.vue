@@ -2060,35 +2060,29 @@ async function endTherapistSession() {
     therapistMessages.value = []
     return
   }
-  therapistEndingSession.value = true
-  therapistError.value = null
 
-  try {
-    const apiMessages = therapistMessages.value.map(m => ({ role: m.role, content: m.content }))
-    const savedNote = await withCelebration(() =>
-      api.post<TherapistSessionNote>('/api/life/therapist/end-session', { messages: apiMessages })
-    )
-    therapistSessionActive.value = false
-    therapistMessages.value = []
-    clearCachedGreeting() // Next session gets a fresh context-aware greeting
+  // Capture messages before clearing UI — user doesn't wait for the save
+  const apiMessages = therapistMessages.value.map(m => ({ role: m.role, content: m.content }))
+  therapistSessionActive.value = false
+  therapistMessages.value = []
+  therapistEndingSession.value = false
+  clearCachedGreeting()
+  therapistView.value = 'chat'
+
+  // Fire celebration toast immediately
+  celebration.pushToast({ type: 'info', message: 'Session ended — saving notes...', duration: 3000 })
+
+  // Save in background — no blocking the user
+  withCelebration(() =>
+    api.post<TherapistSessionNote>('/api/life/therapist/end-session', { messages: apiMessages })
+  ).then(async (savedNote) => {
     await fetchTherapistStatus()
     await fetchTherapistNotes()
-
-    // Navigate to the saved note so the user can review it
     therapistCurrentNote.value = savedNote
-    therapistEditingNote.value = false
-    therapistView.value = 'note-detail'
-    therapistSuccess.value = 'Session saved!'
-    setTimeout(() => { therapistSuccess.value = null }, 3000)
-  } catch (e) {
-    if (e instanceof ApiError) {
-      therapistError.value = (e.body as Record<string, string>).detail ?? 'Failed to save session.'
-    } else {
-      therapistError.value = 'Network error'
-    }
-  } finally {
-    therapistEndingSession.value = false
-  }
+    celebration.pushToast({ type: 'challenge', message: 'Session notes saved!', duration: 3000 })
+  }).catch(() => {
+    celebration.pushToast({ type: 'info', message: 'Failed to save session notes', duration: 4000 })
+  })
 }
 
 async function viewTherapistNote(note: TherapistSessionNote) {
