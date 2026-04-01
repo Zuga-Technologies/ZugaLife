@@ -449,6 +449,8 @@ const levelNames: Record<number, string> = {
    BADGE MODAL SPECIFICS
    ================================================================ */
 .cel-badge-icon {
+  display: flex;
+  justify-content: center;
   font-size: 3.5rem;
   margin-bottom: 0.75rem;
   animation: badge-bounce 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
