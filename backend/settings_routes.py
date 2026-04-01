@@ -84,3 +84,38 @@ async def update_settings(
         await session.refresh(settings)
 
     return LifeSettingsResponse.model_validate(settings)
+
+
+# ── Studio Onboarding ────────────────────────────────────────────
+
+
+@router.get("/onboarding")
+async def get_life_onboarding(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Check if the user has completed ZugaLife studio onboarding."""
+    async with get_session() as session:
+        settings = await _get_or_create_settings(session, user.id)
+        return {"completed": bool(settings.onboarding_completed)}
+
+
+@router.post("/onboarding/complete")
+async def complete_life_onboarding(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Mark ZugaLife studio onboarding as completed."""
+    async with get_session() as session:
+        settings = await _get_or_create_settings(session, user.id)
+        settings.onboarding_completed = True
+    return {"status": "ok"}
+
+
+@router.post("/onboarding/reset")
+async def reset_life_onboarding(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Reset ZugaLife studio onboarding so the user can replay it."""
+    async with get_session() as session:
+        settings = await _get_or_create_settings(session, user.id)
+        settings.onboarding_completed = False
+    return {"status": "ok"}

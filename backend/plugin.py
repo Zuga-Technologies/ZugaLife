@@ -190,6 +190,8 @@ class ZugaLifePlugin(StudioPlugin):
                 "ALTER TABLE life_daily_challenges ADD COLUMN completion_source VARCHAR(50)",
                 # Gamification: prestige system
                 "ALTER TABLE life_user_xp ADD COLUMN prestige_level INTEGER DEFAULT 0",
+                # Onboarding state
+                "ALTER TABLE life_user_settings ADD COLUMN onboarding_completed BOOLEAN DEFAULT FALSE",
             ]
             for sql in migrations:
                 try:

@@ -14,7 +14,9 @@ import SettingsPanel from './SettingsPanel.vue'
 import BackgroundTheme from './BackgroundTheme.vue'
 import AnalyticsDashboard from './AnalyticsDashboard.vue'
 import CelebrationOverlay from './components/CelebrationOverlay.vue'
+import LifeOnboarding from './components/LifeOnboarding.vue'
 import { useCelebration } from './composables/useCelebration'
+import { useOnboardingStore } from '@zugaapp/stores/onboarding'
 import { playXpSound, playBadgeSound, playLevelUpSound, playStreakSound, playPrestigeSound } from './composables/useCelebrationSounds'
 
 const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
@@ -28,6 +30,9 @@ function costToTokens(usd: number): number {
 
 // --- Settings ---
 const showSettings = ref(false)
+
+// --- Onboarding ---
+const onboarding = useOnboardingStore()
 
 // --- Celebration System ---
 const celebration = useCelebration()
@@ -2126,6 +2131,9 @@ onMounted(() => {
     .finally(() => { loadingTherapist.value = false })
 
   // Greeting fetched on-demand in startTherapistSession() — don't block page load
+
+  // Check studio onboarding state
+  onboarding.checkLifeOnboarding()
 })
 
 onUnmounted(() => {
@@ -2139,6 +2147,8 @@ onUnmounted(() => {
     <BackgroundTheme />
     <!-- Celebration overlay (toasts, confetti, modals) -->
     <CelebrationOverlay />
+    <!-- Studio onboarding (first visit only) -->
+    <LifeOnboarding v-if="onboarding.showLifeOnboarding" @complete="onboarding.completeLifeOnboarding()" />
 
     <div
       class="relative z-10 mx-auto py-10 animate-fade-in"
