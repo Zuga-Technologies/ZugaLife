@@ -1933,11 +1933,37 @@ async function fetchTherapistStatus() {
   }
 }
 
+const GREETING_CACHE_KEY = 'zugalife_therapist_greeting'
+
+function getCachedGreeting(): string | null {
+  try {
+    const raw = localStorage.getItem(GREETING_CACHE_KEY)
+    if (!raw) return null
+    const cached = JSON.parse(raw)
+    // Expire after 12 hours — stale context is worse than a new AI call
+    if (Date.now() - cached.ts > 12 * 60 * 60 * 1000) {
+      localStorage.removeItem(GREETING_CACHE_KEY)
+      return null
+    }
+    return cached.greeting
+  } catch {
+    return null
+  }
+}
+
+function cacheGreeting(greeting: string) {
+  localStorage.setItem(GREETING_CACHE_KEY, JSON.stringify({ greeting, ts: Date.now() }))
+}
+
+function clearCachedGreeting() {
+  localStorage.removeItem(GREETING_CACHE_KEY)
+}
+
 async function fetchTherapistGreeting() {
   try {
     const res = await api.get<{ greeting: string; is_first_session: boolean; disclaimer: string }>('/api/life/therapist/greeting')
     therapistGreeting.value = res.greeting
-    // disclaimer is hardcoded in frontend — no need to fetch
+    cacheGreeting(res.greeting)
   } catch {
     therapistGreeting.value = ''
   }
@@ -1957,8 +1983,13 @@ async function startTherapistSession() {
   therapistMessagesRemaining.value = 20
   therapistSending.value = true
 
-  // Always fetch a fresh greeting — context changes between sessions
-  await fetchTherapistGreeting()
+  // Reuse cached greeting if available, otherwise fetch (costs tokens)
+  const cached = getCachedGreeting()
+  if (cached) {
+    therapistGreeting.value = cached
+  } else {
+    await fetchTherapistGreeting()
+  }
   if (therapistGreeting.value) {
     therapistMessages.value.push({ role: 'assistant', content: therapistGreeting.value })
   }
@@ -2039,6 +2070,7 @@ async function endTherapistSession() {
     )
     therapistSessionActive.value = false
     therapistMessages.value = []
+    clearCachedGreeting() // Next session gets a fresh context-aware greeting
     await fetchTherapistStatus()
     await fetchTherapistNotes()
 
