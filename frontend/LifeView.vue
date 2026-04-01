@@ -1957,14 +1957,27 @@ async function startTherapistSession() {
   therapistMessagesRemaining.value = 20
   therapistSending.value = true
 
-  // Fetch greeting on demand if not already loaded
-  if (!therapistGreeting.value) {
-    await fetchTherapistGreeting()
-  }
+  // Always fetch a fresh greeting — context changes between sessions
+  await fetchTherapistGreeting()
   if (therapistGreeting.value) {
     therapistMessages.value.push({ role: 'assistant', content: therapistGreeting.value })
   }
   therapistSending.value = false
+}
+
+const therapistRegeneratingGreeting = ref(false)
+
+async function regenerateTherapistGreeting() {
+  if (therapistRegeneratingGreeting.value) return
+  therapistRegeneratingGreeting.value = true
+  try {
+    await fetchTherapistGreeting()
+    if (therapistGreeting.value && therapistMessages.value.length > 0 && therapistMessages.value[0].role === 'assistant') {
+      therapistMessages.value[0].content = therapistGreeting.value
+    }
+  } finally {
+    therapistRegeneratingGreeting.value = false
+  }
 }
 
 async function sendTherapistMessage() {
@@ -2027,7 +2040,6 @@ async function endTherapistSession() {
     therapistSessionActive.value = false
     therapistMessages.value = []
     await fetchTherapistStatus()
-    await fetchTherapistGreeting()
     await fetchTherapistNotes()
 
     // Navigate to the saved note so the user can review it
@@ -3912,6 +3924,17 @@ onUnmounted(() => {
                 >
                   <p v-for="(para, j) in msg.content.split('\n\n')" :key="j" :class="j > 0 ? 'mt-2' : ''" v-html="renderMarkdown(para)">
                   </p>
+                  <!-- Regenerate greeting button — only on the first assistant message before user replies -->
+                  <button
+                    v-if="i === 0 && msg.role === 'assistant' && therapistMessages.length <= 1"
+                    @click="regenerateTherapistGreeting()"
+                    :disabled="therapistRegeneratingGreeting"
+                    class="mt-2 flex items-center gap-1 text-xs text-txt-secondary hover:text-accent transition-colors disabled:opacity-40"
+                    title="Regenerate greeting"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="therapistRegeneratingGreeting ? 'animate-spin' : ''"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                    {{ therapistRegeneratingGreeting ? 'Regenerating...' : 'Regenerate' }}
+                  </button>
                 </div>
               </div>
 
