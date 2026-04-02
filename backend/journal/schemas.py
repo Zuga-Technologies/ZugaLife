@@ -2,13 +2,19 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+
+JOURNAL_TAGS = [
+    "Work", "Social", "Exercise", "Family", "Creative",
+    "Rest", "Travel", "Health", "Learning", "Relationship",
+]
 
 class JournalCreateRequest(BaseModel):
     title: str | None = Field(None, max_length=200)
     content: str = Field(..., min_length=1, max_length=50000)
     mood_emoji: str | None = Field(None, max_length=32)
+    tags: list[str] | None = Field(None, max_length=10)
 
 
 class JournalReflectionResponse(BaseModel):
@@ -30,9 +36,19 @@ class JournalEntryResponse(BaseModel):
     content: str
     mood_emoji: str | None
     mood_label: str | None
+    tags: list[str] = []
     reflections: list[JournalReflectionResponse]
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def parse_tags(cls, v: str | list | None) -> list[str]:
+        if not v:
+            return []
+        if isinstance(v, str):
+            return [t.strip() for t in v.split(",") if t.strip()]
+        return v
 
 
 class JournalEntryBrief(BaseModel):
@@ -44,6 +60,7 @@ class JournalEntryBrief(BaseModel):
     content_preview: str  # first 200 chars
     mood_emoji: str | None
     mood_label: str | None
+    tags: list[str]
     reflection_count: int
     created_at: datetime
 

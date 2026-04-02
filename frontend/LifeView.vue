@@ -467,6 +467,7 @@ interface JournalEntryBrief {
   content_preview: string
   mood_emoji: string | null
   mood_label: string | null
+  tags: string[]
   reflection_count: number
   created_at: string
 }
@@ -478,6 +479,7 @@ interface JournalEntryFull {
   content: string
   mood_emoji: string | null
   mood_label: string | null
+  tags: string[]
   reflections: JournalReflection[]
   created_at: string
   updated_at: string
@@ -503,7 +505,85 @@ const loadingJournal = ref(true)
 const composeTitle = ref('')
 const composeContent = ref('')
 const composeMood = ref<string | null>(null)
+const composeTags = ref<string[]>([])
 const journalSubmitting = ref(false)
+
+const JOURNAL_TAGS = ['Work', 'Social', 'Exercise', 'Family', 'Creative', 'Rest', 'Travel', 'Health', 'Learning', 'Relationship']
+
+const JOURNAL_PROMPTS = [
+  'What challenged you today, and how did you handle it?',
+  'What are you grateful for right now?',
+  'What did you learn today that surprised you?',
+  'What\'s been on your mind that you haven\'t said out loud?',
+  'Describe a moment today that made you feel something.',
+  'What would you do differently if you could redo today?',
+  'What\'s one thing you\'re avoiding, and why?',
+  'Write about someone who impacted your day.',
+  'What does your ideal tomorrow look like?',
+  'What pattern have you noticed in yourself lately?',
+]
+
+// Rotate prompts by day so user sees different ones
+const todayPrompts = computed(() => {
+  const dayIndex = Math.floor(Date.now() / 86400000)
+  const shuffled = [...JOURNAL_PROMPTS].sort((a, b) => {
+    const ha = (dayIndex * 2654435761 + a.length) % 1000
+    const hb = (dayIndex * 2654435761 + b.length) % 1000
+    return ha - hb
+  })
+  return shuffled.slice(0, 3)
+})
+
+function usePrompt(prompt: string) {
+  composeContent.value = `**${prompt}**\n\n`
+}
+
+function toggleComposeTag(tag: string) {
+  const idx = composeTags.value.indexOf(tag)
+  if (idx >= 0) composeTags.value.splice(idx, 1)
+  else composeTags.value.push(tag)
+}
+
+// Simple markdown toolbar actions
+function insertFormat(type: 'bold' | 'italic' | 'heading' | 'list') {
+  const textarea = document.querySelector<HTMLTextAreaElement>('.journal-textarea')
+  if (!textarea) return
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  const text = composeContent.value
+  const selected = text.substring(start, end)
+
+  let replacement: string
+  let cursorOffset: number
+
+  switch (type) {
+    case 'bold':
+      replacement = selected ? `**${selected}**` : '**bold text**'
+      cursorOffset = selected ? replacement.length : 2
+      break
+    case 'italic':
+      replacement = selected ? `*${selected}*` : '*italic text*'
+      cursorOffset = selected ? replacement.length : 1
+      break
+    case 'heading':
+      replacement = selected ? `## ${selected}` : '## Heading'
+      cursorOffset = replacement.length
+      break
+    case 'list':
+      replacement = selected
+        ? selected.split('\n').map(l => `- ${l}`).join('\n')
+        : '- Item'
+      cursorOffset = replacement.length
+      break
+  }
+
+  composeContent.value = text.substring(0, start) + replacement + text.substring(end)
+  nextTick(() => {
+    textarea.focus()
+    const pos = start + cursorOffset
+    textarea.setSelectionRange(pos, pos)
+  })
+}
 
 const currentEntry = ref<JournalEntryFull | null>(null)
 const loadingDetail = ref(false)
@@ -519,6 +599,18 @@ const composeMoodLabel = computed(() => {
   if (!composeMood.value) return null
   return moods.find(m => m.emoji === composeMood.value)?.label ?? null
 })
+
+function renderMarkdown(text: string): string {
+  // Lightweight markdown → HTML for journal entries (no dependency)
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')  // escape HTML
+    .replace(/^## (.+)$/gm, '<h3 class="text-base font-semibold text-txt-primary mt-4 mb-1">$1</h3>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-sm text-txt-secondary">$1</li>')
+    .replace(/(<li[^>]*>.*<\/li>\n?)+/g, (m) => `<ul class="my-2">${m}</ul>`)
+    .replace(/\n/g, '<br>')
+}
 
 const groupedJournalEntries = computed(() => {
   const groups: { label: string; entries: JournalEntryBrief[] }[] = []
@@ -546,6 +638,7 @@ function goToCompose() {
   composeTitle.value = ''
   composeContent.value = ''
   composeMood.value = null
+  composeTags.value = []
   journalError.value = null
   journalView.value = 'compose'
 }
@@ -597,6 +690,7 @@ async function saveEntry() {
         title: composeTitle.value.trim() || null,
         content: composeContent.value.trim(),
         mood_emoji: composeMood.value,
+        tags: composeTags.value.length ? composeTags.value : null,
       })
     )
     journalSuccess.value = 'Journal entry saved!'
@@ -4179,8 +4273,9 @@ onUnmounted(() => {
                     <span class="text-xs text-txt-muted flex-shrink-0">{{ timeAgo(entry.created_at) }}</span>
                   </div>
                   <p v-if="entry.title" class="text-sm text-txt-secondary mt-0.5 truncate">{{ entry.content_preview }}</p>
-                  <div v-if="entry.reflection_count > 0" class="flex items-center gap-1 mt-1">
-                    <span class="text-xs text-accent">{{ entry.reflection_count }} reflection{{ entry.reflection_count > 1 ? 's' : '' }}</span>
+                  <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                    <span v-for="tag in (entry.tags || [])" :key="tag" class="px-1.5 py-0.5 text-[10px] rounded-full bg-surface-3 text-txt-muted">{{ tag }}</span>
+                    <span v-if="entry.reflection_count > 0" class="text-xs text-accent">{{ entry.reflection_count }} reflection{{ entry.reflection_count > 1 ? 's' : '' }}</span>
                   </div>
                 </div>
               </button>
@@ -4194,10 +4289,62 @@ onUnmounted(() => {
           <button @click="goToJournalList" class="text-txt-muted hover:text-txt-primary transition-colors text-sm mb-2">&larr;</button>
           <h2 class="text-xl font-bold text-txt-primary">New Entry</h2>
         </div>
+
+        <!-- Writing prompts (shown when content is empty) -->
+        <div v-if="!composeContent.trim()" class="mb-4 space-y-2">
+          <p class="text-xs text-txt-muted uppercase tracking-wider">Need a starting point?</p>
+          <button
+            v-for="prompt in todayPrompts"
+            :key="prompt"
+            @click="usePrompt(prompt)"
+            class="w-full text-left px-4 py-3 rounded-xl bg-surface-2/50 border border-bdr/50 text-sm text-txt-secondary hover:text-txt-primary hover:border-accent/30 hover:bg-surface-2 transition-all"
+          >
+            {{ prompt }}
+          </button>
+        </div>
+
         <div class="glass-card p-6 space-y-4">
           <input v-model="composeTitle" type="text" placeholder="Title (optional)" maxlength="200" class="input-field text-lg font-medium" />
-          <textarea v-model="composeContent" placeholder="What's on your mind?" maxlength="50000" rows="10" class="input-field resize-none text-sm leading-relaxed" />
-          <p v-if="contentLength > 0" class="text-right text-xs" :class="contentLength > 45000 ? 'text-amber-400' : 'text-txt-muted'">{{ contentLength.toLocaleString() }}/50,000</p>
+
+          <!-- Formatting toolbar -->
+          <div class="flex items-center gap-1 border-b border-bdr/50 pb-2">
+            <button @click="insertFormat('bold')" class="px-2 py-1 text-xs font-bold text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Bold (Ctrl+B)">B</button>
+            <button @click="insertFormat('italic')" class="px-2 py-1 text-xs italic text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Italic (Ctrl+I)">I</button>
+            <button @click="insertFormat('heading')" class="px-2 py-1 text-xs font-semibold text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Heading">H</button>
+            <button @click="insertFormat('list')" class="px-2 py-1 text-xs text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="List">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+            </button>
+            <span class="flex-1" />
+            <span v-if="contentLength > 0" class="text-xs" :class="contentLength > 45000 ? 'text-amber-400' : 'text-txt-muted'">{{ contentLength.toLocaleString() }}</span>
+          </div>
+
+          <textarea
+            v-model="composeContent"
+            placeholder="What's on your mind?"
+            maxlength="50000"
+            rows="12"
+            class="journal-textarea input-field resize-none text-sm leading-relaxed font-mono"
+          />
+
+          <!-- Activity tags -->
+          <div>
+            <p class="text-xs text-txt-muted mb-2">Tag this entry (optional)</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="tag in JOURNAL_TAGS"
+                :key="tag"
+                @click="toggleComposeTag(tag)"
+                class="px-2.5 py-1 text-xs rounded-full border transition-all duration-150"
+                :class="composeTags.includes(tag)
+                  ? 'bg-accent/15 border-accent/40 text-accent font-medium'
+                  : 'border-bdr/50 text-txt-muted hover:border-bdr-hover hover:text-txt-secondary'"
+              >
+                {{ tag }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Mood picker -->
           <div>
             <p class="text-xs text-txt-muted mb-2">How are you feeling? (optional)</p>
             <div class="flex flex-wrap gap-1.5">
@@ -4214,6 +4361,7 @@ onUnmounted(() => {
             </div>
             <p v-if="composeMoodLabel" class="text-xs text-accent mt-1.5 animate-fade-in">{{ composeMoodLabel }}</p>
           </div>
+
           <p v-if="journalError" class="text-sm text-red-400">{{ journalError }}</p>
           <button @click="saveEntry" :disabled="!composeContent.trim() || journalSubmitting" class="btn-primary w-full">
             <span v-if="journalSubmitting" class="inline-flex items-center gap-2">
@@ -4263,7 +4411,16 @@ onUnmounted(() => {
                 <button @click="deleteEntry" class="text-xs text-txt-muted hover:text-red-400 transition-colors px-2 py-1">Delete</button>
               </div>
             </div>
-            <p class="text-sm text-txt-secondary leading-relaxed whitespace-pre-wrap">{{ currentEntry.content }}</p>
+            <!-- Tags -->
+            <div v-if="currentEntry.tags?.length" class="flex flex-wrap gap-1.5 mb-4">
+              <span
+                v-for="tag in currentEntry.tags"
+                :key="tag"
+                class="px-2 py-0.5 text-[11px] rounded-full bg-accent/10 text-accent font-medium"
+              >{{ tag }}</span>
+            </div>
+            <!-- Content rendered with basic markdown -->
+            <div class="text-sm text-txt-secondary leading-relaxed journal-content" v-html="renderMarkdown(currentEntry.content)" />
           </div>
           <div class="mb-6">
             <h3 class="text-sm font-semibold text-txt-primary mb-3">

@@ -17,6 +17,7 @@ class JournalEntry(Base, TimestampMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     mood_emoji: Mapped[str | None] = mapped_column(String(32), nullable=True)
     mood_label: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    tags: Mapped[str | None] = mapped_column(String(500), nullable=True)  # comma-separated
 
     reflections: Mapped[list["JournalReflection"]] = relationship(
         back_populates="entry",

@@ -96,6 +96,7 @@ async def create_journal_entry(
             content=body.content,
             mood_emoji=body.mood_emoji,
             mood_label=mood_label,
+            tags=",".join(body.tags) if body.tags else None,
         )
         session.add(entry)
         await session.flush()
@@ -163,6 +164,7 @@ async def list_journal_entries(
                 content_preview=e.content[:200],
                 mood_emoji=e.mood_emoji,
                 mood_label=e.mood_label,
+                tags=[t.strip() for t in e.tags.split(",") if t.strip()] if e.tags else [],
                 reflection_count=len(e.reflections),
                 created_at=e.created_at,
             )
