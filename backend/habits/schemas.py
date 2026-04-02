@@ -21,6 +21,7 @@ class HabitCreateRequest(BaseModel):
     emoji: str = Field(..., min_length=1, max_length=32)
     unit: str | None = Field(None, max_length=20)
     default_target: float | None = Field(None, gt=0)
+    trigger: str | None = Field(None, max_length=200)
 
 
 class HabitUpdateRequest(BaseModel):
@@ -29,6 +30,7 @@ class HabitUpdateRequest(BaseModel):
     is_active: bool | None = None
     sort_order: int | None = Field(None, ge=0)
     weekly_target: int | None = Field(None, ge=1, le=7)
+    trigger: str | None = Field(None, max_length=200)
 
 
 class HabitLogRequest(BaseModel):
@@ -53,6 +55,7 @@ class HabitDefinitionResponse(BaseModel):
     is_active: bool
     sort_order: int
     weekly_target: int | None
+    trigger: str | None
     created_at: datetime
 
 

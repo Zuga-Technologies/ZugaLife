@@ -401,6 +401,13 @@ function finish(tab?: string) {
             Next <ArrowRight :size="14" />
           </button>
           <button
+            v-else-if="currentStep === 1 && moodLogged"
+            @click="next"
+            class="flex items-center gap-1 text-sm font-medium text-accent hover:text-accent/80 transition-colors"
+          >
+            Next <ArrowRight :size="14" />
+          </button>
+          <button
             v-else-if="currentStep > 1 && currentStep < TOTAL_STEPS - 1"
             @click="next"
             class="flex items-center gap-1 text-sm font-medium text-accent hover:text-accent/80 transition-colors"

@@ -159,6 +159,7 @@ async def create_habit(
             is_preset=False,
             is_active=True,
             sort_order=next_order,
+            trigger=body.trigger or None,
         )
         session.add(habit)
         await session.flush()
@@ -268,6 +269,8 @@ async def update_habit(
         # weekly_target: distinguish "not sent" vs "sent as null" (to clear)
         if "weekly_target" in body.model_fields_set:
             habit.weekly_target = body.weekly_target
+        if "trigger" in body.model_fields_set:
+            habit.trigger = body.trigger
 
         await session.flush()
         await session.refresh(habit)

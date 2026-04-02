@@ -770,6 +770,7 @@ const newHabitName = ref('')
 const newHabitIcon = ref('')  // Stores a Lucide icon name (e.g. 'dumbbell')
 const newHabitUnit = ref('')
 const newHabitTarget = ref<number | null>(null)
+const newHabitTrigger = ref('')
 const showNewHabitForm = ref(false)
 const showMoreIcons = ref(false)
 
@@ -878,11 +879,13 @@ async function createCustomHabit() {
       emoji: newHabitIcon.value,
       unit: newHabitUnit.value.trim() || null,
       default_target: newHabitTarget.value || null,
+      trigger: newHabitTrigger.value.trim() || null,
     })
     newHabitName.value = ''
     newHabitIcon.value = ''
     newHabitUnit.value = ''
     newHabitTarget.value = null
+    newHabitTrigger.value = ''
     showNewHabitForm.value = false
     habitSuccess.value = 'Habit created!'
     setTimeout(() => { habitSuccess.value = null }, 2000)
@@ -2869,6 +2872,7 @@ onUnmounted(() => {
               <CircleDot v-else :size="22" class="flex-shrink-0 text-accent" />
               <div class="flex-1 min-w-0">
                 <span class="text-sm font-medium text-txt-primary">{{ item.habit.name }}</span>
+                <p v-if="item.habit.trigger" class="text-[11px] text-txt-muted leading-tight mt-0.5">After {{ item.habit.trigger }}</p>
               </div>
               <div v-if="item.habit.unit" class="flex items-center gap-1.5">
                 <input
@@ -3054,6 +3058,14 @@ onUnmounted(() => {
               class="input-field w-24 text-sm"
             />
           </div>
+          <!-- Implementation intention trigger -->
+          <input
+            v-model="newHabitTrigger"
+            type="text"
+            placeholder="I'll do this after... (e.g. morning coffee)"
+            maxlength="200"
+            class="input-field text-sm"
+          />
           <button
             @click="createCustomHabit"
             :disabled="!newHabitName.trim() || !newHabitIcon || habitSubmitting"
