@@ -19,6 +19,7 @@ class MeditationType(str, Enum):
 
 
 class MeditationLength(str, Enum):
+    quick = "quick"    # ~1-3 min (quick reset)
     short = "short"    # ~3-5 min
     medium = "medium"  # ~7-10 min
     long = "long"      # ~12+ min

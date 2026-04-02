@@ -1529,6 +1529,7 @@ const ambienceOptions = [
 ]
 
 const lengthOptions = [
+  { key: 'quick', label: 'Quick' },
   { key: 'short', label: 'Short' },
   { key: 'medium', label: 'Medium' },
   { key: 'long', label: 'Long' },

@@ -222,9 +222,9 @@ async def _generate_in_background(
         raw_script = script_response.content.strip()
         title, transcript = _parse_script(raw_script)
 
-        # 3. TTS — prefer Cartesia when configured (better voice quality for meditation)
-        tts_text = _prepare_tts_text(transcript)
-        print(f"[MEDITATION] {session_id} TTS starting, {len(tts_text)} chars", flush=True)
+        # 3. TTS — split on pause markers, render segments, inject real silence
+        segments = _split_on_pauses(transcript)
+        print(f"[MEDITATION] {session_id} TTS starting, {len(segments)} segments", flush=True)
 
         try:
             from app.config import settings as _settings
@@ -235,26 +235,49 @@ async def _generate_in_background(
         except ImportError:
             _use_cartesia = False
 
-        if _use_cartesia:
-            cartesia_voice_id = CARTESIA_VOICE_MAP.get(body.voice.value, CARTESIA_VOICE_MAP["serene"])
-            print(f"[MEDITATION] {session_id} TTS provider=cartesia voice={body.voice.value} id={cartesia_voice_id[:8]}", flush=True)
-            tts_result = await call_cartesia_tts(
-                text=tts_text,
-                voice_id=cartesia_voice_id,
-                speed=0.75,
-                emotion="calm",
-            )
-        else:
-            openai_voice = OPENAI_VOICE_MAP.get(body.voice.value, "shimmer")
-            print(f"[MEDITATION] {session_id} TTS provider=openai voice={openai_voice}", flush=True)
-            tts_result = await call_openai_tts(
-                text=tts_text,
-                voice=openai_voice,
-                speed=0.9,
-            )
+        # Render each segment and stitch with silence
+        all_audio = bytearray()
+        tts_cost = 0.0
+        tts_provider = "cartesia" if _use_cartesia else "openai"
 
-        total_cost += tts_result.cost
-        print(f"[MEDITATION] {session_id} TTS done, {len(tts_result.audio_bytes)} bytes", flush=True)
+        for i, (seg_text, silence_secs) in enumerate(segments):
+            if not seg_text.strip():
+                if silence_secs > 0:
+                    all_audio.extend(_generate_silence_mp3(silence_secs))
+                continue
+
+            print(f"[MEDITATION] {session_id} segment {i+1}/{len(segments)}, {len(seg_text)} chars, {silence_secs}s pause after", flush=True)
+
+            if _use_cartesia:
+                cartesia_voice_id = CARTESIA_VOICE_MAP.get(body.voice.value, CARTESIA_VOICE_MAP["serene"])
+                tts_result = await call_cartesia_tts(
+                    text=seg_text,
+                    voice_id=cartesia_voice_id,
+                    speed=0.75,
+                    emotion="calm",
+                )
+            else:
+                openai_voice = OPENAI_VOICE_MAP.get(body.voice.value, "shimmer")
+                tts_result = await call_openai_tts(
+                    text=seg_text,
+                    voice=openai_voice,
+                    speed=0.9,
+                )
+
+            all_audio.extend(tts_result.audio_bytes)
+            tts_cost += tts_result.cost
+
+            # Inject real silence after this segment
+            if silence_secs > 0:
+                all_audio.extend(_generate_silence_mp3(silence_secs))
+
+        total_cost += tts_cost
+        # Package as a single TTSResponse-like object for downstream code
+        class _AudioResult:
+            audio_bytes = bytes(all_audio)
+            cost = tts_cost
+        tts_result = _AudioResult()
+        print(f"[MEDITATION] {session_id} TTS done, {len(tts_result.audio_bytes)} bytes, provider={tts_provider}", flush=True)
 
         actual_seconds = int(_mp3_duration_seconds(tts_result.audio_bytes))
 
@@ -605,32 +628,89 @@ def _mp3_duration_seconds(data: bytes) -> float:
 
 
 def _prepare_tts_text(transcript: str) -> str:
-    """Replace pause markers and fix formatting for natural TTS pacing.
+    """Clean transcript text for TTS — converts digits to words.
 
-    OpenAI TTS doesn't support SSML, but it respects punctuation and
-    line breaks for pacing. We use heavy punctuation to create real
-    silences — multiple paragraph breaks produce noticeable gaps.
-    Also converts bare digits to words for proper TTS pronunciation.
+    Pause markers are handled separately by _split_on_pauses() which
+    splits the transcript into segments with silence durations between them.
     """
     import re
 
-    # Convert bare digits to words (e.g. "1" -> "one")
     _DIGIT_WORDS = {
         "1": "one", "2": "two", "3": "three", "4": "four", "5": "five",
         "6": "six", "7": "seven", "8": "eight", "9": "nine", "10": "ten",
     }
     text = transcript
     for digit, word in _DIGIT_WORDS.items():
-        # Match digit surrounded by word boundaries (not inside larger numbers)
         text = re.sub(rf"\b{digit}\b", word, text)
 
-    # [PAUSE 5s] -> heavy pause (triple ellipsis with double paragraph break)
-    text = re.sub(r"\[PAUSE\s*5s?\]", " ...\n\n...\n\n... ", text)
-    # [PAUSE 3s] -> medium pause (double ellipsis with paragraph break)
-    text = re.sub(r"\[PAUSE\s*3s?\]", " ...\n\n... ", text)
-    # Catch any other pause markers
-    text = re.sub(r"\[PAUSE\s*\d+s?\]", " ...\n\n... ", text)
+    # Strip pause markers (they're handled by _split_on_pauses)
+    text = re.sub(r"\[PAUSE\s*\d+s?\]", " ... ", text)
     return text
+
+
+def _split_on_pauses(transcript: str) -> list[tuple[str, int]]:
+    """Split transcript into (text_segment, silence_after_seconds) pairs.
+
+    Returns segments of text with the number of seconds of silence
+    to insert after each segment. Last segment has 0 silence.
+    """
+    import re
+
+    _DIGIT_WORDS = {
+        "1": "one", "2": "two", "3": "three", "4": "four", "5": "five",
+        "6": "six", "7": "seven", "8": "eight", "9": "nine", "10": "ten",
+    }
+
+    # Find all pause markers and their positions
+    pattern = re.compile(r"\[PAUSE\s*(\d+)s?\]")
+    segments: list[tuple[str, int]] = []
+    last_end = 0
+
+    for match in pattern.finditer(transcript):
+        text_chunk = transcript[last_end:match.start()].strip()
+        silence_secs = int(match.group(1))
+        if text_chunk:
+            # Convert digits in this chunk
+            for digit, word in _DIGIT_WORDS.items():
+                text_chunk = re.sub(rf"\b{digit}\b", word, text_chunk)
+            segments.append((text_chunk, silence_secs))
+        last_end = match.end()
+
+    # Remainder after last pause marker
+    remainder = transcript[last_end:].strip()
+    if remainder:
+        for digit, word in _DIGIT_WORDS.items():
+            remainder = re.sub(rf"\b{digit}\b", word, remainder)
+        segments.append((remainder, 0))
+
+    # If no pause markers found, return the whole thing
+    if not segments:
+        text = transcript
+        for digit, word in _DIGIT_WORDS.items():
+            text = re.sub(rf"\b{digit}\b", word, text)
+        segments.append((text, 0))
+
+    return segments
+
+
+def _generate_silence_mp3(seconds: float, bitrate: int = 128000) -> bytes:
+    """Generate silent MP3 frames for the given duration.
+
+    Creates a valid MP3 byte sequence of silence by repeating a minimal
+    silent MPEG1 Layer III frame. Each frame is 417 bytes at 128kbps/44100Hz
+    and lasts ~26.1ms (1152 samples / 44100 Hz).
+    """
+    # Minimal valid silent MP3 frame (MPEG1, Layer III, 128kbps, 44100Hz, stereo)
+    # Frame header: 0xFFFB9004 + 413 zero bytes = silent frame
+    frame_header = bytes([
+        0xFF, 0xFB, 0x90, 0x04,  # MPEG1, Layer III, 128kbps, 44100Hz, stereo
+    ])
+    frame_data = b'\x00' * 413  # Silent audio data to fill frame (417 total)
+    silent_frame = frame_header + frame_data
+
+    # Each frame = 1152 samples at 44100Hz = 26.122ms
+    frames_needed = int(seconds * 44100 / 1152) + 1
+    return silent_frame * frames_needed
 
 
 async def _gather_mood_context(user_id: str) -> str | None:

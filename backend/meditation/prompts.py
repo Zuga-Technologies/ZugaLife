@@ -29,12 +29,14 @@ _EMOJI_LABELS: dict[str, str] = {
 # to overshoot than undershoot since there's no retry loop.  Calibrated
 # against OpenAI TTS at speed 0.9 (~165 wpm effective rate).
 _WORD_TARGETS = {
+    "quick": 350,     # ~1-3 min (quick reset)
     "short": 900,     # ~4-6 min
     "medium": 1800,   # ~8-11 min
     "long": 3500,     # ~14-20 min (must be 12+ min)
 }
 
 _LENGTH_LABELS = {
+    "quick": "1 to 2 minutes",
     "short": "3 to 5 minutes",
     "medium": "8 to 10 minutes",
     "long": "15 to 20 minutes",
