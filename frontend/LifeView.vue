@@ -285,6 +285,20 @@ function navigateTo(tab: Tab) {
   activeTab.value = tab
 }
 
+function onLifeOnboardingComplete(recommendedTab?: string) {
+  onboarding.completeLifeOnboarding()
+  // Navigate to the recommended tab based on user's goal selection
+  const tabMap: Record<string, Tab> = {
+    mood: 'dashboard',
+    journal: 'journal',
+    habits: 'habits',
+    meditate: 'meditate',
+  }
+  if (recommendedTab && tabMap[recommendedTab]) {
+    activeTab.value = tabMap[recommendedTab]
+  }
+}
+
 function confirmTherapistLeave() {
   showTherapistLeaveWarning.value = false
   therapistSessionActive.value = false
@@ -2148,7 +2162,7 @@ onUnmounted(() => {
     <!-- Celebration overlay (toasts, confetti, modals) -->
     <CelebrationOverlay />
     <!-- Studio onboarding (first visit only) -->
-    <LifeOnboarding v-if="onboarding.showLifeOnboarding" @complete="onboarding.completeLifeOnboarding()" />
+    <LifeOnboarding v-if="onboarding.showLifeOnboarding" @complete="onLifeOnboardingComplete" />
 
     <div
       class="relative z-10 mx-auto py-10 animate-fade-in"
