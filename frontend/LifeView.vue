@@ -1463,6 +1463,85 @@ function isOverdue(deadline: string | null): boolean {
   return new Date(deadline + 'T23:59:59') < new Date()
 }
 
+function daysUntilDeadline(deadline: string | null): number | null {
+  if (!deadline) return null
+  const dl = new Date(deadline + 'T23:59:59')
+  return Math.ceil((dl.getTime() - Date.now()) / 86400000)
+}
+
+function deadlineLabel(deadline: string | null): string {
+  const days = daysUntilDeadline(deadline)
+  if (days === null) return ''
+  if (days < 0) return `${Math.abs(days)}d overdue`
+  if (days === 0) return 'Due today'
+  if (days === 1) return 'Due tomorrow'
+  if (days <= 7) return `${days}d left`
+  if (days <= 30) return `${Math.ceil(days / 7)}w left`
+  return `${Math.ceil(days / 30)}mo left`
+}
+
+function projectedCompletion(goal: Goal): string | null {
+  if (goal.milestone_count === 0 || goal.milestone_done === 0) return null
+  const created = new Date(goal.created_at).getTime()
+  const elapsed = Date.now() - created
+  const rate = goal.milestone_done / elapsed  // milestones per ms
+  const remaining = goal.milestone_count - goal.milestone_done
+  const msToComplete = remaining / rate
+  const projected = new Date(Date.now() + msToComplete)
+  return projected.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function paceStatus(goal: Goal): 'ahead' | 'behind' | 'on-track' | null {
+  if (!goal.deadline || goal.milestone_count === 0) return null
+  const created = new Date(goal.created_at).getTime()
+  const deadline = new Date(goal.deadline + 'T23:59:59').getTime()
+  const totalTime = deadline - created
+  const elapsed = Date.now() - created
+  if (totalTime <= 0) return null
+  const expectedPct = Math.min(100, (elapsed / totalTime) * 100)
+  const actualPct = goalMilestonePct(goal)
+  const diff = actualPct - expectedPct
+  if (diff >= 10) return 'ahead'
+  if (diff <= -10) return 'behind'
+  return 'on-track'
+}
+
+// AI goal insight
+const goalInsightLoading = ref<number | null>(null)
+const goalInsights = ref<Record<number, string>>({})
+
+async function fetchGoalInsight(goalId: number) {
+  if (goalInsightLoading.value) return
+  goalInsightLoading.value = goalId
+  try {
+    const res = await api.post<{ insight: string; cost: number }>(`/api/life/goals/${goalId}/insight`)
+    goalInsights.value[goalId] = res.insight
+  } catch {
+    goalInsights.value[goalId] = 'Could not generate insight right now.'
+  } finally {
+    goalInsightLoading.value = null
+  }
+}
+
+// Recommit to a goal
+async function recommitGoal(goalId: number) {
+  try {
+    await api.post(`/api/life/goals/${goalId}/recommit`, {})
+    await fetchGoals()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? 'Recommit failed'
+    }
+  }
+}
+
+// Active goal cap
+const MAX_ACTIVE_GOALS = 3
+const showBacklogGoals = ref(false)
+
+const priorityGoals = computed(() => activeGoals.value.slice(0, MAX_ACTIVE_GOALS))
+const backlogGoals = computed(() => activeGoals.value.slice(MAX_ACTIVE_GOALS))
+
 // ============================
 // MEDITATION
 // ============================
@@ -3331,10 +3410,10 @@ onUnmounted(() => {
           <p class="text-txt-muted text-sm">Pick a template above or create a custom goal.</p>
         </div>
 
-        <!-- Active goals -->
+        <!-- Active goals (capped at 3, rest in backlog) -->
         <div v-else class="space-y-3">
           <div
-            v-for="goal in activeGoals"
+            v-for="goal in priorityGoals"
             :key="goal.id"
             class="glass-card overflow-hidden animate-slide-up"
           >
@@ -3382,7 +3461,7 @@ onUnmounted(() => {
                 class="w-5 h-5 rounded-full border-2 border-bdr hover:border-accent flex-shrink-0 mt-0.5 transition-colors"
               />
               <div class="flex-1 min-w-0 cursor-pointer" @click="toggleGoalExpand(goal.id)">
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
                   <span class="text-sm font-medium text-txt-primary">{{ goal.title }}</span>
                   <button
                     @click.stop="startEditGoal(goal)"
@@ -3391,20 +3470,54 @@ onUnmounted(() => {
                   >
                     <Pencil :size="12" />
                   </button>
+                  <!-- Deadline countdown -->
                   <span
                     v-if="goal.deadline"
-                    class="text-xs px-1.5 py-0.5 rounded"
-                    :class="isOverdue(goal.deadline) ? 'bg-red-500/15 text-red-400' : 'bg-surface-3 text-txt-muted'"
+                    class="text-[11px] px-1.5 py-0.5 rounded font-medium"
+                    :class="isOverdue(goal.deadline)
+                      ? 'bg-red-500/15 text-red-400'
+                      : daysUntilDeadline(goal.deadline)! <= 7
+                        ? 'bg-amber-500/15 text-amber-400'
+                        : 'bg-surface-3 text-txt-muted'"
                   >
-                    {{ new Date(goal.deadline + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}
+                    {{ deadlineLabel(goal.deadline) }}
+                  </span>
+                  <!-- Pace status badge -->
+                  <span
+                    v-if="paceStatus(goal)"
+                    class="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+                    :class="{
+                      'bg-emerald-500/15 text-emerald-400': paceStatus(goal) === 'ahead',
+                      'bg-accent/15 text-accent': paceStatus(goal) === 'on-track',
+                      'bg-red-500/15 text-red-400': paceStatus(goal) === 'behind',
+                    }"
+                  >
+                    {{ paceStatus(goal) === 'ahead' ? 'AHEAD' : paceStatus(goal) === 'behind' ? 'BEHIND' : 'ON TRACK' }}
                   </span>
                 </div>
                 <p v-if="goal.description" class="text-xs text-txt-muted mt-1 line-clamp-2">{{ goal.description }}</p>
+
+                <!-- Overdue recommit banner -->
+                <div v-if="isOverdue(goal.deadline)" class="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2">
+                  <span class="text-xs text-red-400">Deadline passed.</span>
+                  <button
+                    @click.stop="recommitGoal(goal.id)"
+                    class="text-xs font-medium text-accent hover:text-accent/80 transition-colors"
+                  >
+                    Recommit (+30 days)
+                  </button>
+                </div>
+
                 <!-- Milestone progress bar -->
                 <div v-if="goal.milestone_count > 0" class="mt-2">
                   <div class="flex items-center justify-between mb-1">
                     <span class="text-xs text-txt-muted">{{ goal.milestone_done }}/{{ goal.milestone_count }} milestones</span>
-                    <span class="text-xs text-txt-muted">{{ goalMilestonePct(goal) }}%</span>
+                    <div class="flex items-center gap-2">
+                      <span v-if="projectedCompletion(goal)" class="text-[10px] text-txt-muted">
+                        Est. {{ projectedCompletion(goal) }}
+                      </span>
+                      <span class="text-xs text-txt-muted">{{ goalMilestonePct(goal) }}%</span>
+                    </div>
                   </div>
                   <div class="w-full bg-surface-3 rounded-full h-1.5">
                     <div
@@ -3538,13 +3651,57 @@ onUnmounted(() => {
                   Edit
                 </button>
                 <button
+                  @click="fetchGoalInsight(goal.id)"
+                  :disabled="goalInsightLoading === goal.id"
+                  class="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                >
+                  {{ goalInsightLoading === goal.id ? 'Analyzing...' : 'AI Insight' }}
+                </button>
+                <button
                   @click="deleteGoal(goal)"
                   class="text-xs text-txt-muted hover:text-red-400 transition-colors ml-auto"
                 >
                   Delete Goal
                 </button>
               </div>
+
+              <!-- AI Insight display -->
+              <div v-if="goalInsights[goal.id]" class="mt-2 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                <p class="text-xs text-txt-secondary leading-relaxed">{{ goalInsights[goal.id] }}</p>
+              </div>
             </div>
+          </div>
+
+          <!-- Backlog goals (beyond the active cap) -->
+          <div v-if="backlogGoals.length > 0" class="mt-4">
+            <button
+              @click="showBacklogGoals = !showBacklogGoals"
+              class="text-xs text-txt-muted hover:text-txt-primary transition-colors mb-2"
+            >
+              {{ showBacklogGoals ? 'Hide' : 'Show' }} {{ backlogGoals.length }} backlog goal{{ backlogGoals.length > 1 ? 's' : '' }}
+            </button>
+            <div v-if="showBacklogGoals" class="space-y-2 opacity-60">
+              <div
+                v-for="goal in backlogGoals"
+                :key="goal.id"
+                class="glass-card px-4 py-3 flex items-center gap-3"
+              >
+                <button
+                  @click="toggleGoalComplete(goal)"
+                  class="w-5 h-5 rounded-full border-2 border-bdr hover:border-accent flex-shrink-0"
+                />
+                <span class="text-sm text-txt-secondary flex-1">{{ goal.title }}</span>
+                <span v-if="goal.milestone_count > 0" class="text-xs text-txt-muted">{{ goal.milestone_done }}/{{ goal.milestone_count }}</span>
+                <span
+                  v-if="goal.deadline"
+                  class="text-[10px] px-1.5 py-0.5 rounded"
+                  :class="isOverdue(goal.deadline) ? 'bg-red-500/15 text-red-400' : 'bg-surface-3 text-txt-muted'"
+                >
+                  {{ deadlineLabel(goal.deadline) }}
+                </span>
+              </div>
+            </div>
+            <p class="text-[10px] text-txt-muted mt-1">Focus on your top 3 active goals. Complete one to promote a backlog goal.</p>
           </div>
 
           <!-- Completed goals -->

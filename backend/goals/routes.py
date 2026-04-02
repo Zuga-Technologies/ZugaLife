@@ -498,6 +498,123 @@ async def delete_milestone(
         await session.delete(milestone)
 
 
+# --- Recommit (missed deadline) ---
+
+
+from pydantic import BaseModel as _BaseModel
+
+class RecommitRequest(_BaseModel):
+    new_deadline: date | None = None
+
+
+@router.post("/{goal_id}/recommit", response_model=GoalResponse)
+async def recommit_goal(
+    goal_id: int,
+    body: RecommitRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Recommit to a goal — push deadline forward after missing it."""
+    async with get_session() as session:
+        goal = await _get_user_goal(session, goal_id, user.id)
+        if goal.is_completed:
+            raise HTTPException(status_code=400, detail="Goal is already completed")
+
+        if body.new_deadline:
+            goal.deadline = body.new_deadline
+        else:
+            # Default: push 30 days from today
+            goal.deadline = date.today() + timedelta(days=30)
+
+        await session.flush()
+        await session.refresh(goal)
+        return await _goal_to_response(session, goal, user.id)
+
+
+# --- AI Goal Insights ---
+
+
+@router.post("/{goal_id}/insight")
+async def goal_insight(
+    goal_id: int,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Generate an AI insight for a specific goal based on milestone and habit data."""
+    async with get_session() as session:
+        goal = await _get_user_goal(session, goal_id, user.id)
+        linked = await _build_linked_habits(session, goal, user_id=user.id)
+
+        milestones = goal.milestones or []
+        done = sum(1 for m in milestones if m.is_completed)
+        total = len(milestones)
+
+        # Build context
+        habit_summary = "\n".join(
+            f"- {lh.habit_name}: {lh.days_completed}/{lh.days_total} days this week"
+            for lh in linked
+        ) or "No linked habits"
+
+        milestone_summary = "\n".join(
+            f"- {'[x]' if m.is_completed else '[ ]'} {m.title}"
+            for m in milestones
+        ) or "No milestones"
+
+        deadline_info = ""
+        if goal.deadline:
+            days_left = (goal.deadline - date.today()).days
+            if days_left > 0:
+                deadline_info = f"Deadline: {goal.deadline} ({days_left} days remaining)"
+            elif days_left == 0:
+                deadline_info = f"Deadline: TODAY ({goal.deadline})"
+            else:
+                deadline_info = f"Deadline: OVERDUE by {abs(days_left)} days (was {goal.deadline})"
+
+        created_days_ago = (date.today() - goal.created_at.date()).days
+        pct = round(done / total * 100) if total > 0 else 0
+
+        prompt = f"""Analyze this goal and give a brief, actionable insight (2-3 sentences max).
+
+Goal: {goal.title}
+Description: {goal.description or 'None'}
+Created: {created_days_ago} days ago
+Progress: {done}/{total} milestones ({pct}%)
+{deadline_info}
+
+Milestones:
+{milestone_summary}
+
+Linked habit performance (last 7 days):
+{habit_summary}
+
+Based on milestone completion rate and habit consistency, tell the user:
+1. Whether they're on pace to hit the deadline (if set)
+2. One specific, actionable suggestion
+Be direct and specific. Use the actual numbers."""
+
+    try:
+        from core.ai.gateway import ai_call
+        result = await ai_call(
+            messages=[
+                {"role": "system", "content": "You are a concise goal coach. Be direct, use data, no fluff."},
+                {"role": "user", "content": prompt},
+            ],
+            task="chat",
+            user_email=user.email,
+            max_tokens=200,
+        )
+        return {"insight": result.content, "cost": result.cost}
+    except Exception as e:
+        # Fallback: generate a simple rule-based insight
+        if total == 0:
+            fallback = "Add milestones to break this goal into trackable steps — goals with milestones have 75% higher completion rates."
+        elif pct == 0:
+            fallback = "You haven't completed any milestones yet. Focus on the first one — momentum builds from small wins."
+        elif goal.deadline and (goal.deadline - date.today()).days < 7 and pct < 50:
+            fallback = f"Deadline is close but you're only {pct}% done. Consider extending the deadline or breaking remaining milestones into smaller steps."
+        else:
+            fallback = f"You're {pct}% through your milestones. {'Linked habits look consistent — keep it up.' if any(lh.days_completed >= 4 for lh in linked) else 'Try improving your linked habit consistency to build momentum.'}"
+        return {"insight": fallback, "cost": 0}
+
+
 # --- Private helpers ---
 
 
