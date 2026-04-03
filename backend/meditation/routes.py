@@ -385,6 +385,45 @@ async def get_in_progress(user: CurrentUser = Depends(get_current_user)):
         return {"session": SessionResponse.model_validate(row).model_dump()}
 
 
+@router.post("/generate-script")
+async def generate_script(
+    body: dict,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Generate a meditation script via the AI gateway (GPT-4o).
+
+    Used by the Chrome extension which handles TTS + stitching locally.
+    The extension can't use /api/ai/chat because that's Venice-only.
+    """
+    try:
+        from core.ai.gateway import ai_call
+    except ImportError:
+        raise HTTPException(status_code=503, detail="AI gateway not available")
+
+    messages = body.get("messages", [])
+    max_tokens = body.get("max_tokens", 3000)
+    task = body.get("task", "creative")
+
+    if not messages:
+        prompt = body.get("prompt", "")
+        if not prompt:
+            raise HTTPException(status_code=400, detail="prompt or messages required")
+        messages = prompt  # ai_call accepts a string prompt directly
+
+    response = await ai_call(
+        messages, task=task, max_tokens=max_tokens,
+        user_id=user.id, user_email=user.email,
+    )
+
+    return {
+        "content": response.content,
+        "model": response.model,
+        "input_tokens": response.input_tokens,
+        "output_tokens": response.output_tokens,
+        "cost": response.cost,
+    }
+
+
 @router.post("/upload")
 async def upload_meditation(
     audio: UploadFile,
