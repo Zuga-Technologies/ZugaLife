@@ -194,6 +194,8 @@ async def _generate_in_background(
         prev_titles = await _get_previous_titles(user_id)
 
         # 2. Generate script
+        from meditation.prompts import _MAX_TOKENS
+        script_max_tokens = _MAX_TOKENS.get(body.length.value, 3000)
         is_long = body.length.value == "long"
 
         if is_long:
@@ -208,7 +210,7 @@ async def _generate_in_background(
                 previous_titles=prev_titles,
             )
             outline_response = await ai_call(
-                outline_prompt, task="creative", max_tokens=4096,
+                outline_prompt, task="creative", max_tokens=2048,
                 user_id=user_id, user_email=user_email,
             )
             total_cost += outline_response.cost
@@ -222,7 +224,7 @@ async def _generate_in_background(
             # Pass 2: Expand
             expansion_prompt = _prompts.build_expansion_prompt(outline, section_count)
             script_response = await ai_call(
-                expansion_prompt, task="creative_long", max_tokens=8192,
+                expansion_prompt, task="creative_long", max_tokens=script_max_tokens,
                 user_id=user_id, user_email=user_email,
             )
             total_cost += script_response.cost
@@ -239,7 +241,7 @@ async def _generate_in_background(
                 previous_titles=prev_titles,
             )
             script_response = await ai_call(
-                prompt, task="creative", max_tokens=4096,
+                prompt, task="creative", max_tokens=script_max_tokens,
                 user_id=user_id, user_email=user_email,
             )
             total_cost += script_response.cost

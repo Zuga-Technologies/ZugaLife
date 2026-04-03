@@ -25,14 +25,21 @@ _EMOJI_LABELS: dict[str, str] = {
     "\U0001f914": "Thoughtful", "\U0001f60c": "Calm", "\U0001f4aa": "Motivated",
 }
 
-# Word targets by length category.  Deliberately generous — it's better
-# to overshoot than undershoot since there's no retry loop.  Calibrated
-# against OpenAI TTS at speed 0.9 (~165 wpm effective rate).
+# Word targets by length category (min, max).
+# Calibrated against OpenAI TTS at speed 0.9 (~140 wpm effective).
+# Hard ceiling prevents LLM from overshooting.
 _WORD_TARGETS = {
-    "quick": 350,     # ~1-3 min (quick reset)
-    "short": 900,     # ~4-6 min
-    "medium": 1800,   # ~8-11 min
-    "long": 3500,     # ~14-20 min (must be 12+ min)
+    "quick": (200, 350),     # ~1-2 min
+    "short": (500, 800),     # ~3-5 min
+    "medium": (1200, 1800),  # ~8-10 min
+    "long": (2500, 3500),    # ~15-20 min
+}
+
+_MAX_TOKENS = {
+    "quick": 600,
+    "short": 1400,
+    "medium": 3000,
+    "long": 4096,
 }
 
 _LENGTH_LABELS = {
@@ -232,7 +239,7 @@ def build_meditation_prompt(
     previous_titles: list[str] | None = None,
 ) -> str:
     """Build the full meditation script generation prompt."""
-    word_target = _WORD_TARGETS.get(length, 1800)
+    word_min, word_max = _WORD_TARGETS.get(length, (1200, 1800))
     length_label = _LENGTH_LABELS.get(length, "8 to 10 minutes")
     technique = _TECHNIQUE_INSTRUCTIONS.get(
         meditation_type, _TECHNIQUE_INSTRUCTIONS["breathing"],
@@ -283,11 +290,11 @@ PACING (CRITICAL — this will be read aloud by TTS at slow speed):
   Each number MUST have a [PAUSE 3s] between it and the next number.
 - NEVER write bare digits (1, 2, 3). Always spell out: one, two, three, four, five, six.
 
-LENGTH REQUIREMENT (NON-NEGOTIABLE):
-- You MUST write at least {word_target} words. This is a HARD requirement.
-- This is a {length_label} meditation — write enough content to fill that time when read aloud.
-- If you feel you've covered everything, go DEEPER — add more sensory details, more pause markers, more gentle repetition, more silence invitations.
-- Count your output before finishing. If under {word_target} words, keep writing.
+LENGTH REQUIREMENT (CRITICAL — STRICTLY ENFORCED):
+- This is a {length_label} meditation. Write EXACTLY {word_min} to {word_max} words of spoken content.
+- Do NOT exceed {word_max} words. Going over is just as bad as going under.
+- The word count includes spoken text only — pause markers [PAUSE Xs] do not count.
+- If you reach {word_max} words, STOP and write the closing.
 
 FORMAT:
 - Write in second person ("you")
@@ -300,7 +307,7 @@ FORMAT:
 TECHNIQUE:
 {technique}
 
-Write the meditation script now. Remember: title on line 1, blank line, then the script. This is a {length_label} meditation — aim for {word_target}+ words."""
+Write the meditation script now. Remember: title on line 1, blank line, then the script. This is a {length_label} meditation — stay within {word_min}-{word_max} words."""
 
 
 def _pick_content_mode(previous_titles: list[str] | None = None) -> str:
