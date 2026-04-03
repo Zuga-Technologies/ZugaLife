@@ -35,5 +35,10 @@ class TherapistSessionNote(Base, TimestampMixin):
     message_count: Mapped[int] = mapped_column(Integer, default=0)
     cost: Mapped[float] = mapped_column(Float, default=0.0)
 
+    # Mood tracking (before/after session)
+    mood_before: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    mood_after: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5 stars
+
     # Security: provider that processed this session (always "venice")
     provider: Mapped[str] = mapped_column(String(20), default="venice")

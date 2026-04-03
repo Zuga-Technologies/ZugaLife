@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 
 from core.auth.middleware import get_current_user
 from core.auth.models import CurrentUser
@@ -38,6 +38,8 @@ SessionNoteResponse = _schemas.SessionNoteResponse
 SessionNoteListResponse = _schemas.SessionNoteListResponse
 SessionNoteUpdateRequest = _schemas.SessionNoteUpdateRequest
 TherapistStatusResponse = _schemas.TherapistStatusResponse
+ConversationStarter = _schemas.ConversationStarter
+TherapistStartersResponse = _schemas.TherapistStartersResponse
 
 SYSTEM_PROMPT = _prompts.SYSTEM_PROMPT
 FIRST_SESSION_GREETING = _prompts.FIRST_SESSION_GREETING
@@ -95,6 +97,103 @@ async def therapist_greeting(
     }
 
 
+# --- Conversation Starters ---
+
+
+@router.get("/starters", response_model=TherapistStartersResponse)
+async def conversation_starters(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Generate suggested conversation starters based on recent user data."""
+    starters = []
+
+    async with get_session() as session:
+        # Check recent mood trends
+        try:
+            MoodEntry = sys.modules["zugalife.models"].MoodEntry
+            from datetime import timedelta
+            since = datetime.now(timezone.utc) - timedelta(days=3)
+            result = await session.execute(
+                select(MoodEntry.label, MoodEntry.emoji)
+                .where(MoodEntry.user_id == user.id, MoodEntry.created_at >= since)
+                .order_by(desc(MoodEntry.created_at))
+                .limit(5)
+            )
+            recent_moods = result.all()
+            if recent_moods:
+                neg_moods = [m for m in recent_moods if m.label in ("Sad", "Anxious", "Angry", "Frustrated", "Tired")]
+                if len(neg_moods) >= 2:
+                    labels = ", ".join(set(m.label.lower() for m in neg_moods[:3]))
+                    starters.append(ConversationStarter(
+                        text=f"I've been feeling {labels} lately — can we talk about that?",
+                        source="mood",
+                    ))
+                elif recent_moods:
+                    starters.append(ConversationStarter(
+                        text=f"My mood has been mostly {recent_moods[0].label.lower()} — what does that tell you?",
+                        source="mood",
+                    ))
+        except Exception:
+            pass
+
+        # Check habit performance
+        try:
+            HabitDef = sys.modules["zugalife.habits.models"].HabitDefinition
+            HabitLog = sys.modules["zugalife.habits.models"].HabitLog
+            from datetime import date, timedelta
+            week_ago = date.today() - timedelta(days=6)
+            habits = await session.execute(
+                select(HabitDef.name)
+                .where(HabitDef.user_id == user.id, HabitDef.is_active == True)
+            )
+            active_habits = habits.scalars().all()
+            logs = await session.execute(
+                select(func.count())
+                .select_from(HabitLog)
+                .where(HabitLog.user_id == user.id, HabitLog.log_date >= week_ago, HabitLog.completed == True)
+            )
+            log_count = logs.scalar() or 0
+            if active_habits and log_count < len(active_habits) * 3:
+                starters.append(ConversationStarter(
+                    text="I've been struggling to keep up with my habits — can you help me figure out why?",
+                    source="habit",
+                ))
+        except Exception:
+            pass
+
+        # Check recent journal entries
+        try:
+            JournalEntry = sys.modules["zugalife.journal.models"].JournalEntry
+            from datetime import timedelta
+            since = datetime.now(timezone.utc) - timedelta(days=7)
+            result = await session.execute(
+                select(JournalEntry.title, JournalEntry.mood_label)
+                .where(JournalEntry.user_id == user.id, JournalEntry.created_at >= since)
+                .order_by(desc(JournalEntry.created_at))
+                .limit(3)
+            )
+            entries = result.all()
+            if entries and entries[0].title:
+                starters.append(ConversationStarter(
+                    text=f"I wrote about \"{entries[0].title}\" recently — can we dig into that?",
+                    source="journal",
+                ))
+        except Exception:
+            pass
+
+    # Always include general starters
+    general_starters = [
+        "Something's been on my mind and I need to talk it through.",
+        "I'm feeling stuck and I'm not sure why.",
+        "Things are actually going well — I want to understand why so I can keep it up.",
+    ]
+    for gs in general_starters[:2]:
+        if len(starters) < 5:
+            starters.append(ConversationStarter(text=gs, source="general"))
+
+    return TherapistStartersResponse(starters=starters[:5])
+
+
 # --- Chat ---
 
 
@@ -132,12 +231,21 @@ async def therapist_chat(
         if m.role == "user"
     ][-5:]
     for msg_text in recent_user_msgs:
-        if _safety.detect_crisis(msg_text):
+        category = _safety.detect_crisis_category(msg_text)
+        if category:
+            # Log to audit table (fire-and-forget)
+            await _safety.log_crisis_detection(
+                user_id=user.id,
+                category=category,
+                matched_text=msg_text[:200],
+            )
+            response_text = _safety.get_crisis_response(category)
             return TherapistChatResponse(
-                content=_safety.CRISIS_RESPONSE,
+                content=response_text,
                 message_index=message_count,
                 session_messages_remaining=MAX_MESSAGES_PER_SESSION - (message_count // 2),
                 cost=0.0,
+                crisis_detected=True,
             )
 
     # Build context-enriched system prompt
@@ -207,7 +315,16 @@ async def therapist_chat(
     if not content:
         content = "I'm sorry, I lost my train of thought. Could you repeat what you just said?"
 
+    # Periodic disclaimer every 10 exchanges
     user_exchanges = (message_count + 1) // 2
+    if user_exchanges > 0 and user_exchanges % 10 == 0:
+        content += _safety.PERIODIC_DISCLAIMER
+
+    # End-of-session reflection prompt (when 2 exchanges left)
+    if user_exchanges == MAX_MESSAGES_PER_SESSION - 2:
+        content += ("\n\nBefore we wrap up — what's one thing from this conversation "
+                    "that you want to sit with or try before next time?")
+
     return TherapistChatResponse(
         content=content,
         message_index=message_count + 1,
@@ -283,6 +400,9 @@ async def end_session(
             patterns=patterns,
             follow_up=follow_up,
             mood_snapshot=mood,
+            mood_before=body.mood_before,
+            mood_after=body.mood_after,
+            rating=body.rating,
             message_count=len(body.messages),
             cost=total_cost,
             provider="venice",

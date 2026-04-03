@@ -21,6 +21,9 @@ class TherapistChatRequest(BaseModel):
 
 class TherapistEndSessionRequest(BaseModel):
     messages: list[TherapistMessage] = Field(..., min_length=1)
+    mood_before: str | None = Field(None, max_length=32)
+    mood_after: str | None = Field(None, max_length=32)
+    rating: int | None = Field(None, ge=1, le=5)
 
 
 class SessionNoteUpdateRequest(BaseModel):
@@ -37,6 +40,7 @@ class TherapistChatResponse(BaseModel):
     message_index: int
     session_messages_remaining: int
     cost: float
+    crisis_detected: bool = False
 
 
 class SessionNoteResponse(BaseModel):
@@ -47,6 +51,9 @@ class SessionNoteResponse(BaseModel):
     patterns: str | None
     follow_up: str | None
     mood_snapshot: str | None
+    mood_before: str | None
+    mood_after: str | None
+    rating: int | None
     message_count: int
     cost: float
     provider: str
@@ -64,3 +71,12 @@ class TherapistStatusResponse(BaseModel):
     sessions_limit: int
     sessions_remaining: int
     is_first_session: bool
+
+
+class ConversationStarter(BaseModel):
+    text: str
+    source: str  # "mood", "habit", "journal", "general"
+
+
+class TherapistStartersResponse(BaseModel):
+    starters: list[ConversationStarter]

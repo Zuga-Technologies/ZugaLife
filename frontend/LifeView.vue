@@ -2065,6 +2065,11 @@ const therapistEditPatterns = ref('')
 const therapistEditFollowUp = ref('')
 
 const therapistMessagesRemaining = ref(20)
+const therapistMoodBefore = ref<string | null>(null)
+const therapistMoodAfter = ref<string | null>(null)
+const therapistRating = ref<number | null>(null)
+const therapistStarters = ref<{ text: string; source: string }[]>([])
+const therapistShowEndMood = ref(false)
 
 const chatContainer = ref<HTMLElement | null>(null)
 
@@ -2133,7 +2138,17 @@ async function startTherapistSession() {
   therapistSessionActive.value = true
   therapistError.value = null
   therapistMessagesRemaining.value = 20
+  therapistMoodBefore.value = null
+  therapistMoodAfter.value = null
+  therapistRating.value = null
+  therapistShowEndMood.value = false
   therapistSending.value = true
+
+  // Fetch conversation starters
+  try {
+    const res = await api.get<{ starters: { text: string; source: string }[] }>('/api/life/therapist/starters')
+    therapistStarters.value = res.starters
+  } catch { therapistStarters.value = [] }
 
   // Reuse cached greeting if available, otherwise fetch (costs tokens)
   const cached = getCachedGreeting()
@@ -2146,6 +2161,12 @@ async function startTherapistSession() {
     therapistMessages.value.push({ role: 'assistant', content: therapistGreeting.value })
   }
   therapistSending.value = false
+
+}
+
+function useStarter(text: string) {
+  therapistInput.value = text
+  therapistStarters.value = []  // hide starters once one is selected
 }
 
 const therapistRegeneratingGreeting = ref(false)
@@ -2213,20 +2234,32 @@ async function endTherapistSession() {
     return
   }
 
+  // Show mood-after + rating capture before ending
+  if (!therapistShowEndMood.value) {
+    therapistShowEndMood.value = true
+    return  // Wait for user to capture mood/rating, then call again
+  }
+
   // Capture messages before clearing UI — user doesn't wait for the save
   const apiMessages = therapistMessages.value.map(m => ({ role: m.role, content: m.content }))
   therapistSessionActive.value = false
   therapistMessages.value = []
   therapistEndingSession.value = false
+  therapistShowEndMood.value = false
   clearCachedGreeting()
   therapistView.value = 'chat'
 
   // Fire celebration toast immediately
   celebration.pushToast({ type: 'info', message: 'Session ended — saving notes...', duration: 3000 })
 
-  // Save in background — no blocking the user
+  // Save in background with mood and rating
   withCelebration(() =>
-    api.post<TherapistSessionNote>('/api/life/therapist/end-session', { messages: apiMessages })
+    api.post<TherapistSessionNote>('/api/life/therapist/end-session', {
+      messages: apiMessages,
+      mood_before: therapistMoodBefore.value,
+      mood_after: therapistMoodAfter.value,
+      rating: therapistRating.value,
+    })
   ).then(async (savedNote) => {
     await fetchTherapistStatus()
     await fetchTherapistNotes()
@@ -4185,10 +4218,25 @@ onUnmounted(() => {
             <div class="glass-card p-8 text-center">
               <MessageCircleHeart :size="40" class="mx-auto mb-4 text-accent" />
               <h3 class="text-lg font-semibold text-txt-primary mb-2">Ready to talk?</h3>
-              <p class="text-sm text-txt-muted mb-6 max-w-md mx-auto">
+              <p class="text-sm text-txt-muted mb-4 max-w-md mx-auto">
                 A private space to reflect, process, and explore what's on your mind.
                 Powered by Venice AI — your data stays private.
               </p>
+              <!-- Mood before session -->
+              <div class="mb-4">
+                <p class="text-xs text-txt-muted mb-2">How are you feeling right now?</p>
+                <div class="flex flex-wrap justify-center gap-1.5">
+                  <button
+                    v-for="mood in moods.slice(0, 6)"
+                    :key="mood.emoji"
+                    @click="therapistMoodBefore = therapistMoodBefore === mood.emoji ? null : mood.emoji"
+                    class="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150"
+                    :class="therapistMoodBefore === mood.emoji ? 'bg-accent/15 ring-1 ring-accent/50' : 'text-txt-muted hover:bg-surface-3'"
+                  >
+                    <component :is="moodIcons[mood.emoji]" :size="18" v-if="moodIcons[mood.emoji]" />
+                  </button>
+                </div>
+              </div>
               <button
                 @click="startTherapistSession()"
                 :disabled="therapistStatus?.sessions_remaining === 0"
@@ -4243,9 +4291,61 @@ onUnmounted(() => {
               </div>
             </div>
 
+            <!-- Conversation starters (shown after greeting, before user types) -->
+            <div v-if="therapistStarters.length > 0 && therapistMessages.length <= 1" class="mb-3 space-y-1.5">
+              <p class="text-xs text-txt-muted">Suggested topics:</p>
+              <button
+                v-for="starter in therapistStarters"
+                :key="starter.text"
+                @click="useStarter(starter.text)"
+                class="w-full text-left px-3 py-2 rounded-lg bg-surface-2/50 border border-bdr/50 text-xs text-txt-secondary hover:text-txt-primary hover:border-accent/30 transition-all"
+              >
+                {{ starter.text }}
+              </button>
+            </div>
+
+            <!-- End-session mood + rating capture -->
+            <div v-if="therapistShowEndMood" class="border-t border-bdr pt-4 mb-3 space-y-4 animate-fade-in">
+              <div>
+                <p class="text-xs text-txt-muted mb-2">How are you feeling now?</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <button
+                    v-for="mood in moods.slice(0, 6)"
+                    :key="mood.emoji"
+                    @click="therapistMoodAfter = therapistMoodAfter === mood.emoji ? null : mood.emoji"
+                    class="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150"
+                    :class="therapistMoodAfter === mood.emoji ? 'bg-accent/15 ring-1 ring-accent/50' : 'text-txt-muted hover:bg-surface-3'"
+                  >
+                    <component :is="moodIcons[mood.emoji]" :size="18" v-if="moodIcons[mood.emoji]" />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p class="text-xs text-txt-muted mb-2">How helpful was this session?</p>
+                <div class="flex gap-1">
+                  <button
+                    v-for="star in [1, 2, 3, 4, 5]"
+                    :key="star"
+                    @click="therapistRating = therapistRating === star ? null : star"
+                    class="text-lg transition-colors"
+                    :class="therapistRating && star <= therapistRating ? 'text-accent' : 'text-surface-3 hover:text-accent/50'"
+                  >
+                    &#9733;
+                  </button>
+                </div>
+              </div>
+              <button
+                @click="endTherapistSession()"
+                class="btn-primary w-full text-sm"
+              >
+                Save & End Session
+              </button>
+            </div>
+
             <!-- Input area -->
-            <div class="border-t border-bdr pt-3">
+            <div v-if="!therapistShowEndMood" class="border-t border-bdr pt-3">
               <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs text-txt-muted">{{ therapistMessagesRemaining }} messages left</span>
                 <button
                   @click="endTherapistSession()"
                   :disabled="therapistEndingSession"
