@@ -1609,10 +1609,10 @@ const ambienceOptions = [
 ]
 
 const lengthOptions = [
-  { key: 'quick', label: 'Quick', sub: '1-2 min' },
-  { key: 'short', label: 'Short', sub: '3-5 min' },
-  { key: 'medium', label: 'Medium', sub: '8-10 min' },
-  { key: 'long', label: 'Long', sub: '15-20 min' },
+  { key: 'quick', label: 'Quick', sub: '~2 min' },
+  { key: 'short', label: 'Short', sub: '~5 min' },
+  { key: 'medium', label: 'Medium', sub: '~10 min' },
+  { key: 'long', label: 'Long', sub: '~20 min' },
 ]
 
 type MedView = 'new' | 'player' | 'history'
