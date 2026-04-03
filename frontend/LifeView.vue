@@ -1609,10 +1609,10 @@ const ambienceOptions = [
 ]
 
 const lengthOptions = [
-  { key: 'quick', label: 'Quick' },
-  { key: 'short', label: 'Short' },
-  { key: 'medium', label: 'Medium' },
-  { key: 'long', label: 'Long' },
+  { key: 'quick', label: 'Quick', sub: '1-2 min' },
+  { key: 'short', label: 'Short', sub: '3-5 min' },
+  { key: 'medium', label: 'Medium', sub: '8-10 min' },
+  { key: 'long', label: 'Long', sub: '15-20 min' },
 ]
 
 type MedView = 'new' | 'player' | 'history'
@@ -3924,12 +3924,13 @@ onUnmounted(() => {
               v-for="opt in lengthOptions"
               :key="opt.key"
               @click="medLength = opt.key"
-              class="flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+              class="flex-1 py-2 rounded-lg font-medium transition-all duration-150 flex flex-col items-center"
               :class="medLength === opt.key
                 ? 'bg-accent text-white'
                 : 'glass-card text-txt-muted hover:text-txt-primary'"
             >
-              {{ opt.label }}
+              <span class="text-sm">{{ opt.label }}</span>
+              <span class="text-[10px] opacity-70">{{ opt.sub }}</span>
             </button>
           </div>
         </div>

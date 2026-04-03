@@ -224,13 +224,15 @@ function finish(tab?: string) {
                   v-for="goal in goals"
                   :key="goal.id"
                   @click="selectedGoal = goal.id"
-                  class="w-full flex items-center gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left"
+                  class="w-full flex items-center gap-3 p-3.5 rounded-xl border text-left"
+                  style="transition: background-color 0.1s, border-color 0.1s, box-shadow 0.1s;"
                   :class="selectedGoal === goal.id
                     ? 'bg-accent/10 border-accent/40 ring-1 ring-accent/20'
                     : 'bg-surface-2/50 border-bdr/50 hover:border-bdr-hover hover:bg-surface-2'"
                 >
                   <div
-                    class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
+                    class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style="transition: background-color 0.1s;"
                     :class="selectedGoal === goal.id ? 'bg-accent/20' : 'bg-surface-3'"
                   >
                     <component :is="goal.icon" :size="18" :class="selectedGoal === goal.id ? 'text-accent' : 'text-txt-muted'" />
