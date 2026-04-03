@@ -152,9 +152,10 @@ const features = computed(() => [
     id: 'meditate',
     icon: Brain,
     label: 'Meditation',
-    desc: 'AI-generated sessions tuned to you.',
+    desc: 'AI-generated sessions tuned to you. Install the Zugabot extension for background generation.',
     recommended: recommendedFeature.value === 'meditate',
     tab: 'meditate',
+    extensionNote: true,
   },
   {
     id: 'challenges',
@@ -339,6 +340,9 @@ function finish(tab?: string) {
                       </p>
                       <span v-if="feature.recommended" class="text-[10px] font-semibold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
                         RECOMMENDED
+                      </span>
+                      <span v-if="feature.extensionNote" class="text-[10px] font-semibold text-purple-400 bg-purple-400/10 px-1.5 py-0.5 rounded">
+                        EXTENSION
                       </span>
                     </div>
                     <p class="text-xs text-txt-muted">{{ feature.desc }}</p>

@@ -4166,6 +4166,20 @@ onUnmounted(() => {
 
       <p v-if="medError" class="text-sm text-red-400 mb-4">{{ medError }}</p>
 
+      <!-- Extension status banner -->
+      <div v-if="medView === 'new' && !medGenerating" class="mb-4 px-3 py-2 rounded-lg text-xs flex items-center gap-2"
+        :class="hasZugaExtension() ? 'bg-purple-500/10 text-purple-300' : 'bg-surface-2 text-txt-muted'"
+      >
+        <template v-if="hasZugaExtension()">
+          <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+          Extension active — meditation generates in the background, even if you leave this page.
+        </template>
+        <template v-else>
+          <span class="w-2 h-2 rounded-full bg-txt-muted/50" />
+          Install the <a href="https://zugabot.ai/extension" class="text-accent hover:underline">Zugabot extension</a> for background generation on PC.
+        </template>
+      </div>
+
       <!-- ===== NEW SESSION VIEW ===== -->
       <template v-if="medView === 'new'">
         <!-- Options — disabled while generating -->
