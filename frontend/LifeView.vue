@@ -1755,6 +1755,81 @@ async function fetchMedSessions() {
   } catch { /* silent */ }
 }
 
+/** Poll a session until it becomes ready or failed. Shared by both
+ *  fresh generation and resume-on-return flows. */
+async function _pollUntilDone(sessionId: number) {
+  const startTime = Date.now()
+  let polls = 0
+
+  while (true) {
+    await new Promise(r => setTimeout(r, 3000))
+    polls++
+
+    const elapsed = Math.floor((Date.now() - startTime) / 1000)
+    if (elapsed < 15) medGenStage.value = 'Writing your meditation script...'
+    else if (elapsed < 60) medGenStage.value = 'Expanding into full script...'
+    else if (elapsed < 180) medGenStage.value = `Generating voice audio... (${Math.floor(elapsed / 60)}m ${elapsed % 60}s)`
+    else medGenStage.value = `Almost done... (${Math.floor(elapsed / 60)}m ${elapsed % 60}s)`
+
+    try {
+      const session = await api.get<MeditationSession>(`/api/life/meditation/sessions/${sessionId}`)
+
+      if (session.status === 'ready') {
+        medSession.value = session
+        medMoodAfter.value = null
+        medView.value = 'player'
+        medSuccess.value = 'Meditation generated!'
+        setTimeout(() => { medSuccess.value = null }, 2000)
+        await fetchMedRemaining()
+        await fetchMedSessions()
+        if (gamificationData.value) {
+          celebration.takeSnapshot(gamificationData.value)
+          try {
+            const newGam = await api.get<GamificationData>('/api/life/gamification')
+            celebration.celebrateChanges(newGam, ALL_BADGES.value)
+            if (celebration.soundEnabled.value) {
+              if (celebration.activeLevelUp.value) playLevelUpSound()
+              else if (celebration.activeBadge.value) playBadgeSound()
+              else playXpSound()
+            }
+            gamificationData.value = newGam
+          } catch { /* non-critical */ }
+        }
+        setTimeout(() => loadAndPlayAudio(), 300)
+        return
+      }
+
+      if (session.status === 'failed') {
+        medError.value = session.error_message ?? 'Generation failed'
+        return
+      }
+    } catch {
+      if (polls > 200) {
+        medError.value = 'Generation is taking unusually long. Check session history later.'
+        return
+      }
+    }
+  }
+}
+
+/** Check for an in-progress meditation on mount. If one exists, resume
+ *  the generating UI and poll until it finishes. */
+async function checkInProgressMeditation() {
+  try {
+    const res = await api.get<{ session: MeditationSession | null }>('/api/life/meditation/in-progress')
+    if (res.session) {
+      medGenerating.value = true
+      medGenStage.value = 'Resuming generation...'
+      try {
+        await _pollUntilDone(res.session.id)
+      } finally {
+        medGenerating.value = false
+        medGenStage.value = null
+      }
+    }
+  } catch { /* silent — non-critical */ }
+}
+
 async function generateMeditation() {
   if (medGenerating.value) return
   medGenerating.value = true
@@ -1772,7 +1847,6 @@ async function generateMeditation() {
   }
 
   try {
-    // POST returns immediately with a stub session (status="generating")
     const stub = await api.post<MeditationSession>('/api/life/meditation/generate', payload)
 
     if (stub.status === 'failed') {
@@ -1780,69 +1854,14 @@ async function generateMeditation() {
       return
     }
 
-    // Poll until ready or failed — no timeout, keeps going
-    const sessionId = stub.id
-    const startTime = Date.now()
-    let polls = 0
-
-    while (true) {
-      await new Promise(r => setTimeout(r, 3000))
-      polls++
-
-      // Update progress message based on elapsed time
-      const elapsed = Math.floor((Date.now() - startTime) / 1000)
-      if (elapsed < 15) medGenStage.value = 'Writing your meditation script...'
-      else if (elapsed < 60) medGenStage.value = 'Expanding into full script...'
-      else if (elapsed < 180) medGenStage.value = `Generating voice audio... (${Math.floor(elapsed / 60)}m ${elapsed % 60}s)`
-      else medGenStage.value = `Almost done... (${Math.floor(elapsed / 60)}m ${elapsed % 60}s)`
-
-      try {
-        const session = await api.get<MeditationSession>(`/api/life/meditation/sessions/${sessionId}`)
-
-        if (session.status === 'ready') {
-          medSession.value = session
-          medMoodAfter.value = null
-          medView.value = 'player'
-          medSuccess.value = 'Meditation generated!'
-          setTimeout(() => { medSuccess.value = null }, 2000)
-          await fetchMedRemaining()
-          await fetchMedSessions()
-          // Celebrate XP gain from meditation completion
-          if (gamificationData.value) {
-            celebration.takeSnapshot(gamificationData.value)
-            try {
-              const newGam = await api.get<GamificationData>('/api/life/gamification')
-              celebration.celebrateChanges(newGam, ALL_BADGES.value)
-              if (celebration.soundEnabled.value) {
-                if (celebration.activeLevelUp.value) playLevelUpSound()
-                else if (celebration.activeBadge.value) playBadgeSound()
-                else playXpSound()
-              }
-              gamificationData.value = newGam
-            } catch { /* non-critical */ }
-          }
-          setTimeout(() => loadAndPlayAudio(), 300)
-          return
-        }
-
-        if (session.status === 'failed') {
-          medError.value = session.error_message ?? 'Generation failed'
-          return
-        }
-      } catch {
-        // Transient network error — keep polling
-        if (polls > 200) {
-          // Safety valve: 10 min absolute max
-          medError.value = 'Generation is taking unusually long. Check session history later.'
-          return
-        }
-      }
-    }
+    await _pollUntilDone(stub.id)
   } catch (e) {
     if (e instanceof ApiError) {
       const detail = (e.body as Record<string, string>).detail
       if (e.status === 402) {
         medError.value = 'AI budget exhausted for today.'
+      } else if (e.status === 409) {
+        medError.value = detail ?? 'A meditation is already being generated.'
       } else if (e.status === 429) {
         medError.value = detail ?? 'Daily meditation limit reached.'
       } else if (e.status === 503) {
@@ -2521,6 +2540,9 @@ onMounted(() => {
 
   Promise.all([fetchMedRemaining(), fetchMedSessions()])
     .finally(() => { loadingMeditation.value = false })
+
+  // Resume polling if a meditation was generating when the user left/refreshed
+  checkInProgressMeditation()
 
   fetchJournalEntries()
     .finally(() => { loadingJournal.value = false })
@@ -4089,6 +4111,8 @@ onUnmounted(() => {
 
       <!-- ===== NEW SESSION VIEW ===== -->
       <template v-if="medView === 'new'">
+        <!-- Options — disabled while generating -->
+        <div :class="{ 'opacity-50 pointer-events-none select-none': medGenerating }">
         <!-- Type picker -->
         <div class="mb-6">
           <h3 class="text-sm font-semibold text-txt-primary mb-3">Choose a meditation type</h3>
@@ -4195,6 +4219,8 @@ onUnmounted(() => {
             class="input-field text-sm"
           />
         </div>
+
+        </div><!-- /options wrapper -->
 
         <!-- Generate button -->
         <button

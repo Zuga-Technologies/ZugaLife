@@ -84,6 +84,21 @@ async def generate_meditation(
     The client polls GET /sessions/{id} until status becomes "ready" or "failed".
     Generation survives client disconnects and page refreshes.
     """
+    # Block duplicate generation — only one at a time per user
+    async with get_session() as session:
+        in_progress = await session.execute(
+            select(MeditationSession).where(
+                MeditationSession.user_id == user.id,
+                MeditationSession.status == "generating",
+            )
+        )
+        existing = in_progress.scalar_one_or_none()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail="A meditation is already being generated. Please wait for it to finish.",
+            )
+
     used = await _sessions_today(user.id)
     if used >= DAILY_LIMIT:
         raise HTTPException(
@@ -325,6 +340,23 @@ async def _generate_in_background(
 
 
 # --- CRUD ---
+
+
+@router.get("/in-progress")
+async def get_in_progress(user: CurrentUser = Depends(get_current_user)):
+    """Return the currently-generating session, if any. Used by frontend to
+    resume polling after page refresh / navigation."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(MeditationSession).where(
+                MeditationSession.user_id == user.id,
+                MeditationSession.status == "generating",
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return {"session": None}
+        return {"session": SessionResponse.model_validate(row).model_dump()}
 
 
 @router.get("/sessions", response_model=SessionListResponse)
