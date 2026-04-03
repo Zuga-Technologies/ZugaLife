@@ -85,6 +85,7 @@ async def generate_meditation(
     Generation survives client disconnects and page refreshes.
     """
     # Block duplicate generation — only one at a time per user
+    # Auto-fail stuck sessions (>10 min) so they don't block forever
     async with get_session() as session:
         in_progress = await session.execute(
             select(MeditationSession).where(
@@ -94,10 +95,19 @@ async def generate_meditation(
         )
         existing = in_progress.scalar_one_or_none()
         if existing:
-            raise HTTPException(
-                status_code=409,
-                detail="A meditation is already being generated. Please wait for it to finish.",
-            )
+            age = datetime.now(timezone.utc) - existing.created_at.replace(tzinfo=timezone.utc)
+            if age.total_seconds() > 600:
+                # Stuck — auto-fail it so user can try again
+                await session.execute(
+                    update(MeditationSession)
+                    .where(MeditationSession.id == existing.id)
+                    .values(status="failed", error_message="Generation timed out")
+                )
+            else:
+                raise HTTPException(
+                    status_code=409,
+                    detail="A meditation is already being generated. Please wait for it to finish.",
+                )
 
     used = await _sessions_today(user.id)
     if used >= DAILY_LIMIT:
@@ -345,7 +355,10 @@ async def _generate_in_background(
 @router.get("/in-progress")
 async def get_in_progress(user: CurrentUser = Depends(get_current_user)):
     """Return the currently-generating session, if any. Used by frontend to
-    resume polling after page refresh / navigation."""
+    resume polling after page refresh / navigation.
+
+    Auto-fails sessions stuck generating for >10 minutes.
+    """
     async with get_session() as session:
         result = await session.execute(
             select(MeditationSession).where(
@@ -356,6 +369,17 @@ async def get_in_progress(user: CurrentUser = Depends(get_current_user)):
         row = result.scalar_one_or_none()
         if row is None:
             return {"session": None}
+
+        # Auto-fail stuck sessions (>10 min)
+        age = datetime.now(timezone.utc) - row.created_at.replace(tzinfo=timezone.utc)
+        if age.total_seconds() > 600:
+            await session.execute(
+                update(MeditationSession)
+                .where(MeditationSession.id == row.id)
+                .values(status="failed", error_message="Generation timed out")
+            )
+            return {"session": None}
+
         return {"session": SessionResponse.model_validate(row).model_dump()}
 
 
