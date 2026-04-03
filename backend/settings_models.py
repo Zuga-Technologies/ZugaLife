@@ -24,6 +24,7 @@ class LifeUserSettings(Base, TimestampMixin):
 
     # Meditation defaults
     med_length: Mapped[str] = mapped_column(String(10), default="medium")
+    med_duration: Mapped[str | None] = mapped_column(String(10), nullable=True, default="medium")  # legacy column — kept for DB compat
     med_voice: Mapped[str] = mapped_column(String(20), default="nova")
     med_ambience: Mapped[str] = mapped_column(String(20), default="rain")
 
