@@ -601,12 +601,13 @@ const composeMoodLabel = computed(() => {
 })
 
 function renderMarkdown(text: string): string {
-  // Lightweight markdown → HTML for journal entries (no dependency)
+  // Lightweight markdown → HTML for journal + therapist chat (no dependency)
   return text
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')  // escape HTML
     .replace(/^## (.+)$/gm, '<h3 class="text-base font-semibold text-txt-primary mt-4 mb-1">$1</h3>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code class="bg-surface-3 px-1 rounded text-xs">$1</code>')
     .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-sm text-txt-secondary">$1</li>')
     .replace(/(<li[^>]*>.*<\/li>\n?)+/g, (m) => `<ul class="my-2">${m}</ul>`)
     .replace(/\n/g, '<br>')
@@ -2319,16 +2320,6 @@ async function deleteTherapistNote(id: number) {
   } catch {
     therapistError.value = 'Failed to delete note.'
   }
-}
-
-// --- Markdown rendering (lightweight — bold, italic, inline code) ---
-
-function renderMarkdown(text: string): string {
-  return text
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')  // escape HTML
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')                     // **bold**
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')                                 // *italic*
-    .replace(/`(.+?)`/g, '<code class="bg-surface-3 px-1 rounded text-xs">$1</code>')  // `code`
 }
 
 // --- Init ---
