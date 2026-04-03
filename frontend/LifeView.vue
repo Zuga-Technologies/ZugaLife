@@ -1830,6 +1830,53 @@ async function checkInProgressMeditation() {
   } catch { /* silent — non-critical */ }
 }
 
+/** Detect if the Zugabot Chrome extension is installed */
+function hasZugaExtension(): boolean {
+  return document.documentElement.hasAttribute('data-zugabot-extension')
+}
+
+/** Send a command to the extension via bridge.js */
+function sendExtensionCommand(type: string, payload: Record<string, unknown> = {}) {
+  document.dispatchEvent(new CustomEvent('zugabot:command', {
+    detail: { type, payload },
+  }))
+}
+
+/** Listen for extension meditation events */
+let extensionMedListenersSetup = false
+function setupExtensionMedListeners() {
+  if (extensionMedListenersSetup) return
+  extensionMedListenersSetup = true
+
+  document.addEventListener('zugabot:response', ((e: CustomEvent) => {
+    const detail = e.detail
+    if (detail.type === 'meditation:progress') {
+      medGenStage.value = detail.stage
+    }
+    if (detail.type === 'meditation:complete') {
+      medGenerating.value = false
+      medGenStage.value = null
+      // Reload sessions from server (the extension uploaded the result)
+      fetchMedSessions().then(() => {
+        if (detail.session) {
+          medSession.value = detail.session
+          medMoodAfter.value = null
+          medView.value = 'player'
+          medSuccess.value = 'Meditation generated!'
+          setTimeout(() => { medSuccess.value = null }, 2000)
+          fetchMedRemaining()
+          setTimeout(() => loadAndPlayAudio(), 300)
+        }
+      })
+    }
+    if (detail.type === 'meditation:error') {
+      medGenerating.value = false
+      medGenStage.value = null
+      medError.value = detail.error || 'Extension generation failed'
+    }
+  }) as EventListener)
+}
+
 async function generateMeditation() {
   if (medGenerating.value) return
   medGenerating.value = true
@@ -1846,6 +1893,16 @@ async function generateMeditation() {
     payload.focus = medFocus.value.trim()
   }
 
+  // Try extension-based generation first (runs on user's PC, saves server costs)
+  if (hasZugaExtension()) {
+    setupExtensionMedListeners()
+    medGenStage.value = 'Starting via extension...'
+    sendExtensionCommand('meditation:generate', payload)
+    // Extension will notify via events — don't set medGenerating to false here
+    return
+  }
+
+  // Fallback: server-side generation
   try {
     const stub = await api.post<MeditationSession>('/api/life/meditation/generate', payload)
 

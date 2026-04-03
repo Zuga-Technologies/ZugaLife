@@ -9,7 +9,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 # StreamingResponse removed — now using background tasks + polling
 from sqlalchemy import desc, func, or_, select, update
@@ -357,6 +357,66 @@ async def get_in_progress(user: CurrentUser = Depends(get_current_user)):
         if row is None:
             return {"session": None}
         return {"session": SessionResponse.model_validate(row).model_dump()}
+
+
+@router.post("/upload")
+async def upload_meditation(
+    audio: UploadFile,
+    title: str = Form(...),
+    transcript: str = Form(...),
+    type: str = Form(...),
+    length: str = Form("medium"),
+    ambience: str = Form("silence"),
+    voice: str = Form("serene"),
+    focus: str = Form(""),
+    model_used: str = Form(""),
+    tts_model: str = Form("tts-1-hd"),
+    cost: float = Form(0.0),
+    duration_seconds: int = Form(0),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Accept a meditation MP3 uploaded from the Chrome extension.
+
+    Creates a MeditationSession record so the meditation appears across all
+    devices. The extension generates audio locally (via server-proxied API
+    calls) and uploads the finished file here for cross-device sync.
+    """
+    # Save audio file
+    user_dir = _AUDIO_DIR / user.id
+    user_dir.mkdir(parents=True, exist_ok=True)
+    temp_filename = f"{int(time.time())}_{type}.mp3"
+    audio_path = user_dir / temp_filename
+    audio_bytes = await audio.read()
+    audio_path.write_bytes(audio_bytes)
+
+    # Calculate duration from audio if not provided
+    if duration_seconds <= 0:
+        duration_seconds = int(_mp3_duration_seconds(audio_bytes))
+
+    # Create session record
+    async with get_session() as session:
+        meditation = MeditationSession(
+            user_id=user.id,
+            type=type,
+            length=length,
+            duration_seconds=duration_seconds,
+            ambience=ambience,
+            voice=voice,
+            focus=focus or None,
+            title=title,
+            transcript=transcript,
+            audio_filename=f"{user.id}/{temp_filename}",
+            model_used=model_used,
+            tts_model=tts_model,
+            cost=cost,
+            status="ready",
+        )
+        session.add(meditation)
+        await session.flush()
+        result = await session.execute(
+            select(MeditationSession).where(MeditationSession.id == meditation.id)
+        )
+        return SessionResponse.model_validate(result.scalar_one())
 
 
 @router.get("/sessions", response_model=SessionListResponse)
