@@ -8,8 +8,9 @@ import {
   BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle,
   LayoutDashboard, TrendingUp, Target, Clock, CalendarDays, ArrowRight, ArrowLeft,
   ChevronRight, ChevronDown, ChevronUp, Activity, Flame as FlameIcon, Brain as BrainIcon, Settings,
-  Download, Trophy, Star, Zap, CheckCircle2, Lock, CircleDot, Meh,
+  Download, Trophy, Star, Zap, CheckCircle2, Lock, CircleDot, Meh, Headphones,
 } from 'lucide-vue-next'
+import ShareableCard from './components/ShareableCard.vue'
 import SettingsPanel from './SettingsPanel.vue'
 import BackgroundTheme from './BackgroundTheme.vue'
 import AnalyticsDashboard from './AnalyticsDashboard.vue'
@@ -269,6 +270,48 @@ async function fetchGamification() {
     console.error('Gamification fetch failed:', e)
   }
 }
+
+// --- Shareable progress card ---
+const showShareCard = ref(false)
+
+const shareCardData = computed(() => {
+  const gam = gamificationData.value
+  const dash = dashboardData.value
+  if (!gam) return null
+
+  // Find most common mood from recent entries
+  let topMood: { emoji: string; label: string } | null = null
+  if (dash?.mood?.recent?.length) {
+    const counts: Record<string, { emoji: string; label: string; count: number }> = {}
+    for (const m of dash.mood.recent) {
+      const key = m.emoji
+      if (!counts[key]) counts[key] = { emoji: m.emoji, label: m.label, count: 0 }
+      counts[key].count++
+    }
+    const sorted = Object.values(counts).sort((a, b) => b.count - a.count)
+    if (sorted.length > 0) topMood = { emoji: sorted[0].emoji, label: sorted[0].label }
+  }
+
+  return {
+    displayName: dash?.greeting?.replace(/^Good (morning|afternoon|evening)(, )?/, '') || '',
+    level: gam.xp.level,
+    levelName: gam.xp.level_name,
+    totalXp: gam.xp.total_xp,
+    currentStreak: gam.xp.current_streak_days,
+    longestStreak: gam.xp.longest_streak_days,
+    badgeCount: gam.badges.length,
+    topBadges: gam.badges.slice(-6).map(b => ({ emoji: b.emoji, title: b.title })),
+    moodCount: dash?.mood?.total || 0,
+    topMood,
+    journalCount: dash?.journal?.total || 0,
+    meditationCount: dash?.meditation?.total_sessions || 0,
+    meditationMinutes: dash?.meditation?.total_minutes || 0,
+    habitCompletionRate: dash?.habits?.completion_rate || 0,
+    goalsCompleted: dash?.goals?.completed || 0,
+    prestigeLevel: gam.xp.prestige_level,
+    date: dash?.date || new Date().toISOString().slice(0, 10),
+  }
+})
 
 // --- Therapist session navigation guard ---
 const showTherapistLeaveWarning = ref(false)
@@ -763,7 +806,7 @@ async function deleteEntry() {
 // --- Single entry export ---
 const showExportMenu = ref(false)
 
-async function exportEntry(format: 'markdown' | 'json') {
+async function exportEntry(format: 'markdown' | 'json' | 'obsidian') {
   if (!currentEntry.value) return
   showExportMenu.value = false
   try {
@@ -775,6 +818,34 @@ async function exportEntry(format: 'markdown' | 'json') {
     const disposition = resp.headers.get('Content-Disposition') ?? ''
     const match = disposition.match(/filename=(.+)/)
     const filename = match ? match[1] : `entry-${currentEntry.value.id}.${format === 'json' ? 'json' : 'md'}`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch {
+    journalError.value = 'Export failed'
+  }
+}
+
+// --- Bulk journal export (all entries) ---
+const showBulkExportMenu = ref(false)
+
+async function exportAllJournal(format: 'markdown' | 'json' | 'obsidian') {
+  showBulkExportMenu.value = false
+  try {
+    const resp = await fetch(`/api/life/journal/export?format=${format}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+    if (!resp.ok) throw new Error(`Export failed (${resp.status})`)
+    const blob = await resp.blob()
+    const disposition = resp.headers.get('Content-Disposition') ?? ''
+    const match = disposition.match(/filename=(.+)/)
+    const ext = format === 'json' ? 'json' : 'zip'
+    const filename = match ? match[1] : `zugalife-journal.${ext}`
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -1914,6 +1985,118 @@ async function toggleMedFavorite() {
   }
 }
 
+// --- Meditation download & ZugaAudio integration ---
+const showMedActionMenu = ref(false)
+const medSendingToAudio = ref(false)
+
+async function downloadMeditationAudio(session?: MeditationSession | null) {
+  const s = session ?? medSession.value
+  if (!s) return
+  try {
+    const token = getToken()
+    const res = await fetch(`/api/life/meditation/audio/${s.audio_filename}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) throw new Error('Audio fetch failed')
+    const blob = await res.blob()
+    const date = new Date(s.created_at).toISOString().slice(0, 10)
+    const safeTitle = (s.title || 'meditation').replace(/[^a-zA-Z0-9\s-]/g, '').trim()
+    const filename = `ZugaLife - ${safeTitle} - ${date}.mp3`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch {
+    medError.value = 'Download failed'
+  }
+}
+
+async function sendToZugaAudio() {
+  if (!medSession.value || medSendingToAudio.value) return
+  medSendingToAudio.value = true
+  showMedActionMenu.value = false
+  medError.value = null
+  try {
+    const token = getToken()
+    // Fetch the meditation audio blob
+    const audioRes = await fetch(`/api/life/meditation/audio/${medSession.value.audio_filename}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!audioRes.ok) throw new Error('Audio fetch failed')
+    const blob = await audioRes.blob()
+
+    // Upload to ZugaAudio
+    const formData = new FormData()
+    const safeTitle = (medSession.value.title || 'meditation').replace(/[^a-zA-Z0-9\s-]/g, '').trim()
+    formData.append('file', blob, `${safeTitle}.mp3`)
+    const uploadRes = await fetch('/api/audio/upload', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    })
+    if (!uploadRes.ok) throw new Error('Upload to ZugaAudio failed')
+    const clip = await uploadRes.json()
+
+    // Create a project in ZugaAudio with the clip on the master track
+    const date = new Date(medSession.value.created_at).toISOString().slice(0, 10)
+    const projectRes = await fetch('/api/audio/projects', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ title: `${safeTitle} - ${date}` }),
+    })
+    if (!projectRes.ok) throw new Error('Project creation failed')
+    const project = await projectRes.json()
+
+    // Update the project timeline to include the uploaded clip on the master track
+    const masterTrack = project.timeline?.tracks?.[0]
+    if (masterTrack) {
+      masterTrack.clips = [{
+        id: clip.clip_id,
+        name: `${safeTitle}.mp3`,
+        startTime: 0,
+        duration: clip.duration,
+        inPoint: 0,
+        outPoint: clip.duration,
+        volume: 1.0,
+        fadeIn: 0,
+        fadeOut: 0,
+        waveformPeaks: clip.waveform_peaks || [],
+      }]
+      await fetch(`/api/audio/projects/${project.id}/timeline`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ tracks: project.timeline.tracks }),
+      })
+    }
+
+    // Navigate to ZugaAudio with the project open
+    window.location.href = `/audio?project=${project.id}`
+  } catch {
+    medError.value = 'Failed to send to ZugaAudio'
+  } finally {
+    medSendingToAudio.value = false
+  }
+}
+
+async function downloadMedHistoryAudio(brief: MeditationBrief) {
+  try {
+    const full = await api.get<MeditationSession>(`/api/life/meditation/sessions/${brief.id}`)
+    await downloadMeditationAudio(full)
+  } catch {
+    medError.value = 'Download failed'
+  }
+}
+
 async function setMedMoodAfter(emoji: string) {
   if (!medSession.value) return
   medMoodAfter.value = emoji
@@ -2485,14 +2668,24 @@ onUnmounted(() => {
             <p class="text-sm text-txt-secondary mt-1.5">Here's your week at a glance.</p>
           </div>
           <div v-else></div>
-          <button
-            v-if="!props.embedded"
-            @click="showSettings = true"
-            class="p-2.5 rounded-xl bg-surface-0/60 backdrop-blur-md border border-bdr text-txt-secondary transition-colors hover:text-txt-primary hover:bg-surface-3/70"
-            title="Settings"
-          >
-            <Settings :size="18" />
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="!props.embedded && gamificationData"
+              @click="showShareCard = true"
+              class="p-2.5 rounded-xl bg-surface-0/60 backdrop-blur-md border border-bdr text-txt-secondary transition-colors hover:text-accent hover:border-accent/40"
+              title="Share your progress"
+            >
+              <Send :size="18" />
+            </button>
+            <button
+              v-if="!props.embedded"
+              @click="showSettings = true"
+              class="p-2.5 rounded-xl bg-surface-0/60 backdrop-blur-md border border-bdr text-txt-secondary transition-colors hover:text-txt-primary hover:bg-surface-3/70"
+              title="Settings"
+            >
+              <Settings :size="18" />
+            </button>
+          </div>
         </div>
 
         <!-- XP + Level + Streak Bar -->
@@ -4036,13 +4229,41 @@ onUnmounted(() => {
                 <span class="text-xs text-txt-muted">{{ costToTokens(medSession.cost) }} tokens</span>
               </div>
             </div>
-            <button
-              @click="toggleMedFavorite"
-              class="text-xl transition-colors"
-              :class="medSession.is_favorite ? 'text-amber-400' : 'text-txt-muted hover:text-amber-400'"
-            >
-              {{ medSession.is_favorite ? '&#9733;' : '&#9734;' }}
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                @click="toggleMedFavorite"
+                class="text-xl transition-colors"
+                :class="medSession.is_favorite ? 'text-amber-400' : 'text-txt-muted hover:text-amber-400'"
+              >
+                {{ medSession.is_favorite ? '&#9733;' : '&#9734;' }}
+              </button>
+              <div class="relative">
+                <button
+                  @click="showMedActionMenu = !showMedActionMenu"
+                  class="text-txt-muted hover:text-accent transition-colors p-1"
+                  title="More actions"
+                >
+                  <Download :size="16" />
+                </button>
+                <div v-if="showMedActionMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[180px]">
+                  <button
+                    @click="showMedActionMenu = false; downloadMeditationAudio()"
+                    class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors flex items-center gap-2"
+                  >
+                    <Download :size="12" />
+                    Download MP3
+                  </button>
+                  <button
+                    @click="sendToZugaAudio()"
+                    :disabled="medSendingToAudio"
+                    class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Headphones :size="12" />
+                    {{ medSendingToAudio ? 'Sending...' : 'Edit in ZugaAudio' }}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Audio controls -->
@@ -4148,6 +4369,13 @@ onUnmounted(() => {
                 <span v-if="s.is_favorite" class="text-amber-400 text-xs">&#9733;</span>
               </div>
             </div>
+            <button
+              @click.stop="downloadMedHistoryAudio(s)"
+              class="text-txt-muted hover:text-accent transition-colors px-1 self-center"
+              title="Download MP3"
+            >
+              <Download :size="14" />
+            </button>
             <button
               @click.stop="deleteMedSession(s.id)"
               class="text-xs text-txt-muted hover:text-red-400 transition-colors px-1 self-center"
@@ -4497,7 +4725,26 @@ onUnmounted(() => {
       <template v-if="journalView === 'list'">
         <div class="flex items-center justify-between mb-6">
           <p class="text-sm text-txt-secondary">Write, reflect, understand.</p>
-          <button @click="goToCompose" class="btn-primary px-5 py-2 text-sm">New Entry</button>
+          <div class="flex items-center gap-2">
+            <div class="relative">
+              <button @click="showBulkExportMenu = !showBulkExportMenu" class="text-xs text-txt-muted hover:text-accent transition-colors px-2 py-2 flex items-center gap-1">
+                <Download :size="12" />
+                Export All
+              </button>
+              <div v-if="showBulkExportMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[170px]">
+                <button @click="exportAllJournal('markdown')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
+                  Markdown (.zip)
+                </button>
+                <button @click="exportAllJournal('json')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
+                  JSON (.json)
+                </button>
+                <button @click="exportAllJournal('obsidian')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors flex items-center gap-1.5">
+                  Obsidian Vault (.zip)
+                </button>
+              </div>
+            </div>
+            <button @click="goToCompose" class="btn-primary px-5 py-2 text-sm">New Entry</button>
+          </div>
         </div>
         <div v-if="loadingJournal" class="text-sm text-txt-muted">Loading...</div>
         <div v-else-if="journalEntries.length === 0" class="glass-card p-8 text-center">
@@ -4656,6 +4903,9 @@ onUnmounted(() => {
                     <button @click="exportEntry('json')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
                       JSON (.json)
                     </button>
+                    <button @click="exportEntry('obsidian')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
+                      Obsidian (.md)
+                    </button>
                   </div>
                 </div>
                 <button @click="deleteEntry" class="text-xs text-txt-muted hover:text-red-400 transition-colors px-2 py-1">Delete</button>
@@ -4742,6 +4992,14 @@ onUnmounted(() => {
     <transition name="fade">
       <SettingsPanel v-if="showSettings" @close="showSettings = false" />
     </transition>
+
+    <!-- Shareable progress card -->
+    <ShareableCard
+      v-if="shareCardData"
+      :data="shareCardData"
+      :visible="showShareCard"
+      @close="showShareCard = false"
+    />
     </div>
   </div>
 </template>

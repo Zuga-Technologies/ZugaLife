@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZugaLife Marketing Strategy</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: #1a1a2e;
+    line-height: 1.65;
+    font-size: 11pt;
+    background: white;
+  }
+
+  .page { padding: 48px 56px; max-width: 850px; margin: 0 auto; }
+
+  /* Cover page */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 80px 64px;
+    background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0a0a1a 100%);
+    color: white;
+    page-break-after: always;
+  }
+  .cover .logo {
+    width: 48px; height: 48px; border-radius: 12px;
+    background: rgba(99, 102, 241, 0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 800; color: #818cf8;
+    margin-bottom: 48px;
+  }
+  .cover h1 { font-size: 42pt; font-weight: 800; line-height: 1.1; margin-bottom: 16px; }
+  .cover h1 span { color: #818cf8; }
+  .cover .subtitle { font-size: 18pt; color: #94a3b8; margin-bottom: 48px; font-weight: 400; }
+  .cover .meta { color: #64748b; font-size: 11pt; line-height: 1.8; }
+  .cover .meta strong { color: #94a3b8; }
+  .cover .badge {
+    display: inline-block; padding: 6px 16px; border-radius: 20px;
+    background: rgba(99, 102, 241, 0.15); color: #818cf8;
+    font-size: 10pt; font-weight: 600; margin-bottom: 32px;
+  }
+
+  /* Section headers */
+  h1 { font-size: 22pt; font-weight: 800; color: #0f0f23; margin: 40px 0 16px; }
+  h2 { font-size: 16pt; font-weight: 700; color: #1a1a2e; margin: 32px 0 12px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+  h3 { font-size: 12pt; font-weight: 700; color: #334155; margin: 24px 0 8px; }
+  h4 { font-size: 11pt; font-weight: 600; color: #475569; margin: 16px 0 6px; }
+
+  p { margin-bottom: 12px; color: #334155; }
+  strong { color: #1a1a2e; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 10pt; }
+  th { background: #f1f5f9; font-weight: 600; text-align: left; padding: 10px 14px; border: 1px solid #e2e8f0; color: #1a1a2e; }
+  td { padding: 8px 14px; border: 1px solid #e2e8f0; color: #334155; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8fafc; }
+
+  /* Lists */
+  ul, ol { margin: 8px 0 16px 20px; color: #334155; }
+  li { margin-bottom: 6px; }
+  li strong { color: #1a1a2e; }
+
+  /* Callout boxes */
+  .callout {
+    background: #f0f4ff; border-left: 4px solid #6366f1;
+    padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;
+  }
+  .callout p { margin-bottom: 4px; color: #1e1b4b; }
+  .callout strong { color: #312e81; }
+
+  .callout-warning {
+    background: #fef9ec; border-left: 4px solid #f59e0b;
+    padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;
+  }
+  .callout-warning p { color: #78350f; margin-bottom: 4px; }
+
+  .callout-green {
+    background: #ecfdf5; border-left: 4px solid #10b981;
+    padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;
+  }
+  .callout-green p { color: #064e3b; margin-bottom: 4px; }
+
+  /* Quote/template blocks */
+  blockquote {
+    background: #f8fafc; border-left: 3px solid #cbd5e1;
+    padding: 14px 18px; margin: 16px 0; border-radius: 0 6px 6px 0;
+    font-style: italic; color: #475569; font-size: 10.5pt;
+  }
+  blockquote strong { font-style: normal; }
+
+  /* Code blocks for post templates */
+  .template {
+    background: #1e1e2e; color: #cdd6f4; padding: 20px 24px;
+    border-radius: 8px; margin: 16px 0; font-family: 'SF Mono', Consolas, monospace;
+    font-size: 9.5pt; line-height: 1.6; white-space: pre-wrap;
+  }
+
+  /* Timeline */
+  .timeline-item {
+    display: flex; gap: 16px; margin-bottom: 20px;
+    padding-bottom: 20px; border-bottom: 1px solid #f1f5f9;
+  }
+  .timeline-week {
+    width: 64px; flex-shrink: 0; text-align: center;
+    padding: 6px 0; border-radius: 8px; font-weight: 700;
+    font-size: 10pt;
+  }
+  .week-prep { background: #f0f4ff; color: #4f46e5; }
+  .week-launch { background: #fef2f2; color: #dc2626; }
+  .week-growth { background: #ecfdf5; color: #059669; }
+  .week-seo { background: #fefce8; color: #ca8a04; }
+
+  /* Page breaks */
+  .page-break { page-break-before: always; }
+
+  /* Footer */
+  .doc-footer {
+    margin-top: 48px; padding-top: 24px; border-top: 2px solid #e2e8f0;
+    text-align: center; color: #94a3b8; font-size: 9pt;
+  }
+
+  /* Stat cards */
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0 24px; }
+  .stat-card {
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 16px; text-align: center;
+  }
+  .stat-card .number { font-size: 24pt; font-weight: 800; color: #6366f1; }
+  .stat-card .label { font-size: 9pt; color: #64748b; margin-top: 4px; }
+
+  @media print {
+    body { font-size: 10pt; }
+    .cover { min-height: auto; padding: 60px 48px; }
+    .page { padding: 32px 40px; }
+    .page-break { page-break-before: always; }
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="cover">
+  <div class="logo">Z</div>
+  <div class="badge">CONFIDENTIAL</div>
+  <h1>ZugaLife<br><span>Marketing Strategy</span></h1>
+  <p class="subtitle">$0 Budget Path from 0 to 1,000 Users</p>
+  <div class="meta">
+    <strong>Date:</strong> April 2026<br>
+    <strong>Product:</strong> ZugaLife (part of ZugaApp &mdash; zugabot.ai)<br>
+    <strong>Author:</strong> Antonio Delgado / Zuga Technologies<br>
+    <strong>Status:</strong> Active &mdash; Week 1 Ready
+  </div>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="page">
+  <h1>Contents</h1>
+  <table>
+    <tr><td><strong>1.</strong> Product Overview</td><td style="width:60px;text-align:right">3</td></tr>
+    <tr><td><strong>2.</strong> Market Benchmarks &amp; Conversion Data</td><td style="text-align:right">3</td></tr>
+    <tr><td><strong>3.</strong> Phase 1: Pre-Launch (Week 1-2)</td><td style="text-align:right">4</td></tr>
+    <tr><td><strong>4.</strong> Phase 2: Launch Week (Week 3)</td><td style="text-align:right">6</td></tr>
+    <tr><td><strong>5.</strong> Phase 3: Sustained Growth (Week 4-8)</td><td style="text-align:right">8</td></tr>
+    <tr><td><strong>6.</strong> Phase 4: SEO &amp; Content (Week 7-16)</td><td style="text-align:right">10</td></tr>
+    <tr><td><strong>7.</strong> Platform Strategies (Reddit, Twitter, TikTok)</td><td style="text-align:right">11</td></tr>
+    <tr><td><strong>8.</strong> Product-Led Growth Features</td><td style="text-align:right">13</td></tr>
+    <tr><td><strong>9.</strong> Content Calendar</td><td style="text-align:right">14</td></tr>
+    <tr><td><strong>10.</strong> Budget &amp; Risk Assessment</td><td style="text-align:right">15</td></tr>
+    <tr><td><strong>11.</strong> 12-Week Roadmap Summary</td><td style="text-align:right">15</td></tr>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 1: PRODUCT OVERVIEW -->
+  <h1>1. Product Overview</h1>
+
+  <p>ZugaLife is an AI-powered wellness platform that combines mood tracking, journaling with AI reflections, personalized meditation generation, habit tracking, goal setting, an AI therapist, and gamification into a single integrated experience.</p>
+
+  <div class="callout">
+    <p><strong>Key differentiator:</strong> Every meditation is <em>generated</em>, not pre-recorded. Cross-module intelligence means your meditation adapts to your mood, your journal reflects on your habits, and your habit streaks connect to your goals. No other wellness app does this.</p>
+  </div>
+
+  <p>ZugaLife is part of <strong>ZugaApp</strong> (zugabot.ai) &mdash; a larger platform with 12 AI studios covering trading, gaming, health, content creation, and more.</p>
+
+  <h3>Competitive Positioning</h3>
+  <table>
+    <tr><th>Feature</th><th>Calm / Headspace</th><th>Daylio</th><th>ZugaLife</th></tr>
+    <tr><td>Meditations</td><td>Pre-recorded library</td><td>None</td><td><strong>AI-generated per session</strong></td></tr>
+    <tr><td>Journal AI</td><td>None</td><td>None</td><td><strong>AI reflections + pattern detection</strong></td></tr>
+    <tr><td>Cross-module intelligence</td><td>No</td><td>No</td><td><strong>Yes &mdash; all features learn from each other</strong></td></tr>
+    <tr><td>Data ownership</td><td>Locked</td><td>CSV export</td><td><strong>Full export (Obsidian, JSON, Markdown)</strong></td></tr>
+    <tr><td>Pricing</td><td>$70/year</td><td>$36/year</td><td><strong>Pay-as-you-go (tokens)</strong></td></tr>
+  </table>
+
+  <!-- SECTION 2: BENCHMARKS -->
+  <h1>2. Market Benchmarks</h1>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="number">37%</div>
+      <div class="label">Free trial &rarr; paid conversion</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">3%</div>
+      <div class="label">Freemium &rarr; paid conversion</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">12 wk</div>
+      <div class="label">Timeline to 1,000 users ($0)</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Pricing Model</th><th>Conversion Rate</th><th>Source</th></tr>
+    <tr><td>Freemium (permanent free tier)</td><td>2-4%</td><td>RevenueCat 2025</td></tr>
+    <tr><td>Free trial (14 days)</td><td>37-40%</td><td>Business of Apps 2026</td></tr>
+    <tr><td>Hard paywall at signup</td><td>~12%</td><td>RevenueCat 2025</td></tr>
+    <tr><td>Health/fitness top 10%</td><td>68% trial-to-paid</td><td>Business of Apps 2026</td></tr>
+  </table>
+
+  <div class="callout-warning">
+    <p><strong>Recommendation:</strong> Consider a 14-day full-access trial before the pay-as-you-go model. The conversion delta between 3% freemium and 37% trial is massive at small scale. At 1,000 users: ~30 paying users vs. ~370.</p>
+  </div>
+
+  <h3>Realistic Timeline</h3>
+  <table>
+    <tr><th>Milestone</th><th>Timeline</th><th>Confidence</th></tr>
+    <tr><td>First 50 users</td><td>Week 3 (launch week)</td><td>High</td></tr>
+    <tr><td>First paying customer</td><td>Week 4-6</td><td>High</td></tr>
+    <tr><td>250 users</td><td>Week 6</td><td>Medium</td></tr>
+    <tr><td>500 users</td><td>Week 8-10</td><td>Medium</td></tr>
+    <tr><td>1,000 users</td><td>Week 10-14</td><td>Medium</td></tr>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 3: PRE-LAUNCH -->
+  <h1>3. Phase 1: Pre-Launch (Week 1-2)</h1>
+  <p>Goal: Build the infrastructure and credibility that makes launch day work. You are NOT promoting yet.</p>
+
+  <h2>Day 1-3: Platform Account Setup</h2>
+
+  <h4>Reddit (Critical &mdash; Start Immediately)</h4>
+  <ul>
+    <li>Create or verify a <strong>personal</strong> Reddit account (not branded as "ZugaLife Official")</li>
+    <li>You need 30+ days of account age and karma before most wellness subs let you post</li>
+    <li>Days 1-7: Comment only in general subs. Get 50+ karma. This is mandatory.</li>
+    <li>Set up <strong>F5bot</strong> (f5bot.com &mdash; free): monitor "meditation app", "habit tracker app", "journaling app", "mood tracker", "can't sleep anxiety"</li>
+  </ul>
+
+  <h4>Twitter/X</h4>
+  <ul>
+    <li>Create @ZugaLife handle. Bio: "AI-powered wellness &mdash; personalized meditations, habit tracking, journaling. Building in public."</li>
+    <li>Follow 50 wellness accounts. Reply to 10/day. Do NOT post about ZugaLife yet.</li>
+  </ul>
+
+  <h4>TikTok</h4>
+  <ul>
+    <li>Create @ZugaLife. Watch 30 wellness videos to train the algorithm. Don't post until Week 2.</li>
+  </ul>
+
+  <h4>Product Hunt</h4>
+  <ul>
+    <li>Create maker profile under your real name. Upvote + comment on 5-10 products/day for 14 days before launch.</li>
+  </ul>
+
+  <h2>Day 4-7: Infrastructure</h2>
+
+  <div class="callout-green">
+    <p><strong>Already built:</strong> SEO foundation (robots.txt, sitemap, OG tags, page titles), PostHog analytics, free tools (Breathing Timer + Journal Prompt Generator), Obsidian export, shareable milestone cards, blog system.</p>
+  </div>
+
+  <ul>
+    <li>Add real app screenshots to landing page</li>
+    <li>Add social proof element (even "Used by 12 beta testers")</li>
+    <li><strong>Target: 400+ waitlist emails before Product Hunt launch</strong></li>
+  </ul>
+
+  <h2>Day 8-14: Community Infiltration</h2>
+  <p>20 minutes/day on Reddit. Comment only &mdash; genuinely helpful, no links, no product mentions. You need 10-15 helpful comments per subreddit before mentioning ZugaLife.</p>
+
+  <p>Start Twitter posting: 1/day minimum. Rotate between build updates, useful tips, questions, and milestones.</p>
+
+  <p>Post first TikTok. Format: 30-60 seconds, face on camera, no fancy editing. Hook in first 3 seconds.</p>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 4: LAUNCH WEEK -->
+  <h1>4. Phase 2: Launch Week (Week 3)</h1>
+  <p>Maximum coordinated visibility across all channels in one 72-hour window.</p>
+
+  <h2>Product Hunt Launch</h2>
+  <p><strong>Timing:</strong> Tuesday or Wednesday at 12:01 AM PST</p>
+  <p><strong>Tagline:</strong> "AI meditations built from your actual mood"</p>
+
+  <h4>Maker Comment (post within 10 minutes):</h4>
+  <blockquote>
+    Hey PH community &mdash; I'm Antonio, the person who built ZugaLife.<br><br>
+    Six months ago I was using four different apps to track my mood, journal, meditate, and set goals. None of them talked to each other. None of them got smarter about me over time.<br><br>
+    ZugaLife is what I wanted: one place where your meditation is generated from your actual mood that morning, your journal gets a real reflection back, and your habit streaks link to your goals.<br><br>
+    First 50 PH visitors get 60 days free. Happy to answer anything.
+  </blockquote>
+
+  <h2>Same-Day Outreach Schedule</h2>
+  <table>
+    <tr><th>Time (PST)</th><th>Action</th></tr>
+    <tr><td>12:01 AM</td><td>Product Hunt goes live</td></tr>
+    <tr><td>8:00 AM</td><td>Email waitlist with PH link</td></tr>
+    <tr><td>8:30 AM</td><td>Post in r/SideProject</td></tr>
+    <tr><td>9:00 AM</td><td>Post on Indie Hackers</td></tr>
+    <tr><td>9:30 AM</td><td>Tweet PH link + pin tweet</td></tr>
+    <tr><td>10:00 AM</td><td>Post in Discord servers</td></tr>
+    <tr><td>All day</td><td>Respond to every comment within 10 minutes</td></tr>
+  </table>
+
+  <h2>Reddit Launch Posts</h2>
+
+  <h4>r/SideProject (self-promo OK):</h4>
+  <blockquote>
+    <strong>Title:</strong> I was spending $80/month on 5 wellness apps. So I built one that replaced all of them.<br><br>
+    [Personal story] &rarr; [What ZugaLife does] &rarr; [Screenshot] &rarr; "It's in early access at zugabot.ai &mdash; feedback welcome"
+  </blockquote>
+
+  <h4>r/selfimprovement (soft mention):</h4>
+  <blockquote>
+    <strong>Title:</strong> What I learned after journaling every day for 90 days (with an AI reading every entry)<br><br>
+    [Genuinely useful insights] &rarr; Last line: "I built ZugaLife partly because of this experience."
+  </blockquote>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 5: SUSTAINED GROWTH -->
+  <h1>5. Phase 3: Sustained Growth (Week 4-8)</h1>
+
+  <h2>Week-by-Week Targets</h2>
+  <table>
+    <tr><th>Week</th><th>Focus</th><th>Primary Action</th><th>Target</th></tr>
+    <tr><td>4</td><td>Best channel from W3</td><td>70% effort on what drove signups</td><td>150 signups</td></tr>
+    <tr><td>5</td><td>TikTok + community</td><td>5 TikToks/week, join 5 Discords</td><td>250 signups</td></tr>
+    <tr><td>6</td><td>Reddit expansion</td><td>One value post/week, new subs</td><td>400 signups</td></tr>
+    <tr><td>7</td><td>SEO + email</td><td>First 2 blog posts, nurture list</td><td>500 signups</td></tr>
+    <tr><td>8</td><td>Second launch</td><td>PH "New features" or IH feature</td><td>750 signups</td></tr>
+  </table>
+
+  <h2>Target Subreddits</h2>
+  <table>
+    <tr><th>Subreddit</th><th>Size</th><th>Angle</th><th>Promo Rules</th></tr>
+    <tr><td>r/SideProject</td><td>&mdash;</td><td>Launch here first</td><td>Self-promo welcome</td></tr>
+    <tr><td>r/selfimprovement</td><td>2.4M</td><td>Habit systems, growth</td><td>Value-first only</td></tr>
+    <tr><td>r/getdisciplined</td><td>2M</td><td>Accountability</td><td>Value-first only</td></tr>
+    <tr><td>r/DecidingToBeBetter</td><td>1.3M</td><td>Transformation stories</td><td>Value-first only</td></tr>
+    <tr><td>r/Meditation</td><td>850K</td><td>Techniques, app recs</td><td>Strict &mdash; soft mention</td></tr>
+    <tr><td>r/mentalhealth</td><td>800K</td><td>Coping strategies</td><td>Very strict</td></tr>
+    <tr><td>r/productivity</td><td>1.5M</td><td>Systems that work</td><td>Value-first only</td></tr>
+    <tr><td>r/Journaling</td><td>250K</td><td>Prompts, methods</td><td>Tools welcome</td></tr>
+    <tr><td>r/ObsidianMD</td><td>400K+</td><td>We have Obsidian export!</td><td>Integrations welcome</td></tr>
+    <tr><td>r/Anxiety</td><td>700K</td><td>Mental health tools</td><td>Help only</td></tr>
+  </table>
+
+  <h2>Micro-Influencer Strategy ($0)</h2>
+  <ul>
+    <li>Target TikTok/Instagram wellness creators with 1K-20K followers</li>
+    <li>Send 20 DMs/week offering free early access in exchange for honest feedback</li>
+    <li>Expected: 1-2 genuine collabs per week</li>
+  </ul>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 6: SEO -->
+  <h1>6. Phase 4: SEO &amp; Content (Week 7-16)</h1>
+  <p>Blog posts take 2-3 months to rank but generate traffic forever.</p>
+
+  <h2>10 Blog Posts (Priority Order)</h2>
+  <table>
+    <tr><th>#</th><th>Title</th><th>Target Keyword</th></tr>
+    <tr><td>1</td><td>Best Free Meditation Apps 2026</td><td>free meditation app</td></tr>
+    <tr><td>2</td><td>AI Journaling Apps: Do They Actually Help?</td><td>AI journaling app</td></tr>
+    <tr><td>3</td><td>How to Start a Journaling Habit</td><td>how to start journaling</td></tr>
+    <tr><td>4</td><td>Mood Tracking: Does It Improve Mental Health?</td><td>mood tracking app</td></tr>
+    <tr><td>5</td><td>Habit Tracking Apps Compared</td><td>habit tracking comparison</td></tr>
+    <tr><td>6</td><td>What Is AI Therapy and Is It Safe?</td><td>AI therapy app</td></tr>
+    <tr><td>7</td><td>Personalized Meditation: How AI Makes It Different</td><td>personalized meditation</td></tr>
+    <tr><td>8</td><td>Free Mental Health Apps That Work</td><td>free mental health apps</td></tr>
+    <tr><td>9</td><td>The Morning Routine App That Replaced Five Others</td><td>morning routine app</td></tr>
+    <tr><td>10</td><td>Gamification in Mental Health</td><td>gamification mental health</td></tr>
+  </table>
+
+  <h2>Free Tool Pages (Already Built)</h2>
+  <table>
+    <tr><th>Tool</th><th>URL</th><th>Target Keywords</th></tr>
+    <tr><td>Breathing Timer</td><td>/tools/breathing</td><td>box breathing, 4-7-8 breathing</td></tr>
+    <tr><td>Journal Prompts</td><td>/tools/prompts</td><td>journal prompts, gratitude prompts</td></tr>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 7: PLATFORM STRATEGIES -->
+  <h1>7. Platform Strategies</h1>
+
+  <h2>Reddit: The 90-Day Structure</h2>
+  <table>
+    <tr><th>Phase</th><th>Days</th><th>Action</th></tr>
+    <tr><td>Karma building</td><td>1-30</td><td>Comment only. Never mention ZugaLife.</td></tr>
+    <tr><td>Value posting</td><td>31-60</td><td>One value post/week. ZugaLife as footnote.</td></tr>
+    <tr><td>Earned promotion</td><td>61-90</td><td>One "I built this" post.</td></tr>
+  </table>
+
+  <div class="callout-warning">
+    <p><strong>What gets you banned:</strong> Posting same link in multiple subs within 24h. Account with 80%+ posts about ZugaLife. Not reading subreddit rules.</p>
+  </div>
+
+  <h2>Twitter/X: 0 to 500 Followers</h2>
+  <ul>
+    <li>60% of time replying to others, 40% your own posts</li>
+    <li>Never post about ZugaLife more than 40% of the time</li>
+    <li>Post to X Communities for reach beyond followers</li>
+    <li>Hashtags: #BuildingInPublic #mentalhealth #wellness #IndieHacker</li>
+  </ul>
+
+  <h4>Daily Post Rotation:</h4>
+  <ol>
+    <li><strong>Insight:</strong> "Most people think journaling is about writing. It's about noticing patterns."</li>
+    <li><strong>Question:</strong> "What's the hardest habit you've tried to build?"</li>
+    <li><strong>Build update:</strong> "Added [feature]. Here's why:"</li>
+    <li><strong>User story:</strong> "Beta user sent me this:" (with permission)</li>
+    <li><strong>Tip:</strong> Useful wellness content with zero product tie-in</li>
+  </ol>
+
+  <h2>TikTok: Wellness Content That Works</h2>
+  <ul>
+    <li>First 2 seconds: spoken + on-screen hook</li>
+    <li>Raw phone-camera quality beats produced content</li>
+    <li>You = main character. ZugaLife = tool in your story.</li>
+    <li>3-5 videos/week. Say keywords out loud (TikTok transcribes for discovery).</li>
+  </ul>
+
+  <h4>Ready-to-Film Ideas:</h4>
+  <ol>
+    <li>"I tracked my mood for 30 days. Here's what it showed me."</li>
+    <li>"What happens when AI generates your meditation based on your actual mood"</li>
+    <li>"I tracked my habits for 21 days. The data surprised me."</li>
+    <li>"Day 1 of my 30-day AI meditation challenge" (series)</li>
+    <li>"This app told me I was burning out 4 days before I crashed."</li>
+  </ol>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 8: PRODUCT-LED GROWTH -->
+  <h1>8. Product-Led Growth Features</h1>
+  <p>These are product features that turn users into distribution channels.</p>
+
+  <table>
+    <tr><th>Feature</th><th>Distribution Channel</th><th>Status</th></tr>
+    <tr><td>Breathing Timer (/tools/breathing)</td><td>SEO, Reddit, direct sharing</td><td>Built</td></tr>
+    <tr><td>Journal Prompts (/tools/prompts)</td><td>SEO, r/Journaling, r/selfimprovement</td><td>Built</td></tr>
+    <tr><td>Obsidian Journal Export</td><td>r/ObsidianMD (400K+ members)</td><td>Built</td></tr>
+    <tr><td>Meditation MP3 Download</td><td>Shareable audio, YouTube</td><td>Built</td></tr>
+    <tr><td>ZugaAudio Integration</td><td>Audio content pipeline for YouTube</td><td>Built</td></tr>
+    <tr><td>Shareable Milestone Cards</td><td>Instagram, Twitter, LinkedIn</td><td>Built</td></tr>
+    <tr><td>Blog System</td><td>Organic search traffic</td><td>Built</td></tr>
+    <tr><td>PostHog Analytics</td><td>Channel attribution tracking</td><td>Active</td></tr>
+    <tr><td>Data Migration (Daylio/Apple Health)</td><td>Competitor switchers</td><td>Planned</td></tr>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 9: CONTENT CALENDAR -->
+  <h1>9. Content Calendar</h1>
+
+  <h2>Daily Routine (15-20 min per platform)</h2>
+  <table>
+    <tr><th>Platform</th><th>Daily Action</th></tr>
+    <tr><td>Reddit</td><td>Check F5bot alerts, answer 2-3 threads</td></tr>
+    <tr><td>Twitter/X</td><td>1 post (rotate types), reply to all mentions within 1 hour</td></tr>
+    <tr><td>TikTok</td><td>Post Tue + Thu, comment on 5 wellness videos daily</td></tr>
+  </table>
+
+  <h2>Weekly Anchors</h2>
+  <table>
+    <tr><th>Day</th><th>Action</th></tr>
+    <tr><td>Monday</td><td>"Week N update" Twitter thread &mdash; numbers, lessons, changes</td></tr>
+    <tr><td>Wednesday</td><td>Reddit value post (rotate subreddits)</td></tr>
+    <tr><td>Thursday</td><td>TikTok video (app demo or data visualization)</td></tr>
+    <tr><td>Friday</td><td>"Building in public" behind-the-scenes post</td></tr>
+  </table>
+
+  <h2>What to Track vs. Ignore</h2>
+  <table>
+    <tr><th>Track</th><th>Ignore (Early On)</th></tr>
+    <tr><td>Signups per channel per week</td><td>Follower counts</td></tr>
+    <tr><td>Activation rate (feature used within 48h)</td><td>TikTok views on individual videos</td></tr>
+    <tr><td>Trial-to-paid conversion (target: 35%+)</td><td>Reddit upvote counts</td></tr>
+  </table>
+
+  <!-- SECTION 10: BUDGET -->
+  <h1>10. Budget &amp; Risk Assessment</h1>
+
+  <h2>Budget: $0</h2>
+  <table>
+    <tr><th>Item</th><th>Cost</th><th>Notes</th></tr>
+    <tr><td>F5bot</td><td>Free</td><td>Reddit keyword alerts</td></tr>
+    <tr><td>PostHog analytics</td><td>Free tier</td><td>1M events/month</td></tr>
+    <tr><td>Product Hunt</td><td>Free</td><td>Maker account</td></tr>
+    <tr><td>Reddit / Twitter / TikTok</td><td>Free</td><td>Organic only</td></tr>
+    <tr><td>Micro-influencer outreach</td><td>Free</td><td>Trade app access</td></tr>
+    <tr><td>Blog hosting</td><td>Free</td><td>Built into ZugaApp</td></tr>
+    <tr><td><strong>Total</strong></td><td><strong>$0</strong></td><td></td></tr>
+  </table>
+
+  <h2>Risk Factors</h2>
+  <table>
+    <tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr>
+    <tr><td>Reddit account flagged</td><td>Medium</td><td>Keep promo ratio under 20%</td></tr>
+    <tr><td>PH not "Featured"</td><td>Medium</td><td>Need 400+ waitlist + 10 first-hour comments</td></tr>
+    <tr><td>TikTok no traction</td><td>High (first 10)</td><td>Post 20 before judging</td></tr>
+    <tr><td>Slow W1-4 growth</td><td>High</td><td>Normal. Real traction in W6-10.</td></tr>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 11: ROADMAP -->
+  <h1>11. The 12-Week Roadmap</h1>
+
+  <div class="timeline-item">
+    <div class="timeline-week week-prep">W1-2</div>
+    <div><strong>Pre-Launch:</strong> Build credibility. Reddit karma, Twitter engagement, TikTok seeding. Set up F5bot, analytics, waitlist. No promotion.</div>
+  </div>
+  <div class="timeline-item">
+    <div class="timeline-week week-launch">W3</div>
+    <div><strong>LAUNCH:</strong> Product Hunt + Reddit + Indie Hackers + all channels same day. Stay online 24h. Respond to everything.</div>
+  </div>
+  <div class="timeline-item">
+    <div class="timeline-week week-growth">W4</div>
+    <div><strong>Double Down:</strong> 70% effort on the channel that drove the most signups in W3. 30% baseline everywhere else.</div>
+  </div>
+  <div class="timeline-item">
+    <div class="timeline-week week-growth">W5-6</div>
+    <div><strong>Community:</strong> Join Discord servers. First micro-influencer collabs. Reddit value posts in new subs each week.</div>
+  </div>
+  <div class="timeline-item">
+    <div class="timeline-week week-seo">W7-8</div>
+    <div><strong>SEO + Second Launch:</strong> First 2 blog posts. Email nurture sequence. Second PH/IH launch.</div>
+  </div>
+  <div class="timeline-item">
+    <div class="timeline-week week-seo">W9-12</div>
+    <div><strong>Compound Growth:</strong> Early posts start ranking. Referrals + organic + community compound. Continue all channels.</div>
+  </div>
+
+  <div class="callout-green">
+    <p><strong>Expected result at Week 12:</strong> 750-1,000 users, 15-40 paying customers, established presence on Reddit/Twitter/TikTok, blog posts starting to rank.</p>
+  </div>
+
+  <div style="margin-top: 48px; padding: 32px; background: #f8fafc; border-radius: 12px; text-align: center;">
+    <p style="font-size: 14pt; font-weight: 700; color: #1a1a2e; margin-bottom: 8px;">The single most important thing:</p>
+    <p style="font-size: 12pt; color: #475569;">Show up every day for 12 weeks. Consistency beats any single viral moment.<br>The apps that win at $0 are the ones whose founders refused to stop posting.</p>
+  </div>
+
+  <div class="doc-footer">
+    <p>Zuga Technologies &mdash; zugabot.ai</p>
+    <p>Confidential &mdash; April 2026</p>
+  </div>
+</div>
+
+</body>
+</html>

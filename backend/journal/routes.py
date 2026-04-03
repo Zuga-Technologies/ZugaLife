@@ -225,6 +225,68 @@ def _entry_to_markdown(entry: "JournalEntry") -> str:
     return "\n".join(lines)
 
 
+def _entry_to_obsidian(entry: "JournalEntry") -> str:
+    """Convert a JournalEntry to Obsidian-native markdown with Properties."""
+    created = entry.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+    updated = entry.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+    date_short = entry.created_at.strftime("%Y-%m-%d")
+
+    lines = ["---"]
+    if entry.title:
+        safe_title = entry.title.replace('"', '\\"')
+        lines.append(f'title: "{safe_title}"')
+    lines.append(f"date: {date_short}")
+    lines.append(f"created: {created}")
+    lines.append(f"updated: {updated}")
+
+    # Obsidian Properties: mood as dedicated fields
+    if entry.mood_emoji:
+        lines.append(f'mood: "{entry.mood_emoji}"')
+    if entry.mood_label:
+        lines.append(f'mood_label: "{entry.mood_label}"')
+
+    # Tags as YAML list (Obsidian reads these into its tag index)
+    tags = ["journal", "zugalife"]
+    if hasattr(entry, "tags") and entry.tags:
+        raw = entry.tags if isinstance(entry.tags, list) else entry.tags.split(",")
+        for t in raw:
+            clean = t.strip().lower().replace(" ", "-")
+            if clean and clean not in tags:
+                tags.append(clean)
+    lines.append("tags:")
+    for t in tags:
+        lines.append(f"  - {t}")
+
+    lines.append("source: zugalife")
+    lines.append(f"entry_id: {entry.id}")
+    lines.append("---")
+    lines.append("")
+
+    if entry.title:
+        lines.append(f"# {entry.title}")
+        lines.append("")
+
+    lines.append(entry.content)
+
+    if entry.reflections:
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+        lines.append("## AI Reflections")
+        lines.append("")
+        for i, ref in enumerate(entry.reflections, 1):
+            if len(entry.reflections) > 1:
+                lines.append(f"### Reflection {i}")
+                lines.append("")
+            lines.append(ref.content)
+            ref_date = ref.created_at.strftime("%Y-%m-%d %H:%M")
+            lines.append("")
+            lines.append(f"*Generated {ref_date} · {ref.model_used}*")
+            lines.append("")
+
+    return "\n".join(lines)
+
+
 def _safe_filename(title: str | None, date: datetime, entry_id: int) -> str:
     """Generate a filesystem-safe filename for an entry."""
     date_str = date.strftime("%Y-%m-%d")
@@ -238,7 +300,7 @@ def _safe_filename(title: str | None, date: datetime, entry_id: int) -> str:
 
 @router.get("/export")
 async def export_journal(
-    format: str = Query("markdown", pattern="^(markdown|json)$"),
+    format: str = Query("markdown", pattern="^(markdown|json|obsidian)$"),
     start: str | None = Query(None, description="Start date YYYY-MM-DD"),
     end: str | None = Query(None, description="End date YYYY-MM-DD"),
     user: CurrentUser = Depends(get_current_user),
@@ -308,17 +370,45 @@ async def export_journal(
                 },
             )
 
+        # Obsidian vault export — YYYY/MM/ folder structure with Obsidian Properties
+        if format == "obsidian":
+            buf = io.BytesIO()
+            seen_filenames: set[str] = set()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                for entry in entries:
+                    md_content = _entry_to_obsidian(entry)
+                    year = entry.created_at.strftime("%Y")
+                    month = entry.created_at.strftime("%m")
+                    filename = _safe_filename(entry.title, entry.created_at, entry.id)
+
+                    full_path = f"ZugaLife Journal/{year}/{month}/{filename}"
+                    if full_path in seen_filenames:
+                        base = filename.rsplit(".md", 1)[0]
+                        full_path = f"ZugaLife Journal/{year}/{month}/{base} ({entry.id}).md"
+                    seen_filenames.add(full_path)
+
+                    zf.writestr(full_path, md_content)
+
+            buf.seek(0)
+            return StreamingResponse(
+                buf,
+                media_type="application/zip",
+                headers={
+                    "Content-Disposition": "attachment; filename=zugalife-obsidian-vault.zip",
+                },
+            )
+
         buf = io.BytesIO()
-        seen_filenames: set[str] = set()
+        seen_filenames_md: set[str] = set()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for entry in entries:
                 md_content = _entry_to_markdown(entry)
                 filename = _safe_filename(entry.title, entry.created_at, entry.id)
 
-                if filename in seen_filenames:
+                if filename in seen_filenames_md:
                     base = filename.rsplit(".md", 1)[0]
                     filename = f"{base} ({entry.id}).md"
-                seen_filenames.add(filename)
+                seen_filenames_md.add(filename)
 
                 zf.writestr(f"zugalife-journal/{filename}", md_content)
 
@@ -335,7 +425,7 @@ async def export_journal(
 @router.get("/{entry_id}/export")
 async def export_single_entry(
     entry_id: int,
-    format: str = Query("markdown", pattern="^(markdown|json)$"),
+    format: str = Query("markdown", pattern="^(markdown|json|obsidian)$"),
     user: CurrentUser = Depends(get_current_user),
 ):
     """Export a single journal entry as Markdown (.md) or JSON file."""
@@ -376,8 +466,11 @@ async def export_single_entry(
                 headers={"Content-Disposition": f"attachment; filename={filename}"},
             )
 
-        # Markdown — build inside session so reflections are accessible
-        md_content = _entry_to_markdown(entry)
+        # Obsidian or standard Markdown
+        if format == "obsidian":
+            md_content = _entry_to_obsidian(entry)
+        else:
+            md_content = _entry_to_markdown(entry)
     filename = _safe_filename(entry.title, entry.created_at, entry.id)
     return StreamingResponse(
         io.BytesIO(md_content.encode()),
