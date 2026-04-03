@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
+import { api } from '@core/api/client'
 import {
   type ThemeId,
   getSavedTheme,
@@ -126,37 +127,26 @@ async function startAIAmbient() {
 
   try {
     // Start the ambient scheduler in ZugaVideo
-    const res = await fetch('/api/video/ambient/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        theme: ambientTheme,
-        interval_minutes: interval,
-        size: '1920x1080',
-        provider: 'flux_schnell',
-      }),
+    const data = await api.post<{ current_wallpaper_data?: string }>('/api/video/ambient/start', {
+      theme: ambientTheme,
+      interval_minutes: interval,
+      size: '1920x1080',
+      provider: 'flux_schnell',
     })
-    if (res.ok) {
-      const data = await res.json()
-      if (data.current_wallpaper_data) {
-        aiCurrentImage.value = data.current_wallpaper_data
-      }
+    if (data?.current_wallpaper_data) {
+      aiCurrentImage.value = data.current_wallpaper_data
     }
   } catch { /* ZugaVideo may not be loaded */ }
 
   // Poll for updates
   aiPollTimer = setInterval(async () => {
     try {
-      const res = await fetch('/api/video/ambient/status')
-      if (!res.ok) return
-      const data = await res.json()
+      const data = await api.get<{ current_wallpaper_data?: string; current_wallpaper_url?: string }>('/api/video/ambient/status')
       const newImage = data.current_wallpaper_data || data.current_wallpaper_url
       if (newImage && newImage !== aiCurrentImage.value) {
-        // Crossfade: current becomes previous, new becomes current
         aiPreviousImage.value = aiCurrentImage.value
         aiCurrentImage.value = newImage
         aiShowCurrent.value = false
-        // Trigger crossfade
         requestAnimationFrame(() => { aiShowCurrent.value = true })
       }
     } catch { /* silent */ }
