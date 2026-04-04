@@ -269,6 +269,17 @@ async def generate_challenges(
         _last_ai_failure = _time.time()
         return None
 
+    # Pre-flight billing check
+    try:
+        from core.credits.client import get_credit_client, dollars_to_tokens
+        credit_client = get_credit_client()
+        estimated_tokens = dollars_to_tokens(0.002)  # ~512 output tokens at Venice rates
+        if not await credit_client.can_spend(user_id, user_email, estimated_tokens):
+            logger.info("Challenge generation skipped (insufficient credits)")
+            return None
+    except Exception:
+        pass  # Credit system unavailable — proceed (fallback handles failures)
+
     context = await _gather_user_context(session, user_id)
 
     prompt = _build_challenge_prompt(context, challenge_type)

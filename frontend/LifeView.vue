@@ -69,6 +69,21 @@ async function withCelebration<T>(action: () => Promise<T>): Promise<T> {
 type Tab = 'dashboard' | 'journal' | 'habits' | 'goals' | 'meditate' | 'therapist'
 const activeTab = ref<Tab>('dashboard')
 
+// ── Billing redirect for 402 (insufficient tokens) ──────────────
+const showBillingPrompt = ref(false)
+const billingPromptFeature = ref('')
+
+function handleInsufficientTokens(feature: string): string {
+  billingPromptFeature.value = feature
+  showBillingPrompt.value = true
+  return 'You need more tokens to use this feature.'
+}
+
+function goToBilling() {
+  showBillingPrompt.value = false
+  window.location.href = '/tokens'
+}
+
 // ============================
 // DASHBOARD
 // ============================
@@ -771,7 +786,7 @@ async function requestReflection() {
     if (e instanceof ApiError) {
       const body = e.body as Record<string, string>
       if (e.status === 402) {
-        journalError.value = 'AI budget exhausted for today. Try again tomorrow.'
+        journalError.value = handleInsufficientTokens('Journal Reflections')
       } else if (e.status === 429) {
         journalError.value = body.detail ?? 'Maximum reflections reached for this entry.'
       } else {
@@ -1588,8 +1603,12 @@ async function fetchGoalInsight(goalId: number) {
   try {
     const res = await api.post<{ insight: string; cost: number }>(`/api/life/goals/${goalId}/insight`)
     goalInsights.value[goalId] = res.insight
-  } catch {
-    goalInsights.value[goalId] = 'Could not generate insight right now.'
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 402) {
+      goalInsights.value[goalId] = handleInsufficientTokens('Goal Coaching')
+    } else {
+      goalInsights.value[goalId] = 'Could not generate insight right now.'
+    }
   } finally {
     goalInsightLoading.value = null
   }
@@ -1915,7 +1934,7 @@ async function generateMeditation() {
     if (e instanceof ApiError) {
       const detail = (e.body as Record<string, string>).detail
       if (e.status === 402) {
-        medError.value = 'AI budget exhausted for today.'
+        medError.value = handleInsufficientTokens('Meditation')
       } else if (e.status === 409) {
         medError.value = detail ?? 'A meditation is already being generated.'
       } else if (e.status === 429) {
@@ -2470,7 +2489,9 @@ async function sendTherapistMessage() {
   } catch (e) {
     if (e instanceof ApiError) {
       const detail = (e.body as Record<string, string>).detail
-      if (e.status === 429) {
+      if (e.status === 402) {
+        therapistError.value = handleInsufficientTokens('Therapist')
+      } else if (e.status === 429) {
         therapistError.value = detail ?? 'Session limit reached for today.'
       } else if (e.status === 503) {
         therapistError.value = 'Therapist unavailable — Venice may be down.'
@@ -5118,6 +5139,29 @@ onUnmounted(() => {
       @close="showShareCard = false"
     />
     </div>
+
+    <!-- Billing Prompt Modal -->
+    <Teleport to="body">
+      <div v-if="showBillingPrompt" class="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showBillingPrompt = false">
+        <div class="glass-card p-6 max-w-sm mx-4 border border-amber-500/30 text-center">
+          <div class="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
+            <Zap :size="24" class="text-amber-400" />
+          </div>
+          <h3 class="text-lg font-semibold text-txt-primary mb-2">Tokens Required</h3>
+          <p class="text-sm text-txt-secondary mb-4">
+            <strong>{{ billingPromptFeature }}</strong> requires ZugaTokens. Add tokens to continue using AI-powered features.
+          </p>
+          <div class="flex gap-3 justify-center">
+            <button @click="showBillingPrompt = false" class="px-4 py-2 text-sm text-txt-muted hover:text-txt-primary transition-colors">
+              Later
+            </button>
+            <button @click="goToBilling" class="px-4 py-2 text-sm font-medium bg-amber-500 text-black rounded-lg hover:bg-amber-400 transition-colors">
+              Get Tokens
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 

@@ -286,12 +286,10 @@ async def therapist_chat(
         )
     except (BudgetExhaustedError, CreditBlockedError):
         raise HTTPException(status_code=402, detail="Daily AI budget exhausted")
-    except PromptBlockedError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except RuntimeError as e:
-        if "VENICE_API_KEY" in str(e):
-            raise HTTPException(status_code=503, detail="Therapist is currently unavailable")
-        raise
+    except PromptBlockedError:
+        raise HTTPException(status_code=400, detail="Content blocked by security filter")
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Therapist is currently unavailable")
     except Exception:
         logger.exception("Venice API call failed")
         raise HTTPException(status_code=503, detail="Therapist is currently unavailable. Please try later.")

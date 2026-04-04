@@ -223,6 +223,6 @@ async def prestige(
     async with get_session() as session:
         try:
             result = await _engine.perform_prestige(session, user.id)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Prestige requirements not met")
     return result

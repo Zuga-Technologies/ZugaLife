@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, field_validator
 # StreamingResponse removed — now using background tasks + polling
 from sqlalchemy import desc, func, or_, select, update
 
@@ -262,6 +263,18 @@ async def _generate_in_background(
         except ImportError:
             _use_cartesia = False
 
+        # Pre-flight billing check for TTS (estimate cost from total script chars)
+        from core.credits.client import get_credit_client, dollars_to_tokens
+        from core.ai.providers import estimate_tts_cost
+        total_chars = sum(len(seg[0]) for seg in segments)
+        estimated_tts_usd = estimate_tts_cost(total_chars, "tts-1-hd")
+        credit_client = get_credit_client()
+        if user_id and user_email:
+            estimated_tokens = dollars_to_tokens(estimated_tts_usd)
+            if not await credit_client.can_spend(user_id, user_email, estimated_tokens):
+                from core.ai.gateway import CreditBlockedError
+                raise CreditBlockedError("Insufficient ZugaTokens for TTS")
+
         # Render each segment, then merge with ffmpeg for proper MP3 structure
         import shutil
         import subprocess
@@ -281,7 +294,7 @@ async def _generate_in_background(
                         part_files.append(sf)
                     continue
 
-                print(f"[MEDITATION] {session_id} segment {i+1}/{len(segments)}, {len(seg_text)} chars, {silence_secs}s pause after", flush=True)
+                logger.info("Meditation %d segment %d/%d, %d chars", session_id, i+1, len(segments), len(seg_text))
 
                 if _use_cartesia:
                     cartesia_voice_id = CARTESIA_VOICE_MAP.get(body.voice.value, CARTESIA_VOICE_MAP["serene"])
@@ -297,7 +310,7 @@ async def _generate_in_background(
                 vf = tmp_dir / f"part_{len(part_files):04d}_voice.mp3"
                 vf.write_bytes(seg_tts.audio_bytes)
                 part_files.append(vf)
-                tts_cost += seg_tts.cost
+                tts_cost += seg_tts.cost_usd
 
                 if silence_secs > 0:
                     sf = tmp_dir / f"part_{len(part_files):04d}_silence.mp3"
@@ -329,6 +342,17 @@ async def _generate_in_background(
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
         total_cost += tts_cost
+
+        # Record TTS spend
+        if user_id and tts_cost > 0:
+            await credit_client.record_spend(
+                user_id=user_id,
+                tokens=dollars_to_tokens(tts_cost),
+                cost_usd=tts_cost,
+                service=tts_provider,
+                reason="meditation_tts",
+                model="tts-1-hd",
+            )
 
         class _AudioResult:
             audio_bytes = merged_audio
@@ -366,7 +390,9 @@ async def _generate_in_background(
         # XP is awarded when the user finishes listening (POST /sessions/{id}/complete)
 
     except Exception as e:
-        print(f"[MEDITATION] {session_id} FAILED: {type(e).__name__}: {e}", flush=True)
+        logger.error("Meditation %d FAILED: %s: %s", session_id, type(e).__name__, e)
+        # Store only the exception class name — never leak internals to DB
+        error_category = type(e).__name__
         try:
             async with get_session() as session:
                 await session.execute(
@@ -374,11 +400,11 @@ async def _generate_in_background(
                     .where(MeditationSession.id == session_id)
                     .values(
                         status="failed",
-                        error_message=f"{type(e).__name__}: {str(e)[:400]}",
+                        error_message=error_category,
                     )
                 )
         except Exception as e2:
-            print(f"[MEDITATION] {session_id} failed to update status: {e2}", flush=True)
+            logger.error("Meditation %d failed to update status: %s", session_id, e2)
 
 
 # --- CRUD ---
@@ -415,9 +441,28 @@ async def get_in_progress(user: CurrentUser = Depends(get_current_user)):
         return {"session": SessionResponse.model_validate(row).model_dump()}
 
 
+class GenerateScriptRequest(BaseModel):
+    prompt: str
+    max_tokens: int = 3000
+    task: str = "creative"
+
+    @field_validator("task")
+    @classmethod
+    def validate_task(cls, v: str) -> str:
+        allowed = {"creative", "creative_long", "chat"}
+        if v not in allowed:
+            raise ValueError(f"task must be one of {allowed}")
+        return v
+
+    @field_validator("max_tokens")
+    @classmethod
+    def clamp_max_tokens(cls, v: int) -> int:
+        return max(100, min(v, 4096))
+
+
 @router.post("/generate-script")
 async def generate_script(
-    body: dict,
+    body: GenerateScriptRequest,
     user: CurrentUser = Depends(get_current_user),
 ):
     """Generate a meditation script via the AI gateway (GPT-4o).
@@ -429,15 +474,8 @@ async def generate_script(
     except ImportError:
         raise HTTPException(status_code=503, detail="AI gateway not available")
 
-    prompt = body.get("prompt", "")
-    max_tokens = body.get("max_tokens", 3000)
-    task = body.get("task", "creative")
-
-    if not prompt:
-        raise HTTPException(status_code=400, detail="prompt required")
-
     response = await ai_call(
-        prompt, task=task, max_tokens=max_tokens,
+        body.prompt, task=body.task, max_tokens=body.max_tokens,
         user_id=user.id, user_email=user.email,
     )
 
@@ -499,6 +537,17 @@ async def generate_from_script(
     # TTS + stitch
     segments = _split_on_pauses(transcript)
 
+    # Pre-flight billing check for TTS
+    from core.credits.client import get_credit_client, dollars_to_tokens
+    from core.ai.providers import estimate_tts_cost
+    total_chars = sum(len(seg[0]) for seg in segments)
+    estimated_tts_usd = estimate_tts_cost(total_chars, "tts-1-hd")
+    credit_client = get_credit_client()
+    if user.id and user.email:
+        estimated_tokens = dollars_to_tokens(estimated_tts_usd)
+        if not await credit_client.can_spend(user.id, user.email, estimated_tokens):
+            raise HTTPException(status_code=402, detail="Insufficient ZugaTokens for TTS")
+
     try:
         from app.config import settings as _settings
         _use_cartesia = bool(getattr(_settings, "cartesia_api_key", ""))
@@ -537,7 +586,7 @@ async def generate_from_script(
             vf = tmp_dir / f"part_{len(part_files):04d}_voice.mp3"
             vf.write_bytes(tts_result.audio_bytes)
             part_files.append(vf)
-            tts_cost += tts_result.cost
+            tts_cost += tts_result.cost_usd
 
             if silence_secs > 0:
                 sf = tmp_dir / f"part_{len(part_files):04d}_silence.mp3"
@@ -575,6 +624,17 @@ async def generate_from_script(
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
     actual_seconds = int(_mp3_duration_seconds(audio_bytes))
+
+    # Record TTS spend
+    if user.id and tts_cost > 0:
+        await credit_client.record_spend(
+            user_id=user.id,
+            tokens=dollars_to_tokens(tts_cost),
+            cost_usd=tts_cost,
+            service=tts_provider,
+            reason="meditation_tts",
+            model="tts-1-hd",
+        )
 
     # Save audio
     user_dir = _AUDIO_DIR / user.id
@@ -632,12 +692,31 @@ async def upload_meditation(
     devices. The extension generates audio locally (via server-proxied API
     calls) and uploads the finished file here for cross-device sync.
     """
+    _MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
+    _VALID_TYPES = {
+        "breathing", "body_scan", "loving_kindness", "visualization",
+        "gratitude", "stress_relief", "mindfulness", "focus", "sleep",
+    }
+    _VALID_MIME = {"audio/mpeg", "audio/mp3", "audio/x-mp3"}
+
+    # Validate type
+    if type not in _VALID_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {', '.join(sorted(_VALID_TYPES))}")
+
+    # Validate MIME type
+    if audio.content_type and audio.content_type not in _VALID_MIME:
+        raise HTTPException(status_code=400, detail="Only MP3 audio files are accepted")
+
+    # Read with size cap
+    audio_bytes = await audio.read(_MAX_UPLOAD_BYTES + 1)
+    if len(audio_bytes) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 100 MB)")
+
     # Save audio file
     user_dir = _AUDIO_DIR / user.id
     user_dir.mkdir(parents=True, exist_ok=True)
     temp_filename = f"{int(time.time())}_{type}.mp3"
     audio_path = user_dir / temp_filename
-    audio_bytes = await audio.read()
     audio_path.write_bytes(audio_bytes)
 
     # Calculate duration from audio if not provided
@@ -819,7 +898,10 @@ async def serve_audio(
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    audio_path = _AUDIO_DIR / user_id / filename
+    audio_path = (_AUDIO_DIR / user_id / filename).resolve()
+    if not str(audio_path).startswith(str(_AUDIO_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
     if not audio_path.exists():
         raise HTTPException(status_code=404, detail="Audio file not found")
 

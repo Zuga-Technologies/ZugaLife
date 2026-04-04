@@ -591,17 +591,20 @@ Based on milestone completion rate and habit consistency, tell the user:
 Be direct and specific. Use the actual numbers."""
 
     try:
-        from core.ai.gateway import ai_call
+        from core.ai.gateway import ai_call, CreditBlockedError
         result = await ai_call(
             messages=[
                 {"role": "system", "content": "You are a concise goal coach. Be direct, use data, no fluff."},
                 {"role": "user", "content": prompt},
             ],
             task="chat",
+            user_id=user.id,
             user_email=user.email,
             max_tokens=200,
         )
         return {"insight": result.content, "cost": result.cost}
+    except CreditBlockedError:
+        raise HTTPException(status_code=402, detail="Insufficient ZugaTokens")
     except Exception as e:
         # Fallback: generate a simple rule-based insight
         if total == 0:
