@@ -392,26 +392,22 @@ async def generate_script(
 ):
     """Generate a meditation script via the AI gateway (GPT-4o).
 
-    Used by the Chrome extension which handles TTS + stitching locally.
-    The extension can't use /api/ai/chat because that's Venice-only.
+    Used by the Chrome extension for the LLM step only.
     """
     try:
         from core.ai.gateway import ai_call
     except ImportError:
         raise HTTPException(status_code=503, detail="AI gateway not available")
 
-    messages = body.get("messages", [])
+    prompt = body.get("prompt", "")
     max_tokens = body.get("max_tokens", 3000)
     task = body.get("task", "creative")
 
-    if not messages:
-        prompt = body.get("prompt", "")
-        if not prompt:
-            raise HTTPException(status_code=400, detail="prompt or messages required")
-        messages = prompt  # ai_call accepts a string prompt directly
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt required")
 
     response = await ai_call(
-        messages, task=task, max_tokens=max_tokens,
+        prompt, task=task, max_tokens=max_tokens,
         user_id=user.id, user_email=user.email,
     )
 
@@ -422,6 +418,109 @@ async def generate_script(
         "output_tokens": response.output_tokens,
         "cost": response.cost,
     }
+
+
+@router.post("/generate-from-script")
+async def generate_from_script(
+    body: dict,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Take a pre-generated script and run TTS + stitching server-side.
+
+    The extension generates the script (expensive LLM call via proxy),
+    then hands it to the server for TTS + audio stitching (proven pipeline).
+    Returns a complete session with audio, ready to play on any device.
+    """
+    script = body.get("script", "")
+    med_type = body.get("type", "breathing")
+    length = body.get("length", "medium")
+    ambience = body.get("ambience", "silence")
+    voice = body.get("voice", "serene")
+    focus = body.get("focus", "")
+    script_cost = body.get("script_cost", 0.0)
+
+    if not script or len(script.strip()) < 50:
+        raise HTTPException(status_code=400, detail="Script too short")
+
+    try:
+        from core.ai.providers import call_openai_tts, call_cartesia_tts
+    except ImportError:
+        raise HTTPException(status_code=503, detail="TTS not available")
+
+    # Parse script
+    title, transcript = _parse_script(script)
+
+    # TTS + stitch (reuses the proven server-side pipeline)
+    segments = _split_on_pauses(transcript)
+
+    try:
+        from app.config import settings as _settings
+        _use_cartesia = bool(getattr(_settings, "cartesia_api_key", ""))
+    except ImportError:
+        _use_cartesia = False
+
+    all_audio = bytearray()
+    tts_cost = 0.0
+    tts_provider = "cartesia" if _use_cartesia else "openai"
+
+    for i, (seg_text, silence_secs) in enumerate(segments):
+        if not seg_text.strip():
+            if silence_secs > 0:
+                all_audio.extend(_generate_silence_mp3(silence_secs))
+            continue
+
+        if _use_cartesia:
+            cartesia_voice_id = CARTESIA_VOICE_MAP.get(voice, CARTESIA_VOICE_MAP["serene"])
+            tts_result = await call_cartesia_tts(
+                text=seg_text, voice_id=cartesia_voice_id, speed=0.75, emotion="calm",
+            )
+        else:
+            openai_voice = OPENAI_VOICE_MAP.get(voice, "shimmer")
+            tts_result = await call_openai_tts(
+                text=seg_text, voice=openai_voice, speed=0.9,
+            )
+
+        all_audio.extend(tts_result.audio_bytes)
+        tts_cost += tts_result.cost
+
+        if silence_secs > 0:
+            all_audio.extend(_generate_silence_mp3(silence_secs))
+
+    audio_bytes = bytes(all_audio)
+    actual_seconds = int(_mp3_duration_seconds(audio_bytes))
+
+    # Save audio
+    user_dir = _AUDIO_DIR / user.id
+    user_dir.mkdir(parents=True, exist_ok=True)
+    temp_filename = f"{int(time.time())}_{med_type}.mp3"
+    audio_path = user_dir / temp_filename
+    audio_path.write_bytes(audio_bytes)
+
+    # Create session
+    total_cost = script_cost + tts_cost
+    async with get_session() as session:
+        meditation = MeditationSession(
+            user_id=user.id,
+            type=med_type,
+            length=length,
+            duration_seconds=actual_seconds,
+            ambience=ambience,
+            voice=voice,
+            focus=focus or None,
+            title=title,
+            transcript=transcript,
+            audio_filename=f"{user.id}/{temp_filename}",
+            model_used=body.get("model", "gpt-4o"),
+            tts_model=tts_provider,
+            cost=total_cost,
+            status="ready",
+        )
+        session.add(meditation)
+        await session.flush()
+        result = await session.execute(
+            select(MeditationSession).where(MeditationSession.id == meditation.id)
+        )
+        return SessionResponse.model_validate(result.scalar_one())
 
 
 @router.post("/upload")
