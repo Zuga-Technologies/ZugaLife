@@ -262,46 +262,76 @@ async def _generate_in_background(
         except ImportError:
             _use_cartesia = False
 
-        # Render each segment and stitch with silence
-        all_audio = bytearray()
+        # Render each segment, then merge with ffmpeg for proper MP3 structure
+        import shutil
+        import subprocess
+        import tempfile
+
         tts_cost = 0.0
         tts_provider = "cartesia" if _use_cartesia else "openai"
+        tmp_dir = Path(tempfile.mkdtemp(prefix="meditation_"))
+        part_files: list[Path] = []
 
-        for i, (seg_text, silence_secs) in enumerate(segments):
-            if not seg_text.strip():
+        try:
+            for i, (seg_text, silence_secs) in enumerate(segments):
+                if not seg_text.strip():
+                    if silence_secs > 0:
+                        sf = tmp_dir / f"part_{len(part_files):04d}_silence.mp3"
+                        sf.write_bytes(_generate_silence_mp3(silence_secs))
+                        part_files.append(sf)
+                    continue
+
+                print(f"[MEDITATION] {session_id} segment {i+1}/{len(segments)}, {len(seg_text)} chars, {silence_secs}s pause after", flush=True)
+
+                if _use_cartesia:
+                    cartesia_voice_id = CARTESIA_VOICE_MAP.get(body.voice.value, CARTESIA_VOICE_MAP["serene"])
+                    seg_tts = await call_cartesia_tts(
+                        text=seg_text, voice_id=cartesia_voice_id, speed=0.75, emotion="calm",
+                    )
+                else:
+                    openai_voice = OPENAI_VOICE_MAP.get(body.voice.value, "shimmer")
+                    seg_tts = await call_openai_tts(
+                        text=seg_text, voice=openai_voice, speed=0.9,
+                    )
+
+                vf = tmp_dir / f"part_{len(part_files):04d}_voice.mp3"
+                vf.write_bytes(seg_tts.audio_bytes)
+                part_files.append(vf)
+                tts_cost += seg_tts.cost
+
                 if silence_secs > 0:
-                    all_audio.extend(_generate_silence_mp3(silence_secs))
-                continue
+                    sf = tmp_dir / f"part_{len(part_files):04d}_silence.mp3"
+                    sf.write_bytes(_generate_silence_mp3(silence_secs))
+                    part_files.append(sf)
 
-            print(f"[MEDITATION] {session_id} segment {i+1}/{len(segments)}, {len(seg_text)} chars, {silence_secs}s pause after", flush=True)
-
-            if _use_cartesia:
-                cartesia_voice_id = CARTESIA_VOICE_MAP.get(body.voice.value, CARTESIA_VOICE_MAP["serene"])
-                tts_result = await call_cartesia_tts(
-                    text=seg_text,
-                    voice_id=cartesia_voice_id,
-                    speed=0.75,
-                    emotion="calm",
-                )
+            # Merge all parts with ffmpeg
+            if len(part_files) == 1:
+                merged_audio = part_files[0].read_bytes()
             else:
-                openai_voice = OPENAI_VOICE_MAP.get(body.voice.value, "shimmer")
-                tts_result = await call_openai_tts(
-                    text=seg_text,
-                    voice=openai_voice,
-                    speed=0.9,
+                concat_list = tmp_dir / "concat.txt"
+                concat_list.write_text("\n".join(f"file '{f.name}'" for f in part_files))
+                output_path = tmp_dir / "merged.mp3"
+                merge_result = subprocess.run(
+                    ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                     "-i", str(concat_list), "-c:a", "libmp3lame", "-b:a", "128k",
+                     str(output_path)],
+                    capture_output=True, timeout=120,
                 )
-
-            all_audio.extend(tts_result.audio_bytes)
-            tts_cost += tts_result.cost
-
-            # Inject real silence after this segment
-            if silence_secs > 0:
-                all_audio.extend(_generate_silence_mp3(silence_secs))
+                if merge_result.returncode != 0:
+                    print(f"[MEDITATION] {session_id} ffmpeg failed: {merge_result.stderr.decode()[:300]}", flush=True)
+                    merged_audio = bytearray()
+                    for f in part_files:
+                        merged_audio.extend(f.read_bytes())
+                    merged_audio = bytes(merged_audio)
+                else:
+                    merged_audio = output_path.read_bytes()
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
         total_cost += tts_cost
-        # Package as a single TTSResponse-like object for downstream code
+
         class _AudioResult:
-            audio_bytes = bytes(all_audio)
+            audio_bytes = merged_audio
             cost = tts_cost
         tts_result = _AudioResult()
         print(f"[MEDITATION] {session_id} TTS done, {len(tts_result.audio_bytes)} bytes, provider={tts_provider}", flush=True)
@@ -475,34 +505,75 @@ async def generate_from_script(
     except ImportError:
         _use_cartesia = False
 
-    all_audio = bytearray()
+    import shutil
+    import subprocess
+    import tempfile
+
     tts_cost = 0.0
     tts_provider = "cartesia" if _use_cartesia else "openai"
+    tmp_dir = Path(tempfile.mkdtemp(prefix="meditation_"))
+    part_files: list[Path] = []
 
-    for i, (seg_text, silence_secs) in enumerate(segments):
-        if not seg_text.strip():
+    try:
+        for i, (seg_text, silence_secs) in enumerate(segments):
+            if not seg_text.strip():
+                if silence_secs > 0:
+                    sf = tmp_dir / f"part_{len(part_files):04d}_silence.mp3"
+                    sf.write_bytes(_generate_silence_mp3(silence_secs))
+                    part_files.append(sf)
+                continue
+
+            if _use_cartesia:
+                cartesia_voice_id = CARTESIA_VOICE_MAP.get(voice, CARTESIA_VOICE_MAP["serene"])
+                tts_result = await call_cartesia_tts(
+                    text=seg_text, voice_id=cartesia_voice_id, speed=0.75, emotion="calm",
+                )
+            else:
+                openai_voice = OPENAI_VOICE_MAP.get(voice, "shimmer")
+                tts_result = await call_openai_tts(
+                    text=seg_text, voice=openai_voice, speed=0.9,
+                )
+
+            vf = tmp_dir / f"part_{len(part_files):04d}_voice.mp3"
+            vf.write_bytes(tts_result.audio_bytes)
+            part_files.append(vf)
+            tts_cost += tts_result.cost
+
             if silence_secs > 0:
-                all_audio.extend(_generate_silence_mp3(silence_secs))
-            continue
+                sf = tmp_dir / f"part_{len(part_files):04d}_silence.mp3"
+                sf.write_bytes(_generate_silence_mp3(silence_secs))
+                part_files.append(sf)
 
-        if _use_cartesia:
-            cartesia_voice_id = CARTESIA_VOICE_MAP.get(voice, CARTESIA_VOICE_MAP["serene"])
-            tts_result = await call_cartesia_tts(
-                text=seg_text, voice_id=cartesia_voice_id, speed=0.75, emotion="calm",
-            )
+        # Merge all parts with ffmpeg (handles headers, sample rates, everything)
+        if len(part_files) == 1:
+            audio_bytes = part_files[0].read_bytes()
         else:
-            openai_voice = OPENAI_VOICE_MAP.get(voice, "shimmer")
-            tts_result = await call_openai_tts(
-                text=seg_text, voice=openai_voice, speed=0.9,
+            concat_list = tmp_dir / "concat.txt"
+            concat_list.write_text(
+                "\n".join(f"file '{f.name}'" for f in part_files),
             )
-
-        all_audio.extend(tts_result.audio_bytes)
-        tts_cost += tts_result.cost
-
-        if silence_secs > 0:
-            all_audio.extend(_generate_silence_mp3(silence_secs))
-
-    audio_bytes = bytes(all_audio)
+            output_path = tmp_dir / "merged.mp3"
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                    "-i", str(concat_list),
+                    "-c:a", "libmp3lame", "-b:a", "128k",
+                    str(output_path),
+                ],
+                capture_output=True,
+                timeout=120,
+            )
+            if result.returncode != 0:
+                print(f"[MEDITATION] ffmpeg failed: {result.stderr.decode()[:500]}")
+                # Fallback: raw concat (broken but at least produces something)
+                raw = bytearray()
+                for f in part_files:
+                    raw.extend(f.read_bytes())
+                audio_bytes = bytes(raw)
+            else:
+                audio_bytes = output_path.read_bytes()
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
     actual_seconds = int(_mp3_duration_seconds(audio_bytes))
 
     # Save audio
