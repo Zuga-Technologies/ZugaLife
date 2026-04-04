@@ -1064,10 +1064,12 @@ def compute_lagged_correlations(
     delayed = [r for r in results if r["effect_timing"] == "delayed" and r["next_day"]["r"]]
     if delayed:
         top = delayed[0]
+        same_r = top["same_day"]["r"]
+        same_r_str = f"{same_r:.2f}" if same_r is not None else "N/A"
         desc_text = (
             f"'{top['name']}' has a stronger NEXT-DAY effect on mood "
             f"(lag-1 r={top['next_day']['r']:.2f}) than same-day "
-            f"(r={top['same_day']['r']:.2f if top['same_day']['r'] else 'N/A'}). "
+            f"(r={same_r_str}). "
             f"The benefit is delayed."
         )
     elif results:
