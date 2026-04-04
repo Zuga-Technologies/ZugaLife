@@ -2183,18 +2183,6 @@ async function setMedMoodAfter(emoji: string) {
   } catch { /* silent */ }
 }
 
-async function deleteMedSession(sessionId: number) {
-  try {
-    await api.delete(`/api/life/meditation/sessions/${sessionId}`)
-    medSessions.value = medSessions.value.filter(s => s.id !== sessionId)
-    await fetchMedRemaining()
-  } catch (e) {
-    if (e instanceof ApiError) {
-      medError.value = (e.body as Record<string, string>).detail ?? 'Delete failed'
-    }
-  }
-}
-
 async function openMedSession(sessionId: number) {
   medError.value = null
   try {
