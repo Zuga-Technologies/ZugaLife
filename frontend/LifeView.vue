@@ -8,7 +8,7 @@ import {
   BookOpen, MessageCircleHeart, ScrollText, Send, Trash2, Pencil, X, AlertTriangle,
   LayoutDashboard, TrendingUp, Target, Clock, CalendarDays, ArrowRight, ArrowLeft,
   ChevronRight, ChevronDown, ChevronUp, Activity, Flame as FlameIcon, Brain as BrainIcon, Settings,
-  Download, Trophy, Star, Zap, CheckCircle2, Lock, CircleDot, Meh, Headphones,
+  Download, Trophy, Star, Zap, CheckCircle2, Lock, CircleDot, Meh, Headphones, Wind,
 } from 'lucide-vue-next'
 import ShareableCard from './components/ShareableCard.vue'
 import SettingsPanel from './SettingsPanel.vue'
@@ -3272,6 +3272,27 @@ onUnmounted(() => {
               <p class="text-xs text-txt-muted mt-1">Talk through what's on your mind</p>
             </template>
           </button>
+
+          <!-- BREATHWORK CARD -->
+          <a
+            href="https://theboxbreather.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
+            style="animation-delay: 300ms"
+          >
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-sky-500/10 flex items-center justify-center">
+                  <Wind :size="18" class="text-sky-400" />
+                </div>
+                <span class="text-sm font-semibold text-txt-primary">Breathwork</span>
+              </div>
+              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <p class="text-sm text-txt-secondary mb-1">Box breathing exercises</p>
+            <p class="text-xs text-txt-muted mt-auto">theboxbreather.com</p>
+          </a>
 
         </div>
 
