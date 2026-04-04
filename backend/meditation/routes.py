@@ -450,7 +450,23 @@ async def generate_from_script(
     # Parse script
     title, transcript = _parse_script(script)
 
-    # TTS + stitch (reuses the proven server-side pipeline)
+    # If the LLM didn't include pause markers, inject them at sentence boundaries
+    import re
+    pause_count = len(re.findall(r"\[PAUSE\s*\d+s?\]", transcript, re.IGNORECASE))
+    if pause_count < 5:
+        print(f"[MEDITATION] Script has only {pause_count} pause markers, injecting at sentence boundaries")
+        # Insert [PAUSE 3s] after every 2-3 sentences (roughly every 100-150 chars)
+        sentences = re.split(r'(?<=[.!?])\s+', transcript)
+        rebuilt = []
+        for i, sentence in enumerate(sentences):
+            rebuilt.append(sentence)
+            if (i + 1) % 2 == 0 and i < len(sentences) - 1:
+                rebuilt.append("[PAUSE 3s]")
+            if (i + 1) % 6 == 0 and i < len(sentences) - 1:
+                rebuilt[-1] = "[PAUSE 5s]"  # Replace every 3rd pause with a longer one
+        transcript = " ".join(rebuilt)
+
+    # TTS + stitch
     segments = _split_on_pauses(transcript)
 
     try:
