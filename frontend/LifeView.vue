@@ -1898,11 +1898,10 @@ async function generateMeditation() {
     setupExtensionMedListeners()
     medGenStage.value = 'Starting via extension...'
     sendExtensionCommand('meditation:generate', payload)
-    // Extension will notify via events — don't set medGenerating to false here
     return
   }
 
-  // Fallback: server-side generation
+  // Server-side generation
   try {
     const stub = await api.post<MeditationSession>('/api/life/meditation/generate', payload)
 
@@ -2182,6 +2181,18 @@ async function setMedMoodAfter(emoji: string) {
       { emoji },
     )
   } catch { /* silent */ }
+}
+
+async function deleteMedSession(sessionId: number) {
+  try {
+    await api.delete(`/api/life/meditation/sessions/${sessionId}`)
+    medSessions.value = medSessions.value.filter(s => s.id !== sessionId)
+    await fetchMedRemaining()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      medError.value = (e.body as Record<string, string>).detail ?? 'Delete failed'
+    }
+  }
 }
 
 async function openMedSession(sessionId: number) {
@@ -4151,7 +4162,7 @@ onUnmounted(() => {
             { key: 'history', label: 'History' },
           ] as { key: MedView; label: string }[]"
           :key="view.key"
-          @click="medView = view.key; if (view.key === 'history') fetchMedSessions()"
+          @click="medError = null; medView = view.key; if (view.key === 'history') fetchMedSessions()"
           class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
           :class="medView === view.key || (medView === 'player' && view.key === 'new')
             ? 'bg-accent/15 text-accent'
