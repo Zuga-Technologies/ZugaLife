@@ -152,10 +152,9 @@ const features = computed(() => [
     id: 'meditate',
     icon: Brain,
     label: 'Meditation',
-    desc: 'AI-generated sessions tuned to you. Install the Zugabot extension for background generation.',
+    desc: 'AI-generated sessions tuned to your mood and goals.',
     recommended: recommendedFeature.value === 'meditate',
     tab: 'meditate',
-    extensionNote: true,
   },
   {
     id: 'challenges',
@@ -199,7 +198,7 @@ function finish(tab?: string) {
         <!-- Skip -->
         <button
           @click="skip"
-          class="absolute top-4 right-4 z-10 p-1.5 rounded-lg text-txt-muted hover:text-txt-primary hover:bg-surface-3/50 transition-colors"
+          class="absolute top-3 right-3 z-10 p-2.5 rounded-lg text-txt-muted hover:text-txt-primary hover:bg-surface-3/50 transition-colors"
           title="Skip"
         >
           <X :size="18" />
@@ -294,9 +293,9 @@ function finish(tab?: string) {
                 <Sparkles :size="24" class="text-purple-400" />
               </div>
               <h2 class="text-xl font-bold text-txt-primary mb-2">
-                Here's what we think
+                A thought for you
               </h2>
-              <p class="text-xs text-txt-muted mb-6">Based on your goal and how you're feeling</p>
+              <p class="text-xs text-txt-muted mb-6">Based on your goal and how you're feeling right now</p>
 
               <div class="glass-card p-5 text-left max-w-sm">
                 <template v-if="aiLoading">
@@ -341,9 +340,6 @@ function finish(tab?: string) {
                       <span v-if="feature.recommended" class="text-[10px] font-semibold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
                         RECOMMENDED
                       </span>
-                      <span v-if="feature.extensionNote" class="text-[10px] font-semibold text-purple-400 bg-purple-400/10 px-1.5 py-0.5 rounded">
-                        EXTENSION
-                      </span>
                     </div>
                     <p class="text-xs text-txt-muted">{{ feature.desc }}</p>
                   </div>
@@ -381,7 +377,7 @@ function finish(tab?: string) {
           <button
             v-if="currentStep > 0 && currentStep < TOTAL_STEPS - 1"
             @click="prev"
-            class="flex items-center gap-1 text-sm text-txt-muted hover:text-txt-primary transition-colors"
+            class="flex items-center gap-1.5 text-sm text-txt-muted hover:text-txt-primary transition-colors px-3 py-2"
           >
             <ArrowLeft :size="14" /> Back
           </button>
@@ -401,7 +397,7 @@ function finish(tab?: string) {
             v-if="currentStep === 0"
             @click="next"
             :disabled="!selectedGoal"
-            class="flex items-center gap-1 text-sm font-medium transition-colors"
+            class="flex items-center gap-1.5 text-sm font-medium transition-colors px-3 py-2"
             :class="selectedGoal ? 'text-accent hover:text-accent/80' : 'text-txt-muted cursor-not-allowed'"
           >
             Next <ArrowRight :size="14" />
@@ -409,14 +405,14 @@ function finish(tab?: string) {
           <button
             v-else-if="currentStep === 1 && moodLogged"
             @click="next"
-            class="flex items-center gap-1 text-sm font-medium text-accent hover:text-accent/80 transition-colors"
+            class="flex items-center gap-1.5 text-sm font-medium text-accent hover:text-accent/80 transition-colors px-3 py-2"
           >
             Next <ArrowRight :size="14" />
           </button>
           <button
             v-else-if="currentStep > 1 && currentStep < TOTAL_STEPS - 1"
             @click="next"
-            class="flex items-center gap-1 text-sm font-medium text-accent hover:text-accent/80 transition-colors"
+            class="flex items-center gap-1.5 text-sm font-medium text-accent hover:text-accent/80 transition-colors px-3 py-2"
           >
             Next <ArrowRight :size="14" />
           </button>

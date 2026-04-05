@@ -80,6 +80,11 @@ function handleInsufficientTokens(feature: string): string {
 }
 
 function goToBilling() {
+  // Store context so the token dashboard can offer a "Return to X" button after purchase
+  sessionStorage.setItem('zugatokens-pending', JSON.stringify({
+    returnPath: '/life',
+    feature: billingPromptFeature.value,
+  }))
   showBillingPrompt.value = false
   window.location.href = '/tokens'
 }
@@ -479,7 +484,7 @@ const moduleLabels: Record<Exclude<Tab, 'dashboard'>, string> = {
   habits: 'Habits',
   goals: 'Goals',
   meditate: 'Meditate',
-  therapist: 'Therapist',
+  therapist: 'Wellness Bot',
 }
 
 // Strip emoji characters from strings (backend embeds emojis in descriptions)
@@ -944,6 +949,10 @@ const loadingHabits = ref(true)
 const habitError = ref<string | null>(null)
 const habitSuccess = ref<string | null>(null)
 const habitSubmitting = ref(false)
+
+// AI habit insight
+const habitInsightLoading = ref(false)
+const habitInsightText = ref<string | null>(null)
 const historyDays = ref(7)
 
 // New custom habit form
@@ -1148,6 +1157,26 @@ async function resetSingleHabit(habitId: number) {
     resettingHabit.value = null
     await Promise.all([fetchHabitCheckin(), fetchHabitStreaks()])
   } catch { habitError.value = 'Reset failed.' }
+}
+
+async function fetchHabitInsight() {
+  if (habitInsightLoading.value) return
+  habitInsightLoading.value = true
+  habitInsightText.value = null
+  try {
+    const res = await api.post<{ content: string; cost: number }>('/api/life/habits/insight')
+    habitInsightText.value = res.content
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 402) {
+      habitError.value = handleInsufficientTokens('Habit Insights')
+    } else if (e instanceof ApiError && e.status === 429) {
+      habitError.value = (e.body as Record<string, string>).detail ?? 'Insight cooldown active — one per week.'
+    } else {
+      habitError.value = 'Could not generate insight right now.'
+    }
+  } finally {
+    habitInsightLoading.value = false
+  }
 }
 
 const habitUnits = [
@@ -2326,7 +2355,7 @@ const therapistMessages = ref<TherapistMessage[]>([])
 const therapistInput = ref('')
 const therapistSending = ref(false)
 const therapistGreeting = ref('')
-const therapistDisclaimer = "I'm an AI companion, not a licensed therapist. I draw from psychology, philosophy, and contemplative traditions to help you reflect. I make mistakes \u2014 please push back when something doesn't feel right."
+const therapistDisclaimer = "I'm an AI wellness companion, not a licensed therapist or counselor. I draw from psychology, philosophy, and contemplative traditions to help you reflect. I make mistakes \u2014 please push back when something doesn't feel right."
 const therapistStatus = ref<TherapistStatus | null>(null)
 const therapistError = ref<string | null>(null)
 const therapistSuccess = ref<string | null>(null)
@@ -2490,11 +2519,11 @@ async function sendTherapistMessage() {
     if (e instanceof ApiError) {
       const detail = (e.body as Record<string, string>).detail
       if (e.status === 402) {
-        therapistError.value = handleInsufficientTokens('Therapist')
+        therapistError.value = handleInsufficientTokens('Wellness Bot')
       } else if (e.status === 429) {
         therapistError.value = detail ?? 'Session limit reached for today.'
       } else if (e.status === 503) {
-        therapistError.value = 'Therapist unavailable — Venice may be down.'
+        therapistError.value = 'Wellness Bot unavailable — please try again later.'
         therapistAvailable.value = false
       } else {
         therapistError.value = detail ?? `Error (${e.status})`
@@ -3087,7 +3116,7 @@ onUnmounted(() => {
                 </div>
                 <span class="text-sm font-semibold text-txt-primary">Habits</span>
               </div>
-              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ChevronRight :size="16" class="text-txt-muted/40 group-hover:text-txt-muted transition-colors" />
             </div>
             <template v-if="dashboardData.habits.has_data">
               <!-- Progress bar -->
@@ -3136,7 +3165,7 @@ onUnmounted(() => {
                 </div>
                 <span class="text-sm font-semibold text-txt-primary">Goals</span>
               </div>
-              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ChevronRight :size="16" class="text-txt-muted/40 group-hover:text-txt-muted transition-colors" />
             </div>
             <template v-if="dashboardData.goals.has_data">
               <div class="flex-1 flex flex-col">
@@ -3196,7 +3225,7 @@ onUnmounted(() => {
                 </div>
                 <span class="text-sm font-semibold text-txt-primary">Meditation</span>
               </div>
-              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ChevronRight :size="16" class="text-txt-muted/40 group-hover:text-txt-muted transition-colors" />
             </div>
             <template v-if="dashboardData.meditation.has_data && dashboardData.meditation.sessions_this_week > 0">
               <div class="flex items-baseline gap-4 mb-2">
@@ -3234,7 +3263,7 @@ onUnmounted(() => {
                 </div>
                 <span class="text-sm font-semibold text-txt-primary">Journal & Mood</span>
               </div>
-              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ChevronRight :size="16" class="text-txt-muted/40 group-hover:text-txt-muted transition-colors" />
             </div>
             <template v-if="dashboardData.journal.has_data">
               <div class="flex items-baseline gap-1 mb-1">
@@ -3276,9 +3305,9 @@ onUnmounted(() => {
                 <div class="w-9 h-9 rounded-xl bg-teal-500/10 flex items-center justify-center">
                   <MessageCircleHeart :size="18" class="text-teal-400" />
                 </div>
-                <span class="text-sm font-semibold text-txt-primary">Therapist</span>
+                <span class="text-sm font-semibold text-txt-primary">Wellness Bot</span>
               </div>
-              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ChevronRight :size="16" class="text-txt-muted/40 group-hover:text-txt-muted transition-colors" />
             </div>
             <template v-if="dashboardData.therapist.has_data">
               <p class="text-sm text-txt-secondary mb-2 line-clamp-1">{{ dashboardData.therapist.last_themes }}</p>
@@ -3309,7 +3338,7 @@ onUnmounted(() => {
                 </div>
                 <span class="text-sm font-semibold text-txt-primary">Breathwork</span>
               </div>
-              <ChevronRight :size="16" class="text-txt-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ChevronRight :size="16" class="text-txt-muted/40 group-hover:text-txt-muted transition-colors" />
             </div>
             <p class="text-sm text-txt-secondary mb-1">Box breathing exercises</p>
             <p class="text-xs text-txt-muted mt-auto">theboxbreather.com</p>
@@ -3332,7 +3361,7 @@ onUnmounted(() => {
           ] as { key: HabitView; label: string }[]"
           :key="view.key"
           @click="habitView = view.key; if (view.key === 'history') fetchHabitHistory()"
-          class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+          class="px-4 py-2.5 text-xs font-medium rounded-lg transition-colors"
           :class="habitView === view.key ? 'bg-accent/15 text-accent' : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
         >
           {{ view.label }}
@@ -3400,8 +3429,25 @@ onUnmounted(() => {
             </div>
           </div>
 
+          <!-- AI Insight -->
+          <div class="mt-6 glass-card p-4">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-txt-secondary">Weekly AI Insight</span>
+              <button
+                @click="fetchHabitInsight"
+                :disabled="habitInsightLoading"
+                class="text-xs text-purple-400 hover:text-purple-300 transition-colors disabled:opacity-50"
+              >
+                {{ habitInsightLoading ? 'Analyzing...' : 'Generate Insight' }}
+              </button>
+            </div>
+            <div v-if="habitInsightText" class="mt-3 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20 animate-fade-in">
+              <p class="text-xs text-txt-secondary leading-relaxed whitespace-pre-line">{{ habitInsightText }}</p>
+            </div>
+          </div>
+
           <!-- Reset options -->
-          <div class="mt-6 flex flex-wrap gap-2">
+          <div class="mt-4 flex flex-wrap gap-2">
             <button
               v-if="resetConfirm !== 'today'"
               @click="resetConfirm = 'today'"
@@ -3445,7 +3491,7 @@ onUnmounted(() => {
               v-for="d in [7, 30]"
               :key="d"
               @click="historyDays = d; fetchHabitHistory()"
-              class="px-3 py-1 text-xs rounded-lg transition-colors"
+              class="px-4 py-2 text-xs rounded-lg transition-colors"
               :class="historyDays === d ? 'bg-accent/15 text-accent' : 'text-txt-muted hover:text-txt-primary'"
             >
               {{ d }}d
@@ -3605,7 +3651,7 @@ onUnmounted(() => {
             </div>
             <button
               @click="toggleHabitActive(habit)"
-              class="text-xs px-2 py-1 rounded transition-colors"
+              class="text-xs px-3 py-2 rounded transition-colors"
               :class="habit.is_active ? 'text-amber-400 hover:bg-amber-400/10' : 'text-emerald-400 hover:bg-emerald-400/10'"
             >
               {{ habit.is_active ? 'Deactivate' : 'Activate' }}
@@ -3613,18 +3659,18 @@ onUnmounted(() => {
             <button
               v-if="resettingHabit !== habit.id"
               @click="resettingHabit = habit.id"
-              class="text-xs text-txt-muted hover:text-red-400 transition-colors px-2 py-1"
+              class="text-xs text-txt-muted hover:text-red-400 transition-colors px-3 py-2"
             >
               Reset
             </button>
-            <div v-else class="flex items-center gap-1 animate-fade-in">
-              <button @click="resetSingleHabit(habit.id)" class="text-xs text-red-400 hover:text-red-300 font-medium px-1">Clear logs</button>
-              <button @click="resettingHabit = null" class="text-xs text-txt-muted hover:text-txt-primary px-1">Cancel</button>
+            <div v-else class="flex items-center gap-2 animate-fade-in">
+              <button @click="resetSingleHabit(habit.id)" class="text-xs text-red-400 hover:text-red-300 font-medium px-2 py-1.5">Clear logs</button>
+              <button @click="resettingHabit = null" class="text-xs text-txt-muted hover:text-txt-primary px-2 py-1.5">Cancel</button>
             </div>
             <button
               v-if="!habit.is_preset"
               @click="deleteCustomHabit(habit)"
-              class="text-xs text-txt-muted hover:text-red-400 transition-colors px-2 py-1"
+              class="text-xs text-txt-muted hover:text-red-400 transition-colors px-3 py-2"
             >
               Delete
             </button>
@@ -3644,7 +3690,7 @@ onUnmounted(() => {
           ] as { key: GoalSubView; label: string }[]"
           :key="view.key"
           @click="goalSubView = view.key; if (view.key === 'weekly') fetchWeeklyTargets()"
-          class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+          class="px-4 py-2.5 text-xs font-medium rounded-lg transition-colors"
           :class="goalSubView === view.key ? 'bg-accent/15 text-accent' : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
         >
           {{ view.label }}
@@ -3894,7 +3940,7 @@ onUnmounted(() => {
                   <span class="text-xs text-txt-muted w-8 text-right">{{ lh.days_completed }}/{{ lh.days_total }}</span>
                   <button
                     @click="unlinkHabit(goal.id, lh.habit_id)"
-                    class="text-xs text-txt-muted hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 px-1"
+                    class="text-xs text-txt-muted/40 hover:text-red-400 transition-colors px-2 py-1"
                   >&times;</button>
                 </div>
               </div>
@@ -3936,7 +3982,7 @@ onUnmounted(() => {
                   </span>
                   <button
                     @click="deleteMilestone(goal.id, ms.id)"
-                    class="text-xs text-txt-muted hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 px-1"
+                    class="text-xs text-txt-muted/40 hover:text-red-400 transition-colors px-2 py-1"
                   >
                     &times;
                   </button>
@@ -4193,7 +4239,7 @@ onUnmounted(() => {
           ] as { key: MedView; label: string }[]"
           :key="view.key"
           @click="medError = null; medView = view.key; if (view.key === 'history') fetchMedSessions()"
-          class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+          class="px-4 py-2.5 text-xs font-medium rounded-lg transition-colors"
           :class="medView === view.key || (medView === 'player' && view.key === 'new')
             ? 'bg-accent/15 text-accent'
             : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
@@ -4383,7 +4429,7 @@ onUnmounted(() => {
                 >
                   <Download :size="16" />
                 </button>
-                <div v-if="showMedActionMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[180px]">
+                <div v-if="showMedActionMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[180px] max-w-[calc(100vw-2rem)]">
                   <button
                     @click="showMedActionMenu = false; downloadMeditationAudio()"
                     class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors flex items-center gap-2"
@@ -4547,7 +4593,7 @@ onUnmounted(() => {
             ] as { key: TherapistView; label: string }[]"
             :key="view.key"
             @click="therapistView = view.key as TherapistView; if (view.key === 'notes') fetchTherapistNotes()"
-            class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+            class="px-4 py-2.5 text-xs font-medium rounded-lg transition-colors"
             :class="therapistView === view.key || (therapistView === 'note-detail' && view.key === 'notes')
               ? 'bg-accent/15 text-accent'
               : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
@@ -4754,7 +4800,7 @@ onUnmounted(() => {
                 </div>
                 <button
                   @click.stop="deleteTherapistNote(note.id)"
-                  class="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-txt-muted hover:text-red-400 hover:bg-red-400/10 transition-all"
+                  class="p-2 rounded-lg text-txt-muted/40 hover:text-red-400 hover:bg-red-400/10 transition-all"
                   title="Delete note"
                 >
                   <Trash2 :size="14" />
@@ -4869,7 +4915,7 @@ onUnmounted(() => {
                 <Download :size="12" />
                 Export All
               </button>
-              <div v-if="showBulkExportMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[170px]">
+              <div v-if="showBulkExportMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[170px] max-w-[calc(100vw-2rem)]">
                 <button @click="exportAllJournal('markdown')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
                   Markdown (.zip)
                 </button>
@@ -4943,10 +4989,10 @@ onUnmounted(() => {
 
           <!-- Formatting toolbar -->
           <div class="flex items-center gap-1 border-b border-bdr/50 pb-2">
-            <button @click="insertFormat('bold')" class="px-2 py-1 text-xs font-bold text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Bold (Ctrl+B)">B</button>
-            <button @click="insertFormat('italic')" class="px-2 py-1 text-xs italic text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Italic (Ctrl+I)">I</button>
-            <button @click="insertFormat('heading')" class="px-2 py-1 text-xs font-semibold text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Heading">H</button>
-            <button @click="insertFormat('list')" class="px-2 py-1 text-xs text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="List">
+            <button @click="insertFormat('bold')" class="px-3 py-2 text-xs font-bold text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Bold (Ctrl+B)">B</button>
+            <button @click="insertFormat('italic')" class="px-3 py-2 text-xs italic text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Italic (Ctrl+I)">I</button>
+            <button @click="insertFormat('heading')" class="px-3 py-2 text-xs font-semibold text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Heading">H</button>
+            <button @click="insertFormat('list')" class="px-3 py-2 text-xs text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="List">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
             </button>
             <span class="flex-1" />
@@ -5030,11 +5076,11 @@ onUnmounted(() => {
               </div>
               <div class="flex items-center gap-2">
                 <div class="relative">
-                  <button @click="showExportMenu = !showExportMenu" class="text-xs text-txt-muted hover:text-accent transition-colors px-2 py-1 flex items-center gap-1">
+                  <button @click="showExportMenu = !showExportMenu" class="text-xs text-txt-muted hover:text-accent transition-colors px-3 py-2 flex items-center gap-1">
                     <Download :size="12" />
                     Export
                   </button>
-                  <div v-if="showExportMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[140px]">
+                  <div v-if="showExportMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[140px] max-w-[calc(100vw-2rem)]">
                     <button @click="exportEntry('markdown')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
                       Markdown (.md)
                     </button>
@@ -5046,7 +5092,7 @@ onUnmounted(() => {
                     </button>
                   </div>
                 </div>
-                <button @click="deleteEntry" class="text-xs text-txt-muted hover:text-red-400 transition-colors px-2 py-1">Delete</button>
+                <button @click="deleteEntry" class="text-xs text-txt-muted hover:text-red-400 transition-colors px-3 py-2">Delete</button>
               </div>
             </div>
             <!-- Tags -->

@@ -8,15 +8,6 @@
 export type ThemeId =
   | 'none'
   | 'cyberpunk-city'
-  | 'northern-lights'
-  | 'still-water'
-  | 'cosmic-drift'
-  | 'rainy-window'
-  | 'forest-stream'
-  | 'campfire'
-  | 'golden-sunset'
-  | 'misty-forest'
-  | 'soft-bokeh'
   | 'ai-ambient'
   | 'custom'
 
@@ -47,96 +38,6 @@ export const THEMES: ThemeDefinition[] = [
     overlay: 0.3,
     speed: 1.0,
     fallbackBg: 'linear-gradient(135deg, #0a0a1a, #1a0a2e)',
-  },
-  {
-    id: 'northern-lights',
-    name: 'Northern Lights',
-    description: 'Real aurora borealis timelapse',
-    preview: 'linear-gradient(135deg, #0f172a, #2dd4bf, #8b5cf6)',
-    video: '/backgrounds/northern-lights.mp4',
-    overlay: 0.15,
-    speed: 0.7,   // timelapse — below 0.6 causes visible frame chop
-    fallbackBg: 'linear-gradient(135deg, #0f172a, #1a3a4a)',
-  },
-  {
-    id: 'still-water',
-    name: 'Beach',
-    description: 'Calm ocean waves on a warm day',
-    preview: 'linear-gradient(135deg, #0c4a6e, #0ea5e9, #164e63)',
-    video: '/backgrounds/still-water-a.mp4',
-    overlay: 0.3,
-    speed: 0.7,   // real-time water — below 0.6 causes visible frame chop
-    fallbackBg: 'linear-gradient(135deg, #0a1929, #0c4a6e)',
-  },
-  {
-    id: 'cosmic-drift',
-    name: 'Cosmic Drift',
-    description: 'Stars drifting through deep space',
-    preview: 'radial-gradient(ellipse at 30% 40%, #1a1a2e 0%, #090909 100%)',
-    video: '/backgrounds/cosmic-drift.mp4',
-    overlay: 0,
-    speed: 0.7,   // slow star drift — below 0.6 causes visible frame chop
-    fallbackBg: 'radial-gradient(ellipse at 30% 40%, #12121e, #060610)',
-  },
-  {
-    id: 'rainy-window',
-    name: 'Rainy Window',
-    description: 'Raindrops on glass with soft bokeh lights',
-    preview: 'linear-gradient(135deg, #1a1a2e, #2d3748, #1a202c)',
-    video: '/backgrounds/rainy-window.mp4',
-    overlay: 0.1,
-    speed: 0.6,   // real-time rain — slight slowdown
-    fallbackBg: 'linear-gradient(135deg, #1a1a2e, #2d3748)',
-  },
-  {
-    id: 'forest-stream',
-    name: 'Forest Stream',
-    description: 'Sunlit stream flowing through the forest',
-    preview: 'linear-gradient(135deg, #14532d, #166534, #1a3a1a)',
-    video: '/backgrounds/forest-stream.mp4',
-    overlay: 0.45,
-    speed: 0.8,   // drone footage — faster for smoother motion
-    fallbackBg: 'linear-gradient(135deg, #0a1a0a, #14532d)',
-  },
-  {
-    id: 'campfire',
-    name: 'Campfire',
-    description: 'Crackling flames in the dark woods',
-    preview: 'linear-gradient(135deg, #1a0a00, #92400e, #451a03)',
-    video: '/backgrounds/campfire.mp4',
-    overlay: 0.2,
-    speed: 0.7,   // real fire — too slow looks unnatural
-    fallbackBg: 'linear-gradient(135deg, #1a0a00, #2a1508)',
-  },
-  {
-    id: 'golden-sunset',
-    name: 'Golden Sunset',
-    description: 'Warm sunset timelapse over rolling hills',
-    preview: 'linear-gradient(135deg, #451a03, #d97706, #92400e)',
-    video: '/backgrounds/golden-sunset.mp4',
-    overlay: 0.4,
-    speed: 0.6,   // real-time sailboat sunset
-    fallbackBg: 'linear-gradient(135deg, #1a0f05, #451a03)',
-  },
-  {
-    id: 'misty-forest',
-    name: 'Misty Forest',
-    description: 'Aerial drift through fog-covered trees',
-    preview: 'linear-gradient(135deg, #1e293b, #475569, #334155)',
-    video: '/backgrounds/misty-forest.mp4',
-    overlay: 0.4,
-    speed: 0.4,   // aerial drone — slow float
-    fallbackBg: 'linear-gradient(135deg, #0f1720, #1e293b)',
-  },
-  {
-    id: 'soft-bokeh',
-    name: 'Soft Bokeh',
-    description: 'Floating monochrome light orbs',
-    preview: 'linear-gradient(135deg, #111, #333, #111)',
-    video: '/backgrounds/soft-bokeh.mp4',
-    overlay: 0.1,
-    speed: 0.5,   // floating orbs — dreamy slowdown
-    fallbackBg: 'linear-gradient(135deg, #0a0a0a, #1a1a1a)',
   },
   {
     id: 'ai-ambient',
