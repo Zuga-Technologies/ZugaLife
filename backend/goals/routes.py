@@ -1,5 +1,6 @@
 """ZugaLife life goals endpoints."""
 
+import asyncio
 import logging
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -335,6 +336,17 @@ async def toggle_goal_complete(
 
         await session.flush()
         await session.refresh(goal)
+
+        # Emit webhook event for goal completion (fire-and-forget)
+        if goal.is_completed:
+            try:
+                from core.events.bus import event_bus
+                asyncio.create_task(event_bus.emit("life:goal_completed", {
+                    "goal_id": goal.id,
+                    "title": goal.title,
+                }, user_id=user.id))
+            except Exception:
+                pass
 
         if goal.is_completed and _get_gam_engine():
             try:

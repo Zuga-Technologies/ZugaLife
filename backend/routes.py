@@ -1,5 +1,6 @@
 """ZugaLife mood logging endpoints."""
 
+import asyncio
 import logging
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -102,6 +103,18 @@ async def log_mood(
             )
         )
         today_count = today_result.scalar_one()
+
+        # Emit webhook event (fire-and-forget)
+        try:
+            from core.events.bus import event_bus
+            asyncio.create_task(event_bus.emit("life:mood_logged", {
+                "emoji": body.emoji.value,
+                "label": label,
+                "note": body.note or "",
+                "streak": streak,
+            }, user_id=user.id))
+        except Exception:
+            pass  # Never block mood logging on event emission
 
         response = MoodLogResponse(
             entry=MoodEntryResponse.model_validate(entry),

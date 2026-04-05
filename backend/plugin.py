@@ -146,6 +146,36 @@ class ZugaLifePlugin(StudioPlugin):
         return _combined_router
 
     @property
+    def event_catalog(self) -> list[dict]:
+        return [
+            {
+                "type": "life:mood_logged",
+                "description": "User logged their mood",
+                "data_schema": {"emoji": "string", "label": "string", "note": "string (optional)", "streak": "integer"},
+            },
+            {
+                "type": "life:habit_completed",
+                "description": "User completed a habit",
+                "data_schema": {"habit_id": "integer", "habit_name": "string", "log_date": "date"},
+            },
+            {
+                "type": "life:journal_created",
+                "description": "User wrote a journal entry",
+                "data_schema": {"entry_id": "integer", "title": "string", "mood_emoji": "string (optional)"},
+            },
+            {
+                "type": "life:goal_completed",
+                "description": "User completed a goal",
+                "data_schema": {"goal_id": "integer", "title": "string"},
+            },
+            {
+                "type": "life:meditation_completed",
+                "description": "User completed a meditation session",
+                "data_schema": {"session_id": "integer", "focus": "string", "duration_seconds": "integer"},
+            },
+        ]
+
+    @property
     def models(self) -> list:
         return [
             _models.MoodEntry,

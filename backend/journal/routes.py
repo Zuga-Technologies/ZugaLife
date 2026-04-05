@@ -1,5 +1,6 @@
 """ZugaLife journal CRUD + AI reflection endpoints."""
 
+import asyncio
 import io
 import logging
 import sys
@@ -103,6 +104,17 @@ async def create_journal_entry(
         await session.refresh(entry)
         response = JournalEntryResponse.model_validate(entry)
         entry_id = entry.id
+
+        # Emit webhook event (fire-and-forget)
+        try:
+            from core.events.bus import event_bus
+            asyncio.create_task(event_bus.emit("life:journal_created", {
+                "entry_id": entry.id,
+                "title": body.title or "Untitled",
+                "mood_emoji": body.mood_emoji,
+            }, user_id=user.id))
+        except Exception:
+            pass
 
         gam = _get_gam_engine()
         if gam:

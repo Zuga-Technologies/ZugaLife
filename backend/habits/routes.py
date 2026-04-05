@@ -1,5 +1,6 @@
 """ZugaLife habit tracking endpoints."""
 
+import asyncio
 import logging
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -367,6 +368,18 @@ async def log_habit(
             await session.flush()
 
         await session.refresh(log)
+
+        # Emit webhook event for completed habits (fire-and-forget)
+        if body.completed:
+            try:
+                from core.events.bus import event_bus
+                asyncio.create_task(event_bus.emit("life:habit_completed", {
+                    "habit_id": habit.id,
+                    "habit_name": habit.name,
+                    "log_date": str(log_date),
+                }, user_id=user.id))
+            except Exception:
+                pass
 
         # Only award XP once per habit per day — check XP transaction log
         gam = _get_gam_engine()
