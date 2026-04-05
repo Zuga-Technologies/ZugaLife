@@ -81,11 +81,13 @@ const CUSTOM_IMG_KEY = 'zugalife-bg-custom-img'
 const CUSTOM_OPACITY_KEY = 'zugalife-bg-custom-opacity'
 
 export function getSavedTheme(): ThemeId {
-  return (localStorage.getItem(STORAGE_KEY) as ThemeId) || 'cyberpunk-city'
+  const saved = localStorage.getItem(STORAGE_KEY) as ThemeId
+  if (saved && THEMES.some(t => t.id === saved)) return saved
+  return 'cyberpunk-city'
 }
 export function saveTheme(id: ThemeId) { localStorage.setItem(STORAGE_KEY, id) }
 export function getTheme(id: ThemeId): ThemeDefinition {
-  return THEMES.find(t => t.id === id) || THEMES[0]
+  return THEMES.find(t => t.id === id) || THEMES.find(t => t.id === 'cyberpunk-city') || THEMES[0]
 }
 
 export function getCustomImage(): string | null { return localStorage.getItem(CUSTOM_IMG_KEY) }
