@@ -34,7 +34,7 @@ export const THEMES: ThemeDefinition[] = [
     name: 'Cyberpunk City',
     description: 'AI-generated neon cityscape — powered by ZugaVideo',
     preview: 'linear-gradient(135deg, #1a0a2e, #3b1f7c, #0ea5e9)',
-    video: '/backgrounds/cyberpunk-city.mp4',
+    video: '/backgrounds/cyberpunk-city-v2.mp4',
     overlay: 0.3,
     speed: 1.0,
     fallbackBg: 'linear-gradient(135deg, #0a0a1a, #1a0a2e)',
