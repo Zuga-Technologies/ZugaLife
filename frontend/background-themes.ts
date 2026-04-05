@@ -7,6 +7,7 @@
 
 export type ThemeId =
   | 'none'
+  | 'cyberpunk-city'
   | 'northern-lights'
   | 'still-water'
   | 'cosmic-drift'
@@ -36,6 +37,16 @@ export const THEMES: ThemeDefinition[] = [
     name: 'Default Dark',
     description: 'Clean dark background — no animation',
     preview: 'linear-gradient(135deg, #0a0a0a, #1a1a1a)',
+  },
+  {
+    id: 'cyberpunk-city',
+    name: 'Cyberpunk City',
+    description: 'AI-generated neon cityscape — powered by ZugaVideo',
+    preview: 'linear-gradient(135deg, #1a0a2e, #3b1f7c, #0ea5e9)',
+    video: '/backgrounds/cyberpunk-city.mp4',
+    overlay: 0.3,
+    speed: 1.0,
+    fallbackBg: 'linear-gradient(135deg, #0a0a1a, #1a0a2e)',
   },
   {
     id: 'northern-lights',
@@ -169,7 +180,7 @@ const CUSTOM_IMG_KEY = 'zugalife-bg-custom-img'
 const CUSTOM_OPACITY_KEY = 'zugalife-bg-custom-opacity'
 
 export function getSavedTheme(): ThemeId {
-  return (localStorage.getItem(STORAGE_KEY) as ThemeId) || 'northern-lights'
+  return (localStorage.getItem(STORAGE_KEY) as ThemeId) || 'cyberpunk-city'
 }
 export function saveTheme(id: ThemeId) { localStorage.setItem(STORAGE_KEY, id) }
 export function getTheme(id: ThemeId): ThemeDefinition {
