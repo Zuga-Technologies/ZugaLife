@@ -5360,6 +5360,11 @@ onUnmounted(() => {
               </div>
             </div>
 
+            <!-- Error message -->
+            <p v-if="tokenStore.purchaseError" class="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mb-3">
+              {{ tokenStore.purchaseError }}
+            </p>
+
             <button @click="closeBillingPrompt" class="w-full py-2.5 rounded-lg text-sm text-txt-muted hover:text-txt-primary border border-bdr hover:bg-surface-2 transition-colors">
               Close
             </button>
