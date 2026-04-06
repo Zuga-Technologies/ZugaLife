@@ -8,6 +8,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'life', component: () => import('./LifeView.vue') },
+    { path: '/tokens', name: 'tokens', component: () => import('./TokensView.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })

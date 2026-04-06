@@ -358,7 +358,7 @@ async def end_session(
         {"role": "user", "content": summary_prompt},
     ]
 
-    from core.ai.gateway import ai_call
+    from core.ai.gateway import BudgetExhaustedError, CreditBlockedError, ai_call
 
     try:
         response = await ai_call(
@@ -380,12 +380,26 @@ async def end_session(
                 user_id=user.id,
                 user_email=user.email,
             )
+    except (CreditBlockedError, BudgetExhaustedError):
+        logger.warning("Insufficient tokens for session summary: user=%s", user.id)
+        response = None
+        summary_handled = True
+        themes = "Session completed (summary skipped — not enough tokens)"
+        patterns = None
+        follow_up = None
+        mood = None
+        total_cost = 0.0
     except Exception:
         logger.exception("Failed to generate session summary")
         response = None
+        summary_handled = False
+    else:
+        summary_handled = False
 
-    # Parse the structured summary
-    if response and response.content.strip():
+    # Parse the structured summary (skip if already handled by credit error)
+    if summary_handled:
+        pass  # themes etc. already set above
+    elif response and response.content.strip():
         themes, patterns, follow_up, mood = _parse_summary(response.content)
         total_cost = response.cost
     else:

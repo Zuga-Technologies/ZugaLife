@@ -18,6 +18,7 @@ import CelebrationOverlay from './components/CelebrationOverlay.vue'
 import LifeOnboarding from './components/LifeOnboarding.vue'
 import { useCelebration } from './composables/useCelebration'
 import { useOnboardingStore } from '@zugaapp/stores/onboarding'
+import { useTokenStore } from '@core/billing/useTokens'
 import { playXpSound, playBadgeSound, playLevelUpSound, playStreakSound, playPrestigeSound } from './composables/useCelebrationSounds'
 
 const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
@@ -82,21 +83,24 @@ function notifyTokenSpend() {
 // ── Billing redirect for 402 (insufficient tokens) ──────────────
 const showBillingPrompt = ref(false)
 const billingPromptFeature = ref('')
+const showBillingPacks = ref(false)
+const tokenStore = useTokenStore()
 
 function handleInsufficientTokens(feature: string): string {
   billingPromptFeature.value = feature
   showBillingPrompt.value = true
+  showBillingPacks.value = false
   return 'You need more tokens to use this feature.'
 }
 
 function goToBilling() {
-  // Store context so the token dashboard can offer a "Return to X" button after purchase
-  sessionStorage.setItem('zugatokens-pending', JSON.stringify({
-    returnPath: '/life',
-    feature: billingPromptFeature.value,
-  }))
+  showBillingPacks.value = true
+  tokenStore.loadPacks()
+}
+
+function closeBillingPrompt() {
   showBillingPrompt.value = false
-  window.location.href = '/tokens'
+  showBillingPacks.value = false
 }
 
 // ============================
@@ -5287,23 +5291,79 @@ onUnmounted(() => {
 
     <!-- Billing Prompt Modal -->
     <Teleport to="body">
-      <div v-if="showBillingPrompt" class="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showBillingPrompt = false">
-        <div class="glass-card p-6 max-w-sm mx-4 border border-amber-500/30 text-center">
+      <div v-if="showBillingPrompt" class="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="closeBillingPrompt">
+        <div class="glass-card p-6 max-w-md mx-4 border border-amber-500/30 text-center">
           <div class="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
             <Zap :size="24" class="text-amber-400" />
           </div>
-          <h3 class="text-lg font-semibold text-txt-primary mb-2">Tokens Required</h3>
-          <p class="text-sm text-txt-secondary mb-4">
-            <strong>{{ billingPromptFeature }}</strong> requires ZugaTokens. Add tokens to continue using AI-powered features.
-          </p>
-          <div class="flex gap-3 justify-center">
-            <button @click="showBillingPrompt = false" class="px-4 py-2 text-sm text-txt-muted hover:text-txt-primary transition-colors">
-              Later
+
+          <!-- Step 1: Prompt -->
+          <template v-if="!showBillingPacks">
+            <h3 class="text-lg font-semibold text-txt-primary mb-2">Tokens Required</h3>
+            <p class="text-sm text-txt-secondary mb-4">
+              <strong>{{ billingPromptFeature }}</strong> requires ZugaTokens. Add tokens to continue using AI-powered features.
+            </p>
+            <div class="flex gap-3 justify-center">
+              <button @click="closeBillingPrompt" class="px-4 py-2 text-sm text-txt-muted hover:text-txt-primary transition-colors">
+                Later
+              </button>
+              <button @click="goToBilling" class="px-4 py-2 text-sm font-medium bg-amber-500 text-black rounded-lg hover:bg-amber-400 transition-colors">
+                Get Tokens
+              </button>
+            </div>
+          </template>
+
+          <!-- Step 2: Purchase packs (inline — fast path to Stripe) -->
+          <template v-else>
+            <h3 class="text-lg font-semibold text-txt-primary mb-1">Buy ZugaTokens</h3>
+            <p class="text-xs text-txt-muted mb-4">One-time packs — tokens never expire.</p>
+
+            <div class="space-y-2 mb-4 text-left" v-if="tokenStore.packs.length">
+              <button
+                v-for="pack in tokenStore.packs"
+                :key="pack.id"
+                @click="tokenStore.buyPack(pack.id)"
+                :disabled="tokenStore.purchaseLoading !== null"
+                class="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-bdr hover:border-amber-500/50 hover:bg-amber-500/5 transition-all"
+                :class="{ 'ring-2 ring-amber-500': pack.id === 'best_value' }"
+              >
+                <div class="flex items-center gap-3">
+                  <span class="text-lg font-bold text-amber-400">{{ pack.tokens.toLocaleString() }}</span>
+                  <span class="text-xs text-txt-muted">tokens</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span v-if="pack.id === 'best_value'" class="text-[10px] font-semibold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">Best Value</span>
+                  <span class="text-sm font-semibold text-txt-primary">
+                    ${{ (pack.price_cents / 100).toFixed(2) }}
+                  </span>
+                </div>
+              </button>
+            </div>
+            <div v-else class="py-6 text-sm text-txt-muted">Loading packs...</div>
+
+            <!-- Subscription tiers -->
+            <div v-if="tokenStore.tiers.length" class="mb-4">
+              <p class="text-xs text-txt-muted mb-3 uppercase tracking-wider font-semibold">Or subscribe monthly</p>
+              <div class="grid grid-cols-3 gap-2">
+                <button
+                  v-for="tier in tokenStore.tiers"
+                  :key="tier.id"
+                  @click="tokenStore.subscribeTier(tier.id)"
+                  :disabled="tokenStore.purchaseLoading !== null"
+                  class="flex flex-col items-center px-3 py-3 rounded-xl border border-bdr hover:border-amber-500/50 hover:bg-amber-500/5 transition-all"
+                >
+                  <span class="text-xs font-semibold text-txt-primary capitalize">{{ tier.id }}</span>
+                  <span class="text-lg font-bold text-amber-400 mt-1">{{ tier.tokens_per_month.toLocaleString() }}</span>
+                  <span class="text-[10px] text-txt-muted">tokens/mo</span>
+                  <span class="text-xs font-semibold text-txt-secondary mt-1">${{ (tier.price_cents / 100).toFixed(0) }}/mo</span>
+                </button>
+              </div>
+            </div>
+
+            <button @click="closeBillingPrompt" class="w-full py-2.5 rounded-lg text-sm text-txt-muted hover:text-txt-primary border border-bdr hover:bg-surface-2 transition-colors">
+              Close
             </button>
-            <button @click="goToBilling" class="px-4 py-2 text-sm font-medium bg-amber-500 text-black rounded-lg hover:bg-amber-400 transition-colors">
-              Get Tokens
-            </button>
-          </div>
+          </template>
         </div>
       </div>
     </Teleport>
