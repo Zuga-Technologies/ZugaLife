@@ -28,6 +28,10 @@ const MARKUP_MULTIPLIER = 3
 function costToTokens(usd: number): number {
   return Math.ceil(usd * MARKUP_MULTIPLIER * ZUGATOKENS_PER_DOLLAR)
 }
+function tokenLabel(usd: number): string {
+  const n = costToTokens(usd)
+  return n === 1 ? '1 token' : `${n} tokens`
+}
 
 // --- Settings ---
 const showSettings = ref(false)
@@ -68,6 +72,12 @@ async function withCelebration<T>(action: () => Promise<T>): Promise<T> {
 
 type Tab = 'dashboard' | 'journal' | 'habits' | 'goals' | 'meditate' | 'therapist'
 const activeTab = ref<Tab>('dashboard')
+
+// ── Token balance sync ───────────────────────────────────────────
+/** Notify TopNav to refresh the token badge after any AI call that costs tokens. */
+function notifyTokenSpend() {
+  window.dispatchEvent(new CustomEvent('zugatokens-updated'))
+}
 
 // ── Billing redirect for 402 (insufficient tokens) ──────────────
 const showBillingPrompt = ref(false)
@@ -787,6 +797,7 @@ async function requestReflection() {
     )
     currentEntry.value.reflections.push(res.reflection)
     reflectionsRemaining.value = res.remaining
+    notifyTokenSpend()
   } catch (e) {
     if (e instanceof ApiError) {
       const body = e.body as Record<string, string>
@@ -1166,6 +1177,7 @@ async function fetchHabitInsight() {
   try {
     const res = await api.post<{ content: string; cost: number }>('/api/life/habits/insight')
     habitInsightText.value = res.content
+    notifyTokenSpend()
   } catch (e) {
     if (e instanceof ApiError && e.status === 402) {
       habitError.value = handleInsufficientTokens('Habit Insights')
@@ -1632,6 +1644,7 @@ async function fetchGoalInsight(goalId: number) {
   try {
     const res = await api.post<{ insight: string; cost: number }>(`/api/life/goals/${goalId}/insight`)
     goalInsights.value[goalId] = res.insight
+    notifyTokenSpend()
   } catch (e) {
     if (e instanceof ApiError && e.status === 402) {
       goalInsights.value[goalId] = handleInsufficientTokens('Goal Coaching')
@@ -1828,6 +1841,7 @@ async function _pollUntilDone(sessionId: number) {
         medView.value = 'player'
         medSuccess.value = 'Meditation generated!'
         setTimeout(() => { medSuccess.value = null }, 2000)
+        notifyTokenSpend()
         await fetchMedRemaining()
         await fetchMedSessions()
         if (gamificationData.value) {
@@ -1907,6 +1921,7 @@ function handleExtensionMedComplete(session?: MeditationSession) {
   clearExtensionMedTimers()
   medGenerating.value = false
   medGenStage.value = null
+  notifyTokenSpend()
   fetchMedSessions().then(() => {
     if (session) {
       medSession.value = session
@@ -2570,6 +2585,7 @@ async function sendTherapistMessage() {
     )
     therapistMessages.value.push({ role: 'assistant', content: res.content })
     therapistMessagesRemaining.value = res.session_messages_remaining
+    notifyTokenSpend()
 
     // Auto-end session when limit reached (therapist already wrapped up naturally)
     if (res.session_messages_remaining <= 0) {
@@ -4472,7 +4488,7 @@ onUnmounted(() => {
               <div class="flex items-center gap-2 mt-1">
                 <span class="text-xs text-txt-muted">{{ getMedTypeLabel(medSession.type) }}</span>
                 <span class="text-xs text-txt-muted">{{ Math.floor(medSession.duration_seconds / 60) }}:{{ String(medSession.duration_seconds % 60).padStart(2, '0') }}</span>
-                <span class="text-xs text-txt-muted">{{ costToTokens(medSession.cost) }} tokens</span>
+                <span class="text-xs text-txt-muted">{{ tokenLabel(medSession.cost) }}</span>
               </div>
             </div>
             <div class="flex items-center gap-2">
@@ -4874,7 +4890,7 @@ onUnmounted(() => {
               <p v-if="note.follow_up" class="text-xs text-txt-muted line-clamp-2">{{ note.follow_up }}</p>
               <div class="flex items-center gap-3 mt-2 text-xs text-txt-muted">
                 <span>{{ note.message_count }} messages</span>
-                <span>{{ costToTokens(note.cost) }} tokens</span>
+                <span>{{ tokenLabel(note.cost) }}</span>
               </div>
             </div>
           </div>
@@ -4959,7 +4975,7 @@ onUnmounted(() => {
             <div class="flex items-center gap-3 pt-3 border-t border-bdr text-xs text-txt-muted">
               <span>{{ therapistCurrentNote.message_count }} messages</span>
               <span>{{ therapistCurrentNote.provider }}</span>
-              <span>{{ costToTokens(therapistCurrentNote.cost) }} tokens</span>
+              <span>{{ tokenLabel(therapistCurrentNote.cost) }}</span>
             </div>
           </div>
         </template>
@@ -5182,7 +5198,7 @@ onUnmounted(() => {
                 <div class="flex items-center gap-2 mb-2">
                   <span class="text-xs font-medium text-accent">Reflection {{ i + 1 }}</span>
                   <span class="text-xs text-txt-muted">{{ formatDate(reflection.created_at) }}</span>
-                  <span class="text-xs text-txt-muted ml-auto">{{ costToTokens(reflection.cost) }} tokens</span>
+                  <span class="text-xs text-txt-muted ml-auto">{{ tokenLabel(reflection.cost) }}</span>
                 </div>
                 <p class="text-sm text-txt-secondary leading-relaxed whitespace-pre-wrap">{{ reflection.content }}</p>
               </div>
