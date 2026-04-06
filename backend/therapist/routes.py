@@ -81,14 +81,19 @@ async def therapist_greeting(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Get a context-aware greeting for starting a new session."""
+    from core.ai.gateway import BudgetExhaustedError, CreditBlockedError
+
     first = await _context.is_first_session(user.id)
     context_summary = await _context.build_user_context(user.id)
 
-    if first:
-        greeting = FIRST_SESSION_GREETING
-    else:
-        # Generate a natural greeting via Venice instead of dumping raw data
-        greeting = await _generate_returning_greeting(user.id, user.email, context_summary)
+    try:
+        if first:
+            greeting = FIRST_SESSION_GREETING
+        else:
+            # Generate a natural greeting via Venice instead of dumping raw data
+            greeting = await _generate_returning_greeting(user.id, user.email, context_summary)
+    except (CreditBlockedError, BudgetExhaustedError):
+        raise HTTPException(status_code=402, detail="You're out of tokens. Add more to continue using the Wellness Bot.")
 
     return {
         "greeting": greeting,
@@ -285,14 +290,14 @@ async def therapist_chat(
             user_email=user.email,
         )
     except (BudgetExhaustedError, CreditBlockedError):
-        raise HTTPException(status_code=402, detail="Daily AI budget exhausted")
+        raise HTTPException(status_code=402, detail="You're out of tokens. Add more to continue using the Wellness Bot.")
     except PromptBlockedError:
         raise HTTPException(status_code=400, detail="Content blocked by security filter")
     except RuntimeError:
-        raise HTTPException(status_code=503, detail="Therapist is currently unavailable")
+        raise HTTPException(status_code=503, detail="Wellness Bot is temporarily unavailable")
     except Exception:
         logger.exception("Venice API call failed")
-        raise HTTPException(status_code=503, detail="Therapist is currently unavailable. Please try later.")
+        raise HTTPException(status_code=503, detail="Wellness Bot is temporarily unavailable. Please try later.")
 
     # If Venice returned empty (model spent all tokens reasoning), retry once
     if not response.content.strip():
@@ -513,6 +518,7 @@ async def _generate_returning_greeting(user_id: str, user_email: str, context_su
     """Generate a warm, natural returning-user greeting via Venice.
 
     Falls back to the static template if Venice is unavailable.
+    Raises CreditBlockedError/BudgetExhaustedError if user has no tokens.
     """
     last_ref = await _context.get_last_session_reference(user_id)
     last_note = f"Last session: {last_ref}" if last_ref else ""
@@ -522,7 +528,7 @@ async def _generate_returning_greeting(user_id: str, user_email: str, context_su
         last_session_note=last_note,
     )
 
-    from core.ai.gateway import ai_call
+    from core.ai.gateway import BudgetExhaustedError, CreditBlockedError, ai_call
 
     try:
         response = await ai_call(
@@ -543,6 +549,8 @@ async def _generate_returning_greeting(user_id: str, user_email: str, context_su
                 last_session_reference=last_ref or "It's good to see you again.",
             )
         return greeting
+    except (CreditBlockedError, BudgetExhaustedError):
+        raise  # Let token errors propagate to the endpoint
     except Exception:
         logger.warning("Failed to generate greeting via Venice, using static fallback")
         return RETURNING_SESSION_GREETING.format(

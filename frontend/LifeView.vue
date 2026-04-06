@@ -2507,7 +2507,10 @@ async function fetchTherapistGreeting() {
     const res = await api.get<{ greeting: string; is_first_session: boolean; disclaimer: string }>('/api/life/therapist/greeting')
     therapistGreeting.value = res.greeting
     cacheGreeting(res.greeting)
-  } catch {
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 402) {
+      therapistError.value = handleInsufficientTokens('Wellness Bot')
+    }
     therapistGreeting.value = ''
   }
 }
@@ -2603,7 +2606,7 @@ async function sendTherapistMessage() {
       } else if (e.status === 429) {
         therapistError.value = detail ?? 'Session limit reached for today.'
       } else if (e.status === 503) {
-        therapistError.value = 'Wellness Bot unavailable — please try again later.'
+        therapistError.value = 'Wellness Bot is temporarily unavailable — please try again later.'
         therapistAvailable.value = false
       } else {
         therapistError.value = detail ?? `Error (${e.status})`
@@ -4656,8 +4659,8 @@ onUnmounted(() => {
       <!-- Unavailable state -->
       <div v-if="!therapistAvailable" class="glass-card p-8 text-center">
         <AlertTriangle :size="32" class="mx-auto mb-3 text-amber-400" />
-        <h3 class="text-lg font-semibold text-txt-primary mb-2">Therapist Unavailable</h3>
-        <p class="text-sm text-txt-muted">Venice AI is currently unreachable. Please try again later.</p>
+        <h3 class="text-lg font-semibold text-txt-primary mb-2">Wellness Bot Unavailable</h3>
+        <p class="text-sm text-txt-muted">The Wellness Bot is currently unreachable. Please try again later.</p>
         <button @click="fetchTherapistStatus()" class="mt-4 px-4 py-2 text-sm rounded-lg bg-accent/15 text-accent hover:bg-accent/25 transition-colors">
           Retry Connection
         </button>
