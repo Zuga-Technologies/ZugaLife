@@ -577,6 +577,7 @@ const loadingJournal = ref(true)
 
 const composeTitle = ref('')
 const composeContent = ref('')
+const showJournalPrompts = ref(false)
 const composeMood = ref<string | null>(null)
 const composeTags = ref<string[]>([])
 const journalSubmitting = ref(false)
@@ -2453,6 +2454,7 @@ const therapistMoodBefore = ref<string | null>(null)
 const therapistMoodAfter = ref<string | null>(null)
 const therapistRating = ref<number | null>(null)
 const therapistStarters = ref<{ text: string; source: string }[]>([])
+const showTherapistStarters = ref(false)
 const therapistShowEndMood = ref(false)
 
 const chatContainer = ref<HTMLElement | null>(null)
@@ -4774,16 +4776,24 @@ onUnmounted(() => {
             </div>
 
             <!-- Conversation starters (shown after greeting, before user types) -->
-            <div v-if="therapistStarters.length > 0 && therapistMessages.length <= 1" class="mb-3 space-y-1.5">
-              <p class="text-xs text-txt-muted">Suggested topics:</p>
+            <div v-if="therapistStarters.length > 0 && therapistMessages.length <= 1" class="mb-3">
               <button
-                v-for="starter in therapistStarters"
-                :key="starter.text"
-                @click="useStarter(starter.text)"
-                class="w-full text-left px-3 py-2 rounded-lg bg-surface-2/50 border border-bdr/50 text-xs text-txt-secondary hover:text-txt-primary hover:border-accent/30 transition-all"
+                @click="showTherapistStarters = !showTherapistStarters"
+                class="flex items-center gap-1 text-xs text-txt-muted hover:text-txt-secondary transition-colors mb-1.5"
               >
-                {{ starter.text }}
+                <svg :class="showTherapistStarters ? 'rotate-90' : ''" class="w-3 h-3 transition-transform duration-150" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                Suggested topics
               </button>
+              <div v-if="showTherapistStarters" class="space-y-1.5 animate-fade-in">
+                <button
+                  v-for="starter in therapistStarters"
+                  :key="starter.text"
+                  @click="useStarter(starter.text)"
+                  class="w-full text-left px-3 py-2 rounded-lg bg-surface-2/50 border border-bdr/50 text-xs text-txt-secondary hover:text-txt-primary hover:border-accent/30 transition-all"
+                >
+                  {{ starter.text }}
+                </button>
+              </div>
             </div>
 
             <!-- End-session mood + rating capture -->
@@ -5050,16 +5060,24 @@ onUnmounted(() => {
         </div>
 
         <!-- Writing prompts (shown when content is empty) -->
-        <div v-if="!composeContent.trim()" class="mb-4 space-y-2">
-          <p class="text-xs text-txt-muted uppercase tracking-wider">Need a starting point?</p>
+        <div v-if="!composeContent.trim()" class="mb-4">
           <button
-            v-for="prompt in todayPrompts"
-            :key="prompt"
-            @click="usePrompt(prompt)"
-            class="w-full text-left px-4 py-3 rounded-xl bg-surface-2/50 border border-bdr/50 text-sm text-txt-secondary hover:text-txt-primary hover:border-accent/30 hover:bg-surface-2 transition-all"
+            @click="showJournalPrompts = !showJournalPrompts"
+            class="flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-secondary uppercase tracking-wider transition-colors mb-2"
           >
-            {{ prompt }}
+            <svg :class="showJournalPrompts ? 'rotate-90' : ''" class="w-3 h-3 transition-transform duration-150" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            Need a starting point?
           </button>
+          <div v-if="showJournalPrompts" class="space-y-2 animate-fade-in">
+            <button
+              v-for="prompt in todayPrompts"
+              :key="prompt"
+              @click="usePrompt(prompt)"
+              class="w-full text-left px-4 py-3 rounded-xl bg-surface-2/50 border border-bdr/50 text-sm text-txt-secondary hover:text-txt-primary hover:border-accent/30 hover:bg-surface-2 transition-all"
+            >
+              {{ prompt }}
+            </button>
+          </div>
         </div>
 
         <div class="glass-card p-6 space-y-4">
