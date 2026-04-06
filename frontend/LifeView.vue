@@ -1892,6 +1892,34 @@ function sendExtensionCommand(type: string, payload: Record<string, unknown> = {
 
 /** Listen for extension meditation events */
 let extensionMedListenersSetup = false
+let extensionMedFallbackTimer: ReturnType<typeof setTimeout> | null = null
+let extensionMedPollTimer: ReturnType<typeof setInterval> | null = null
+let extensionMedResolved = false
+
+function clearExtensionMedTimers() {
+  if (extensionMedFallbackTimer) { clearTimeout(extensionMedFallbackTimer); extensionMedFallbackTimer = null }
+  if (extensionMedPollTimer) { clearInterval(extensionMedPollTimer); extensionMedPollTimer = null }
+}
+
+function handleExtensionMedComplete(session?: MeditationSession) {
+  if (extensionMedResolved) return
+  extensionMedResolved = true
+  clearExtensionMedTimers()
+  medGenerating.value = false
+  medGenStage.value = null
+  fetchMedSessions().then(() => {
+    if (session) {
+      medSession.value = session
+      medMoodAfter.value = null
+      medView.value = 'player'
+      medSuccess.value = 'Meditation generated!'
+      setTimeout(() => { medSuccess.value = null }, 2000)
+      fetchMedRemaining()
+      setTimeout(() => loadAndPlayAudio(), 300)
+    }
+  })
+}
+
 function setupExtensionMedListeners() {
   if (extensionMedListenersSetup) return
   extensionMedListenersSetup = true
@@ -1902,27 +1930,58 @@ function setupExtensionMedListeners() {
       medGenStage.value = detail.stage
     }
     if (detail.type === 'meditation:complete') {
-      medGenerating.value = false
-      medGenStage.value = null
-      // Reload sessions from server (the extension uploaded the result)
-      fetchMedSessions().then(() => {
-        if (detail.session) {
-          medSession.value = detail.session
-          medMoodAfter.value = null
-          medView.value = 'player'
-          medSuccess.value = 'Meditation generated!'
-          setTimeout(() => { medSuccess.value = null }, 2000)
-          fetchMedRemaining()
-          setTimeout(() => loadAndPlayAudio(), 300)
-        }
-      })
+      handleExtensionMedComplete(detail.session)
     }
     if (detail.type === 'meditation:error') {
+      if (extensionMedResolved) return
+      extensionMedResolved = true
+      clearExtensionMedTimers()
       medGenerating.value = false
       medGenStage.value = null
       medError.value = detail.error || 'Extension generation failed'
     }
   }) as EventListener)
+}
+
+/** Poll server for a newly completed session as fallback when the
+ *  extension's completion event gets lost (service worker sleep, tab
+ *  messaging failure, etc.). Records the session count before generation
+ *  starts, then detects when a new "ready" session appears. */
+function startExtensionMedFallbackPoll() {
+  extensionMedResolved = false
+  clearExtensionMedTimers()
+
+  const beforeCount = medSessions.value.length
+
+  // Poll every 5s — check if a new session appeared on the server
+  extensionMedPollTimer = setInterval(async () => {
+    if (extensionMedResolved) { clearExtensionMedTimers(); return }
+    try {
+      const res = await api.get<MeditationListResponse>('/api/life/meditation/sessions')
+      if (res.sessions.length > beforeCount) {
+        const newest = res.sessions[0]
+        if (newest) {
+          // Fetch the full session object (brief doesn't have transcript/audio)
+          const full = await api.get<MeditationSession>(`/api/life/meditation/sessions/${newest.id}`)
+          if (full.status === 'ready') {
+            medSessions.value = res.sessions
+            medTotal.value = res.total
+            handleExtensionMedComplete(full)
+          }
+        }
+      }
+    } catch { /* silent — keep polling */ }
+  }, 5000)
+
+  // Hard timeout: 5 minutes — give up and show error
+  extensionMedFallbackTimer = setTimeout(() => {
+    if (extensionMedResolved) return
+    extensionMedResolved = true
+    clearExtensionMedTimers()
+    medGenerating.value = false
+    medGenStage.value = null
+    medError.value = 'Generation timed out. Check your meditation history — it may have completed.'
+  }, 5 * 60 * 1000)
 }
 
 async function generateMeditation() {
@@ -1946,6 +2005,9 @@ async function generateMeditation() {
     setupExtensionMedListeners()
     medGenStage.value = 'Starting via extension...'
     sendExtensionCommand('meditation:generate', payload)
+    // Start fallback poll — if the extension event gets lost (service worker
+    // sleep, tab messaging failure), the poll catches the completed session
+    startExtensionMedFallbackPoll()
     return
   }
 
