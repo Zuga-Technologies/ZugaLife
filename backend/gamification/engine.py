@@ -13,6 +13,7 @@ Usage from another ZugaLife route:
 
 import hashlib
 import logging
+import random
 import sys
 from datetime import date, datetime, timezone
 
@@ -149,6 +150,35 @@ CHALLENGE_POOL: list[dict] = [
     {"key": "reflect_journal",    "title": "Mirror Mirror",     "desc": "Get an AI reflection on a journal entry",           "xp": 30},
     {"key": "habit_streak_3",     "title": "Triple Threat",     "desc": "Have 3+ habits with active streaks",                "xp": 35},
 ]
+
+
+# ---------------------------------------------------------------------------
+# Variable rewards — random bonus XP multipliers (slot machine dopamine)
+# ---------------------------------------------------------------------------
+
+VARIABLE_REWARDS = [
+    {"chance": 0.10, "multiplier": 2.0, "label": "Double XP!",     "tier": "rare"},
+    {"chance": 0.03, "multiplier": 3.0, "label": "Triple XP!",     "tier": "epic"},
+    {"chance": 0.01, "multiplier": 5.0, "label": "JACKPOT! 5x XP", "tier": "legendary"},
+]
+
+# Streak freeze — milestones where a free freeze is earned (max 2 stockpiled)
+FREEZE_MILESTONES = {7, 21, 50}
+MAX_STREAK_FREEZES = 2
+
+
+def roll_variable_reward() -> dict | None:
+    """Roll for a variable reward bonus. Checked rarest-first so legendary
+    doesn't overlap with rare. Returns reward dict or None (86% of the time)."""
+    roll = random.random()
+    # Check from rarest to most common
+    if roll < 0.01:
+        return VARIABLE_REWARDS[2]   # legendary (1%)
+    if roll < 0.01 + 0.03:
+        return VARIABLE_REWARDS[1]   # epic (3%)
+    if roll < 0.01 + 0.03 + 0.10:
+        return VARIABLE_REWARDS[0]   # rare (10%)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +429,17 @@ async def award_xp(
     else:
         xp_gained = max(1, round(base_amount * streak_mult * prestige_mult))
 
+    # --- Variable reward roll (slot machine bonus) ---
+    bonus_reward = None
+    if source not in ("streak_bonus", "daily_challenge"):
+        bonus_reward = roll_variable_reward()
+        if bonus_reward:
+            xp_gained = max(1, round(xp_gained * bonus_reward["multiplier"]))
+            logger.info(
+                "Variable reward %s for %s: %sx on %s",
+                bonus_reward["tier"], user_id[:8], bonus_reward["multiplier"], source,
+            )
+
     # --- Record transaction ---
     tx = XPTransaction(
         user_id=user_id,
@@ -408,7 +449,8 @@ async def award_xp(
     )
     session.add(tx)
 
-    # --- Update streak ---
+    # --- Update streak (with freeze protection) ---
+    freeze_used = False
     if user_xp.last_active_date is None:
         # First ever activity
         user_xp.current_streak_days = 1
@@ -419,12 +461,39 @@ async def award_xp(
         # Consecutive day — advance streak
         user_xp.current_streak_days += 1
     else:
-        # Gap — reset streak
-        user_xp.current_streak_days = 1
+        # Gap detected — try streak freeze before resetting
+        gap_days = (today - user_xp.last_active_date).days
+        if gap_days <= 2 and user_xp.streak_freezes > 0:
+            # Consume a freeze — streak survives the gap
+            user_xp.streak_freezes -= 1
+            user_xp.streak_freezes_used += 1
+            user_xp.current_streak_days += 1
+            freeze_used = True
+            logger.info(
+                "Streak freeze consumed for %s (gap=%d days, streak preserved at %d)",
+                user_id[:8], gap_days, user_xp.current_streak_days,
+            )
+        else:
+            # No freeze available or gap too long — reset
+            user_xp.current_streak_days = 1
 
     user_xp.last_active_date = today
     if user_xp.current_streak_days > user_xp.longest_streak_days:
         user_xp.longest_streak_days = user_xp.current_streak_days
+
+    # --- Award streak freeze at milestones (max stockpile = MAX_STREAK_FREEZES) ---
+    if user_xp.current_streak_days in FREEZE_MILESTONES:
+        if user_xp.streak_freezes < MAX_STREAK_FREEZES:
+            user_xp.streak_freezes += 1
+            logger.info(
+                "Streak freeze earned for %s at day %d (total: %d)",
+                user_id[:8], user_xp.current_streak_days, user_xp.streak_freezes,
+            )
+
+    # --- Store transient bonus/freeze state for dashboard read-once pickup ---
+    user_xp.last_bonus_label = bonus_reward["label"] if bonus_reward else None
+    user_xp.last_bonus_tier = bonus_reward["tier"] if bonus_reward else None
+    user_xp.last_freeze_used = freeze_used
 
     # --- Update XP and level ---
     old_level = user_xp.level
@@ -458,6 +527,10 @@ async def award_xp(
         level_up=level_up,
         new_level=new_level if level_up else None,
         new_badges=new_badges,
+        bonus_label=bonus_reward["label"] if bonus_reward else None,
+        bonus_tier=bonus_reward["tier"] if bonus_reward else None,
+        bonus_multiplier=bonus_reward["multiplier"] if bonus_reward else None,
+        streak_freeze_used=freeze_used,
     )
 
 
@@ -771,6 +844,7 @@ async def build_xp_status(session, user_id: str) -> object:
             prestige_level=0,
             prestige_multiplier=1.0,
             can_prestige=False,
+            streak_freezes=0,
         )
 
     level, level_name = compute_level(user_xp.total_xp)
@@ -782,7 +856,7 @@ async def build_xp_status(session, user_id: str) -> object:
 
     can_prestige = level >= PRESTIGE_LEVEL
 
-    return _schemas.XPStatusResponse(
+    status = _schemas.XPStatusResponse(
         total_xp=user_xp.total_xp,
         level=level,
         level_name=level_name,
@@ -794,7 +868,20 @@ async def build_xp_status(session, user_id: str) -> object:
         prestige_level=user_xp.prestige_level,
         prestige_multiplier=compute_prestige_multiplier(user_xp.prestige_level),
         can_prestige=can_prestige,
+        streak_freezes=user_xp.streak_freezes,
+        streak_freeze_used=user_xp.last_freeze_used,
+        bonus_label=user_xp.last_bonus_label,
+        bonus_tier=user_xp.last_bonus_tier,
     )
+
+    # Clear transient state after reading (read-once pattern)
+    if user_xp.last_bonus_label or user_xp.last_freeze_used:
+        user_xp.last_bonus_label = None
+        user_xp.last_bonus_tier = None
+        user_xp.last_freeze_used = False
+        await session.flush()
+
+    return status
 
 
 async def perform_prestige(session, user_id: str) -> object:

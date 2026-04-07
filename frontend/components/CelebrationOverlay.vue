@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useCelebration } from '../composables/useCelebration'
-import { X, Trophy, Star, Zap, Flame } from 'lucide-vue-next'
+import { X, Trophy, Star, Zap, Flame, Sparkles, Snowflake } from 'lucide-vue-next'
 import { badgeIcons, prestigeIcons } from '../icons'
 
 // Map toast type to Lucide icon
-const toastIcons: Record<string, any> = { xp: Zap, streak: Flame, challenge: Trophy, info: Star }
+const toastIcons: Record<string, any> = { xp: Zap, streak: Flame, challenge: Trophy, info: Star, bonus: Sparkles, freeze: Snowflake }
 
 const {
   toasts,
@@ -55,6 +55,7 @@ const levelNames: Record<number, string> = {
         >
           <component v-if="toastIcons[toast.type]" :is="toastIcons[toast.type]" :size="18" class="cel-toast__icon" />
           <span class="cel-toast__msg">{{ toast.message }}</span>
+          <span v-if="toast.tier" class="cel-toast__tier" :class="`cel-toast__tier--${toast.tier}`">{{ toast.tier }}</span>
         </div>
       </TransitionGroup>
     </div>
@@ -217,6 +218,39 @@ const levelNames: Record<number, string> = {
 .cel-toast--streak .cel-toast__icon { color: #ef4444; }
 .cel-toast--challenge .cel-toast__icon { color: #22c55e; }
 .cel-toast--info .cel-toast__icon { color: #8b5cf6; }
+
+/* Variable reward bonus toasts */
+.cel-toast--bonus {
+  border-color: rgba(234, 179, 8, 0.5);
+  background: linear-gradient(135deg, rgba(15, 15, 25, 0.92) 0%, rgba(234, 179, 8, 0.15) 100%);
+  animation: bonus-shimmer 1.5s ease-in-out infinite;
+}
+.cel-toast--bonus .cel-toast__icon { color: #eab308; }
+
+/* Streak freeze toast */
+.cel-toast--freeze {
+  border-color: rgba(6, 182, 212, 0.4);
+  background: linear-gradient(135deg, rgba(15, 15, 25, 0.92) 0%, rgba(6, 182, 212, 0.12) 100%);
+}
+.cel-toast--freeze .cel-toast__icon { color: #06b6d4; }
+
+@keyframes bonus-shimmer {
+  0%, 100% { box-shadow: 0 0 8px rgba(234, 179, 8, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(234, 179, 8, 0.4); }
+}
+
+.cel-toast__tier {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.cel-toast__tier--rare { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+.cel-toast__tier--epic { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+.cel-toast__tier--legendary { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
 
 .cel-toast__msg {
   flex: 1;

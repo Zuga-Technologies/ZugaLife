@@ -25,6 +25,10 @@ class XPStatusResponse(BaseModel):
     prestige_level: int = 0
     prestige_multiplier: float = 1.0
     can_prestige: bool = False
+    streak_freezes: int = 0
+    streak_freeze_used: bool = False
+    bonus_label: str | None = None
+    bonus_tier: str | None = None
 
 
 class XPGainResponse(BaseModel):
@@ -33,6 +37,10 @@ class XPGainResponse(BaseModel):
     level_up: bool
     new_level: int | None
     new_badges: list[BadgeResponse]
+    bonus_label: str | None = None
+    bonus_tier: str | None = None
+    bonus_multiplier: float | None = None
+    streak_freeze_used: bool = False
 
 
 class PrestigeResponse(BaseModel):

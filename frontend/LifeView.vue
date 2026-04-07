@@ -20,7 +20,7 @@ import ThemeRenderer from './components/themes/ThemeRenderer.vue'
 import { useCelebration } from './composables/useCelebration'
 import { useOnboardingStore } from '@zugaapp/stores/onboarding'
 import { useTokenStore } from '@core/billing/useTokens'
-import { playXpSound, playBadgeSound, playLevelUpSound, playStreakSound, playPrestigeSound } from './composables/useCelebrationSounds'
+import { playXpSound, playBadgeSound, playLevelUpSound, playStreakSound, playPrestigeSound, playJackpotSound } from './composables/useCelebrationSounds'
 
 const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
@@ -52,15 +52,37 @@ async function withCelebration<T>(action: () => Promise<T>): Promise<T> {
   if (gamificationData.value) {
     celebration.takeSnapshot(gamificationData.value)
   }
+  const prevFreezes = gamificationData.value?.xp.streak_freezes ?? 0
   const result = await action()
   // Re-fetch gamification data and celebrate changes
   try {
     const newData = await api.get<GamificationData>('/api/life/gamification')
     if (gamificationData.value) {
       celebration.celebrateChanges(newData, ALL_BADGES.value)
+
+      // --- Variable reward bonus celebration ---
+      if (newData.xp.bonus_label && newData.xp.bonus_tier) {
+        const xpGained = newData.xp.total_xp - (gamificationData.value?.xp.total_xp ?? 0)
+        celebration.celebrateBonus(
+          newData.xp.bonus_label,
+          newData.xp.bonus_tier as 'rare' | 'epic' | 'legendary',
+          xpGained,
+        )
+      }
+
+      // --- Streak freeze notifications ---
+      if (newData.xp.streak_freeze_used) {
+        celebration.celebrateFreezeSaved(newData.xp.current_streak_days)
+      }
+      if (newData.xp.streak_freezes > prevFreezes) {
+        celebration.celebrateFreezeEarned(newData.xp.streak_freezes)
+      }
+
       // Play sounds based on what changed
       if (celebration.soundEnabled.value) {
-        if (celebration.activeLevelUp.value) playLevelUpSound()
+        if (newData.xp.bonus_tier === 'legendary') playJackpotSound()
+        else if (newData.xp.bonus_tier === 'epic') playJackpotSound()
+        else if (celebration.activeLevelUp.value) playLevelUpSound()
         else if (celebration.activeBadge.value) playBadgeSound()
         else if (newData.xp.total_xp !== (gamificationData.value?.xp.total_xp ?? 0)) playXpSound()
       }
@@ -323,6 +345,10 @@ interface XPStatus {
   prestige_level: number
   prestige_multiplier: number
   can_prestige: boolean
+  streak_freezes: number
+  streak_freeze_used: boolean
+  bonus_label: string | null
+  bonus_tier: string | null
 }
 
 interface Badge {
@@ -2978,6 +3004,11 @@ onUnmounted(() => {
             v-if="gamificationData.xp.streak_multiplier > 1"
             class="text-[9px] font-bold text-amber-300 bg-amber-500/20 px-1 rounded"
           >{{ gamificationData.xp.streak_multiplier }}x</span>
+          <span
+            v-if="gamificationData.xp.streak_freezes > 0"
+            class="text-[9px] font-bold text-cyan-300 bg-cyan-500/20 px-1 rounded"
+            :title="`${gamificationData.xp.streak_freezes} streak freeze${gamificationData.xp.streak_freezes > 1 ? 's' : ''} available`"
+          >🧊{{ gamificationData.xp.streak_freezes }}</span>
         </div>
       </div>
     </div>
@@ -3133,6 +3164,13 @@ onUnmounted(() => {
                 {{ gamificationData.xp.streak_multiplier }}x
               </div>
               <span v-else class="text-[10px] text-txt-muted leading-none">streak</span>
+              <div
+                v-if="gamificationData.xp.streak_freezes > 0"
+                class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400 leading-none"
+                :title="`${gamificationData.xp.streak_freezes} streak freeze${gamificationData.xp.streak_freezes > 1 ? 's' : ''}`"
+              >
+                🧊 {{ gamificationData.xp.streak_freezes }}
+              </div>
             </div>
           </div>
 

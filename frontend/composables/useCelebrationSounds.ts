@@ -67,6 +67,17 @@ export function playStreakSound() {
   setTimeout(() => playTone(659, 0.2, 'sine', 0.12), 160)   // E5
 }
 
+/** Jackpot slot-machine payout — rapid ascending cascade + sparkle */
+export function playJackpotSound() {
+  playTone(523, 0.1, 'sine', 0.12)       // C5
+  setTimeout(() => playTone(659, 0.1, 'sine', 0.12), 60)   // E5
+  setTimeout(() => playTone(784, 0.1, 'sine', 0.14), 120)  // G5
+  setTimeout(() => playTone(1047, 0.15, 'triangle', 0.16), 180) // C6
+  setTimeout(() => playTone(1319, 0.15, 'triangle', 0.14), 240) // E6
+  setTimeout(() => playTone(1568, 0.3, 'sine', 0.12), 300)  // G6 — sparkle top
+  setTimeout(() => playTone(2093, 0.4, 'sine', 0.08), 400)  // C7 — shimmer
+}
+
 /** Grand prestige fanfare — ascending arpeggio with harmony */
 export function playPrestigeSound() {
   playTone(392, 0.2, 'triangle', 0.1)     // G4

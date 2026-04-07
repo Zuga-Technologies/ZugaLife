@@ -12,9 +12,10 @@ import { ref, reactive } from 'vue'
 
 export interface Toast {
   id: number
-  type: 'xp' | 'streak' | 'challenge' | 'info'
+  type: 'xp' | 'streak' | 'challenge' | 'info' | 'bonus' | 'freeze'
   message: string
   xp?: number
+  tier?: 'rare' | 'epic' | 'legendary'
   duration: number // ms
 }
 
@@ -223,6 +224,45 @@ function celebratePrestige(
 }
 
 // ---------------------------------------------------------------------------
+// Variable reward bonus celebration
+// ---------------------------------------------------------------------------
+
+function celebrateBonus(label: string, tier: 'rare' | 'epic' | 'legendary', xpGained: number) {
+  pushToast({
+    type: 'bonus',
+    message: `${label} +${xpGained} XP`,
+    xp: xpGained,
+    tier,
+    duration: tier === 'legendary' ? 5000 : 4000,
+  })
+  if (tier === 'legendary') {
+    triggerConfetti(5000)
+  } else if (tier === 'epic') {
+    triggerConfetti(3000)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Streak freeze celebration
+// ---------------------------------------------------------------------------
+
+function celebrateFreezeSaved(streakDays: number) {
+  pushToast({
+    type: 'freeze',
+    message: `Streak Freeze saved your ${streakDays}-day streak! 🧊→🔥`,
+    duration: 5000,
+  })
+}
+
+function celebrateFreezeEarned(totalFreezes: number) {
+  pushToast({
+    type: 'info',
+    message: `Streak Freeze earned! You have ${totalFreezes} safety net${totalFreezes > 1 ? 's' : ''} 🧊`,
+    duration: 4000,
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Sound toggle (persisted via localStorage)
 // ---------------------------------------------------------------------------
 
@@ -267,5 +307,10 @@ export function useCelebration() {
     takeSnapshot,
     celebrateChanges,
     celebratePrestige,
+
+    // Bonus & freeze celebrations
+    celebrateBonus,
+    celebrateFreezeSaved,
+    celebrateFreezeEarned,
   }
 }

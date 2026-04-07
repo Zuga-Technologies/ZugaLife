@@ -29,6 +29,12 @@ class UserXP(Base):
     prestige_level: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     current_streak_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     longest_streak_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    streak_freezes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    streak_freezes_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Transient bonus state — set by award_xp, cleared after dashboard read
+    last_bonus_label: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_bonus_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    last_freeze_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     last_active_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
