@@ -5,7 +5,7 @@
  * handles rate limiting, and routes actions.
  */
 
-import { api } from '../../../core/frontend/api/client'
+import { api } from '@core/api/client'
 
 // --- Types ---
 
