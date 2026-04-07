@@ -2023,7 +2023,35 @@ function setupExtensionMedListeners() {
       clearExtensionMedTimers()
       medGenerating.value = false
       medGenStage.value = null
-      medError.value = detail.error || 'Extension generation failed'
+      const err = detail.error || 'Extension generation failed'
+      // Map extension errors to proper modals
+      if (err.includes('402') || err.toLowerCase().includes('insufficient') || err.toLowerCase().includes('token')) {
+        medError.value = handleInsufficientTokens('Meditation')
+      } else if (err.includes('500') || err.includes('503') || err.toLowerCase().includes('api error')) {
+        medError.value = handleServiceError(
+          'Service Temporarily Unavailable',
+          'Our AI provider is experiencing issues. This usually resolves within a few minutes. Your tokens were not charged.',
+          startMeditation,
+        )
+      } else if (err.toLowerCase().includes('timeout') || err.toLowerCase().includes('timed out')) {
+        medError.value = handleServiceError(
+          'Generation Timed Out',
+          'The meditation took too long to generate. Try a shorter duration, or try again in a moment.',
+          startMeditation,
+        )
+      } else if (err.toLowerCase().includes('network') || err.toLowerCase().includes('fetch')) {
+        medError.value = handleServiceError(
+          'Connection Issue',
+          'We couldn\'t reach the AI service. Check your internet connection and try again.',
+          startMeditation,
+        )
+      } else {
+        medError.value = handleServiceError(
+          'Generation Failed',
+          'Something went wrong generating your meditation. Please try again.',
+          startMeditation,
+        )
+      }
     }
   }) as EventListener)
 }
