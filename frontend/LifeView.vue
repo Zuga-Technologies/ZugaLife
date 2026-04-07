@@ -16,6 +16,7 @@ import BackgroundTheme from './BackgroundTheme.vue'
 import AnalyticsDashboard from './AnalyticsDashboard.vue'
 import CelebrationOverlay from './components/CelebrationOverlay.vue'
 import LifeOnboarding from './components/LifeOnboarding.vue'
+import ThemeRenderer from './components/themes/ThemeRenderer.vue'
 import { useCelebration } from './composables/useCelebration'
 import { useOnboardingStore } from '@zugaapp/stores/onboarding'
 import { useTokenStore } from '@core/billing/useTokens'
@@ -237,6 +238,74 @@ async function fetchDashboard() {
     console.error('Dashboard fetch failed:', e)
   }
 }
+
+// ============================
+// ZUGATHEMES
+// ============================
+
+interface InstalledTheme {
+  id: string
+  theme_id: string
+  studio: string
+  pos_x: number
+  pos_y: number
+  pos_w: number
+  pos_h: number
+  enabled: boolean
+  theme: {
+    id: string
+    title: string
+    html: string
+    css: string | null
+    js: string
+    permissions: Array<{ key: string; type: string; description: string }>
+    [key: string]: unknown
+  }
+}
+
+const installedThemes = ref<InstalledTheme[]>([])
+
+async function fetchInstalledThemes() {
+  try {
+    const res = await api.get<InstalledTheme[]>('/api/life/themes/my/installed?studio=life')
+    installedThemes.value = res.filter(t => t.enabled)
+  } catch {
+    // Themes are non-critical — don't block dashboard
+  }
+}
+
+async function uninstallTheme(installId: string) {
+  try {
+    await api.delete(`/api/life/themes/install/${installId}`)
+    installedThemes.value = installedThemes.value.filter(t => t.id !== installId)
+  } catch (e) {
+    console.error('Theme uninstall failed:', e)
+  }
+}
+
+// Listen for theme events from ThemeBridge
+window.addEventListener('zugatheme:celebrate', ((e: CustomEvent) => {
+  const type = e.detail?.type || 'confetti'
+  if (type === 'confetti' && celebration) {
+    celebration.triggerConfetti()
+  }
+}) as EventListener)
+
+window.addEventListener('zugatheme:navigate', ((e: CustomEvent) => {
+  const to = e.detail?.to
+  if (to && ['dashboard', 'journal', 'habits', 'goals', 'meditate', 'therapist'].includes(to)) {
+    navigateTo(to as Tab)
+  }
+}) as EventListener)
+
+window.addEventListener('zugatheme:notify', ((e: CustomEvent) => {
+  // Reuse the existing toast system
+  const { title, message } = e.detail || {}
+  if (message) {
+    journalSuccess.value = message
+    setTimeout(() => { journalSuccess.value = '' }, 3000)
+  }
+}) as EventListener)
 
 // ============================
 // GAMIFICATION
@@ -2840,6 +2909,9 @@ onMounted(() => {
   Promise.all([fetchTherapistStatus(), fetchTherapistNotes()])
     .finally(() => { loadingTherapist.value = false })
 
+  // Tier 3 — non-critical: themes load in background, never block dashboard
+  fetchInstalledThemes()
+
   // Greeting fetched on-demand in startTherapistSession() — don't block page load
 
   // Check studio onboarding state
@@ -3528,6 +3600,30 @@ onUnmounted(() => {
             <p class="text-xs text-txt-muted mt-auto">theboxbreather.com</p>
           </a>
 
+        </div>
+
+        <!-- ===== INSTALLED THEMES ===== -->
+        <div v-if="installedThemes.length > 0" class="mt-6">
+          <h3 class="text-sm font-semibold text-txt-secondary mb-3">My Themes</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div
+              v-for="install in installedThemes"
+              :key="install.id"
+              class="theme-grid-item"
+              :style="{
+                gridColumn: `span ${Math.min(install.pos_w <= 6 ? 1 : 2, 2)}`,
+                minHeight: `${install.pos_h * 60}px`,
+              }"
+            >
+              <ThemeRenderer
+                :theme="install.theme"
+                studio="life"
+                :show-title-bar="true"
+                :removable="true"
+                @remove="uninstallTheme(install.id)"
+              />
+            </div>
+          </div>
         </div>
 
       </template>

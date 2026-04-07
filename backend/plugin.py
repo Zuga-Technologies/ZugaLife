@@ -110,6 +110,11 @@ _gam_engine = _load_submodule("gamification", "engine")
 _gam_ai = _load_submodule("gamification", "ai_challenges")
 _gam_routes = _load_submodule("gamification", "routes")
 
+# Load themes submodule: models → schemas → routes
+_th_models = _load_submodule("themes", "models")
+_th_schemas = _load_submodule("themes", "schemas")
+_th_routes = _load_submodule("themes", "routes")
+
 # Load data management (reset endpoints) — must come after all domain modules
 _data_mgmt = _load_sibling("data_management")
 
@@ -127,6 +132,7 @@ _combined_router.include_router(_t_routes.router)
 _combined_router.include_router(_s_routes.router)
 _combined_router.include_router(_f_routes.router)
 _combined_router.include_router(_gam_routes.router)
+_combined_router.include_router(_th_routes.router)
 _combined_router.include_router(_data_mgmt.router)
 _combined_router.include_router(_dashboard.router)
 
@@ -188,6 +194,8 @@ class ZugaLifePlugin(StudioPlugin):
             _gam_models.UserXP, _gam_models.XPTransaction,
             _gam_models.UserBadge, _gam_models.DailyChallenge,
             _gam_models.WeeklyQuest,
+            _th_models.Theme, _th_models.ThemeInstall, _th_models.ThemeState,
+            _th_models.ThemePurchase, _th_models.ThemeReview,
         ]
 
     async def on_startup(self) -> None:
