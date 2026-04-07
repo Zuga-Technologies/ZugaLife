@@ -94,6 +94,10 @@ async def therapist_greeting(
             greeting = await _generate_returning_greeting(user.id, user.email, context_summary)
     except (CreditBlockedError, BudgetExhaustedError):
         raise HTTPException(status_code=402, detail="You're out of tokens. Add more to continue using the Wellness Bot.")
+    except Exception as e:
+        if type(e).__name__ == "InsufficientTokensError":
+            raise HTTPException(status_code=402, detail=str(e))
+        raise
 
     return {
         "greeting": greeting,
@@ -295,7 +299,9 @@ async def therapist_chat(
         raise HTTPException(status_code=400, detail="Content blocked by security filter")
     except RuntimeError:
         raise HTTPException(status_code=503, detail="Wellness Bot is temporarily unavailable")
-    except Exception:
+    except Exception as e:
+        if type(e).__name__ == "InsufficientTokensError":
+            raise HTTPException(status_code=402, detail=str(e))
         logger.exception("Venice API call failed")
         raise HTTPException(status_code=503, detail="Wellness Bot is temporarily unavailable. Please try later.")
 
@@ -389,8 +395,18 @@ async def end_session(
         follow_up = None
         mood = None
         total_cost = 0.0
-    except Exception:
-        logger.exception("Failed to generate session summary")
+    except Exception as e:
+        if type(e).__name__ == "InsufficientTokensError":
+            logger.warning("Insufficient tokens for session summary: user=%s", user.id)
+            response = None
+            summary_handled = True
+            themes = "Session completed (summary skipped — not enough tokens)"
+            patterns = None
+            follow_up = None
+            mood = None
+            total_cost = 0.0
+        else:
+            logger.exception("Failed to generate session summary")
         response = None
         summary_handled = False
     else:
@@ -565,7 +581,10 @@ async def _generate_returning_greeting(user_id: str, user_email: str, context_su
         return greeting
     except (CreditBlockedError, BudgetExhaustedError):
         raise  # Let token errors propagate to the endpoint
-    except Exception:
+    except Exception as e:
+        # InsufficientTokensError comes from ZugaApp gateway — also propagate
+        if type(e).__name__ == "InsufficientTokensError":
+            raise
         logger.warning("Failed to generate greeting via Venice, using static fallback")
         return RETURNING_SESSION_GREETING.format(
             last_session_reference=last_ref or "It's good to see you again.",
