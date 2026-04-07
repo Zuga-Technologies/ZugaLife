@@ -103,6 +103,65 @@ function closeBillingPrompt() {
   showBillingPacks.value = false
 }
 
+// ── Service Error Modal (Venice down, timeouts, etc.) ──────────────
+const showServiceError = ref(false)
+const serviceErrorTitle = ref('')
+const serviceErrorMessage = ref('')
+const serviceErrorRetryFn = ref<(() => void) | null>(null)
+
+function handleServiceError(title: string, message: string, retryFn?: () => void): string {
+  serviceErrorTitle.value = title
+  serviceErrorMessage.value = message
+  serviceErrorRetryFn.value = retryFn ?? null
+  showServiceError.value = true
+  return message  // also set as inline error for non-modal contexts
+}
+
+function closeServiceError() {
+  showServiceError.value = false
+  serviceErrorRetryFn.value = null
+}
+
+function retryFromServiceError() {
+  const fn = serviceErrorRetryFn.value
+  closeServiceError()
+  if (fn) fn()
+}
+
+/** Map backend error_message strings to user-friendly modal content */
+function handleMeditationFailure(errorMsg: string | null, retryFn?: () => void): string {
+  if (errorMsg === 'insufficient_tokens') {
+    return handleInsufficientTokens('Meditation')
+  }
+  if (errorMsg?.includes('temporarily unavailable')) {
+    return handleServiceError(
+      'Service Temporarily Unavailable',
+      'Our AI provider is experiencing issues. This usually resolves within a few minutes. Your tokens were not charged.',
+      retryFn,
+    )
+  }
+  if (errorMsg?.includes('timed out')) {
+    return handleServiceError(
+      'Generation Timed Out',
+      'The meditation took too long to generate. Try a shorter duration, or try again in a moment.',
+      retryFn,
+    )
+  }
+  if (errorMsg?.includes('Could not reach')) {
+    return handleServiceError(
+      'Connection Issue',
+      'We couldn\'t reach the AI service. Check your internet connection and try again.',
+      retryFn,
+    )
+  }
+  // Generic fallback — still show a modal, not raw text
+  return handleServiceError(
+    'Generation Failed',
+    errorMsg || 'Something went wrong generating your meditation. Please try again.',
+    retryFn,
+  )
+}
+
 // ============================
 // DASHBOARD
 // ============================
@@ -809,12 +868,14 @@ async function requestReflection() {
       if (e.status === 402) {
         journalError.value = handleInsufficientTokens('Journal Reflections')
       } else if (e.status === 429) {
-        journalError.value = body.detail ?? 'Maximum reflections reached for this entry.'
+        journalError.value = handleServiceError('Reflection Limit', body.detail ?? 'Maximum reflections reached for this entry.')
+      } else if (e.status >= 500) {
+        journalError.value = handleServiceError('Service Unavailable', 'The AI service is temporarily down. Your tokens were not charged. Please try again in a few minutes.')
       } else {
-        journalError.value = body.detail ?? `Error (${e.status})`
+        journalError.value = handleServiceError('Error', body.detail ?? 'Something went wrong. Please try again.')
       }
     } else {
-      journalError.value = 'Network error — is the backend running?'
+      journalError.value = handleServiceError('Connection Issue', 'We couldn\'t reach the server. Check your internet connection and try again.')
     }
   } finally {
     reflecting.value = false
@@ -1187,9 +1248,11 @@ async function fetchHabitInsight() {
     if (e instanceof ApiError && e.status === 402) {
       habitError.value = handleInsufficientTokens('Habit Insights')
     } else if (e instanceof ApiError && e.status === 429) {
-      habitError.value = (e.body as Record<string, string>).detail ?? 'Insight cooldown active — one per week.'
+      habitError.value = handleServiceError('Insight Cooldown', (e.body as Record<string, string>).detail ?? 'Insights are available once per week. Check back later!')
+    } else if (e instanceof ApiError && e.status >= 500) {
+      habitError.value = handleServiceError('Service Unavailable', 'The AI service is temporarily down. Your tokens were not charged. Please try again in a few minutes.')
     } else {
-      habitError.value = 'Could not generate insight right now.'
+      habitError.value = handleServiceError('Generation Failed', 'Could not generate your habit insight right now. Please try again.')
     }
   } finally {
     habitInsightLoading.value = false
@@ -1653,8 +1716,10 @@ async function fetchGoalInsight(goalId: number) {
   } catch (e) {
     if (e instanceof ApiError && e.status === 402) {
       goalInsights.value[goalId] = handleInsufficientTokens('Goal Coaching')
+    } else if (e instanceof ApiError && e.status >= 500) {
+      goalInsights.value[goalId] = handleServiceError('Service Unavailable', 'The AI service is temporarily down. Your tokens were not charged. Please try again in a few minutes.')
     } else {
-      goalInsights.value[goalId] = 'Could not generate insight right now.'
+      goalInsights.value[goalId] = handleServiceError('Generation Failed', 'Could not generate your goal coaching insight right now. Please try again.')
     }
   } finally {
     goalInsightLoading.value = null
@@ -1867,7 +1932,7 @@ async function _pollUntilDone(sessionId: number) {
       }
 
       if (session.status === 'failed') {
-        medError.value = session.error_message ?? 'Generation failed'
+        medError.value = handleMeditationFailure(session.error_message)
         return
       }
     } catch {
@@ -2036,7 +2101,7 @@ async function generateMeditation() {
     const stub = await api.post<MeditationSession>('/api/life/meditation/generate', payload)
 
     if (stub.status === 'failed') {
-      medError.value = stub.error_message ?? 'Generation failed'
+      medError.value = handleMeditationFailure(stub.error_message)
       return
     }
 
@@ -2047,16 +2112,18 @@ async function generateMeditation() {
       if (e.status === 402) {
         medError.value = handleInsufficientTokens('Meditation')
       } else if (e.status === 409) {
-        medError.value = detail ?? 'A meditation is already being generated.'
+        medError.value = handleServiceError('Already Generating', detail ?? 'A meditation is already being generated. Please wait for it to finish.')
       } else if (e.status === 429) {
-        medError.value = detail ?? 'Daily meditation limit reached.'
+        medError.value = handleServiceError('Daily Limit Reached', detail ?? 'You\'ve used all your meditation sessions for today. Come back tomorrow for more!')
       } else if (e.status === 503) {
-        medError.value = 'Meditation generation not available.'
+        medError.value = handleServiceError('Service Unavailable', 'Meditation generation is temporarily unavailable. Please try again later.')
+      } else if (e.status >= 500) {
+        medError.value = handleServiceError('Server Error', 'Something went wrong on our end. Your tokens were not charged. Please try again.', startMeditation)
       } else {
-        medError.value = detail ?? `Error (${e.status})`
+        medError.value = handleServiceError('Error', detail ?? 'Something went wrong. Please try again.')
       }
     } else {
-      medError.value = 'Network error'
+      medError.value = handleServiceError('Connection Issue', 'We couldn\'t reach the server. Check your internet connection and try again.', startMeditation)
     }
   } finally {
     medGenerating.value = false
@@ -2514,6 +2581,8 @@ async function fetchTherapistGreeting() {
   } catch (e) {
     if (e instanceof ApiError && e.status === 402) {
       therapistError.value = handleInsufficientTokens('Wellness Bot')
+    } else if (e instanceof ApiError && e.status >= 500) {
+      therapistError.value = handleServiceError('Wellness Bot Unavailable', 'The AI service is temporarily down. Please try again in a few minutes.')
     }
     therapistGreeting.value = ''
   }
@@ -2608,15 +2677,15 @@ async function sendTherapistMessage() {
       if (e.status === 402) {
         therapistError.value = handleInsufficientTokens('Wellness Bot')
       } else if (e.status === 429) {
-        therapistError.value = detail ?? 'Session limit reached for today.'
-      } else if (e.status === 503) {
-        therapistError.value = 'Wellness Bot is temporarily unavailable — please try again later.'
+        therapistError.value = handleServiceError('Session Limit Reached', detail ?? 'You\'ve reached the session limit for today. Come back tomorrow!')
+      } else if (e.status === 503 || e.status >= 500) {
+        therapistError.value = handleServiceError('Wellness Bot Unavailable', 'The AI service is temporarily down. Your tokens were not charged. Please try again in a few minutes.')
         therapistAvailable.value = false
       } else {
-        therapistError.value = detail ?? `Error (${e.status})`
+        therapistError.value = handleServiceError('Error', detail ?? 'Something went wrong. Please try again.')
       }
     } else {
-      therapistError.value = 'Network error — is the backend running?'
+      therapistError.value = handleServiceError('Connection Issue', 'We couldn\'t reach the server. Check your internet connection and try again.')
     }
   } finally {
     therapistSending.value = false
@@ -5369,6 +5438,27 @@ onUnmounted(() => {
               Close
             </button>
           </template>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Service Error Modal (Venice down, timeouts, network issues) -->
+    <Teleport to="body">
+      <div v-if="showServiceError" class="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="closeServiceError">
+        <div class="glass-card p-6 max-w-md mx-4 border border-red-500/30 text-center">
+          <div class="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle :size="24" class="text-red-400" />
+          </div>
+          <h3 class="text-lg font-semibold text-txt-primary mb-2">{{ serviceErrorTitle }}</h3>
+          <p class="text-sm text-txt-secondary mb-5 leading-relaxed">{{ serviceErrorMessage }}</p>
+          <div class="flex gap-3 justify-center">
+            <button @click="closeServiceError" class="px-4 py-2 text-sm text-txt-muted hover:text-txt-primary transition-colors">
+              Dismiss
+            </button>
+            <button v-if="serviceErrorRetryFn" @click="retryFromServiceError" class="px-4 py-2 text-sm font-medium bg-indigo-500 text-white rounded-lg hover:bg-indigo-400 transition-colors">
+              Try Again
+            </button>
+          </div>
         </div>
       </div>
     </Teleport>

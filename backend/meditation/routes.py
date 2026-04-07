@@ -126,6 +126,28 @@ async def generate_meditation(
             detail="Meditation generation not available in standalone mode",
         )
 
+    # Pre-flight credit check BEFORE creating the session stub.
+    # This returns a clean 402 that the frontend turns into a "buy tokens" modal,
+    # instead of creating a stub that silently fails in the background.
+    try:
+        from core.credits.client import get_credit_client, dollars_to_tokens
+        from core.ai.gateway import _estimate_call_cost
+        credit_client = get_credit_client()
+        # Estimate: script generation + TTS (rough upper bound)
+        from meditation.prompts import _MAX_TOKENS
+        script_max_tokens = _MAX_TOKENS.get(body.length.value, 3000)
+        estimated_cost = _estimate_call_cost(script_max_tokens) + 0.02  # +$0.02 TTS buffer
+        estimated_tokens = dollars_to_tokens(estimated_cost)
+        if not await credit_client.can_spend(user.id, user.email, estimated_tokens):
+            raise HTTPException(
+                status_code=402,
+                detail="Insufficient ZugaTokens. Add more tokens to generate meditations.",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # Credit system unavailable — allow generation to proceed
+
     # Create a placeholder session immediately
     async with get_session() as session:
         meditation = MeditationSession(
@@ -391,8 +413,17 @@ async def _generate_in_background(
 
     except Exception as e:
         logger.error("Meditation %d FAILED: %s: %s", session_id, type(e).__name__, e)
-        # Store only the exception class name — never leak internals to DB
-        error_category = type(e).__name__
+        # Map known exceptions to user-friendly messages; never leak internals
+        _FRIENDLY_ERRORS = {
+            "CreditBlockedError": "insufficient_tokens",
+            "BudgetExhaustedError": "insufficient_tokens",
+            "HTTPStatusError": "The AI service is temporarily unavailable. Please try again.",
+            "ConnectError": "Could not reach the AI service. Please try again.",
+            "TimeoutException": "Generation timed out. Please try a shorter meditation.",
+            "ReadTimeout": "Generation timed out. Please try a shorter meditation.",
+        }
+        error_name = type(e).__name__
+        error_msg = _FRIENDLY_ERRORS.get(error_name, "Generation failed. Please try again.")
         try:
             async with get_session() as session:
                 await session.execute(
@@ -400,7 +431,7 @@ async def _generate_in_background(
                     .where(MeditationSession.id == session_id)
                     .values(
                         status="failed",
-                        error_message=error_category,
+                        error_message=error_msg,
                     )
                 )
         except Exception as e2:
