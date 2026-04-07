@@ -505,10 +505,19 @@ async def generate_script(
     except ImportError:
         raise HTTPException(status_code=503, detail="AI gateway not available")
 
-    response = await ai_call(
-        body.prompt, task=body.task, max_tokens=body.max_tokens,
-        user_id=user.id, user_email=user.email,
-    )
+    try:
+        response = await ai_call(
+            body.prompt, task=body.task, max_tokens=body.max_tokens,
+            user_id=user.id, user_email=user.email,
+        )
+    except Exception as e:
+        ename = type(e).__name__
+        if ename in ("CreditBlockedError", "InsufficientTokensError"):
+            raise HTTPException(status_code=402, detail=str(e))
+        if ename == "BudgetExhaustedError":
+            raise HTTPException(status_code=402, detail="Daily budget exhausted")
+        logger.exception("generate-script failed for user %s", user.id)
+        raise HTTPException(status_code=502, detail="AI service unavailable")
 
     return {
         "content": response.content,
