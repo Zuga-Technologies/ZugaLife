@@ -107,26 +107,24 @@ const srcdoc = computed(() => {
     ::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.3); border-radius: 3px; }
   `
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  ${csp}
-  <style>${baseStyles}</style>
-  ${t.css ? `<style>${t.css}</style>` : ''}
-</head>
-<body>
-  ${t.html}
-  <script>${THEME_SDK_SOURCE}</script>
-  <script>
-  try {
-    ${t.js}
-  } catch (err) {
-    document.body.innerHTML = '<div style="color:#f87171;padding:16px;">' +
-      '<strong>Theme Error</strong><br>' + err.message + '</div>'
-  }
-  </script>
-</body>
-</html>`
+  const SC = '<' + '/script>'
+  const doc = [
+    '<!DOCTYPE html><html lang="en"><head>',
+    csp,
+    `<style>${baseStyles}<` + '/style>',
+    t.css ? `<style>${t.css}<` + '/style>' : '',
+    '<' + '/head><body>',
+    t.html,
+    `<script>${THEME_SDK_SOURCE}${SC}`,
+    '<script>',
+    'try {', t.js, '} catch (err) {',
+    `document.body.innerHTML = '<div style="color:#f87171;padding:16px;">'`,
+    `+ '<strong>Theme Error<` + `/strong><br>' + err.message + '<` + `/div>'`,
+    '}',
+    SC,
+    '<' + '/body><' + '/html>',
+  ]
+  return doc.join('\n')
 })
 
 function onIframeLoad() {
