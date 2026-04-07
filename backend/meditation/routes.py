@@ -416,6 +416,7 @@ async def _generate_in_background(
         # Map known exceptions to user-friendly messages; never leak internals
         _FRIENDLY_ERRORS = {
             "CreditBlockedError": "insufficient_tokens",
+            "InsufficientTokensError": "insufficient_tokens",
             "BudgetExhaustedError": "insufficient_tokens",
             "HTTPStatusError": "The AI service is temporarily unavailable. Please try again.",
             "ConnectError": "Could not reach the AI service. Please try again.",

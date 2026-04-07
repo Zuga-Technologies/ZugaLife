@@ -45,9 +45,20 @@ router = APIRouter(prefix="/api/life/journal", tags=["life-journal"])
 async def _infer_mood(entry_id: int, content: str, user_id: str = "", user_email: str = "") -> None:
     """Background task: classify journal mood via AI and update the entry."""
     try:
-        from core.ai.gateway import ai_call
+        from core.ai.gateway import ai_call, CreditBlockedError
     except ImportError:
         return  # Standalone mode — no AI available
+
+    # Skip if user can't afford it — don't waste an API round-trip
+    if user_id and user_email:
+        try:
+            from core.credits.client import get_credit_client, dollars_to_tokens
+            credit_client = get_credit_client()
+            if not await credit_client.can_spend(user_id, user_email, dollars_to_tokens(0.001)):
+                log.info("Mood inference skipped for entry %d — insufficient tokens", entry_id)
+                return
+        except Exception:
+            pass  # Credit system unavailable — proceed anyway
 
     prompt = _prompts.build_mood_inference_prompt(content)
 
@@ -56,6 +67,9 @@ async def _infer_mood(entry_id: int, content: str, user_id: str = "", user_email
             prompt, task="chat", max_tokens=256,
             user_id=user_id or None, user_email=user_email or None,
         )
+    except CreditBlockedError:
+        log.info("Mood inference skipped for entry %d — insufficient tokens", entry_id)
+        return
     except Exception:
         log.warning("Mood inference failed for entry %d", entry_id)
         return
