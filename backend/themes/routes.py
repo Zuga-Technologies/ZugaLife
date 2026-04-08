@@ -40,7 +40,7 @@ PLATFORM_CUT_PERCENT = 10
 PAGE_SIZE = 20
 
 # Valid studios that support themes
-VALID_STUDIOS = {"life"}  # Expand as we add bridge APIs to other studios
+VALID_STUDIOS = {"life", "trader", "news", "learn", "gamer", "code", "operator", "health", "video", "image", "overseer", "motion"}
 
 # Valid categories
 VALID_CATEGORIES = {"widget", "dashboard", "tracker", "visualization", "tool", "game"}
