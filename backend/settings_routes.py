@@ -80,6 +80,19 @@ async def update_settings(
         for field, value in updates.items():
             setattr(settings, field, value)
 
+        # Sync display_name to core UserRecord so it's available in auth, chat, nav
+        if "display_name" in updates and updates["display_name"]:
+            try:
+                from core.auth.models import UserRecord
+                user_result = await session.execute(
+                    select(UserRecord).where(UserRecord.id == user.id)
+                )
+                user_record = user_result.scalar_one_or_none()
+                if user_record:
+                    user_record.name = updates["display_name"]
+            except Exception:
+                pass  # Non-critical — Life settings still saved
+
         await session.flush()
         await session.refresh(settings)
 
