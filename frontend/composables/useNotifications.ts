@@ -5,9 +5,7 @@
  * backend sync, and preference management.
  */
 import { ref, computed } from 'vue'
-import { useApi } from '@core/composables/useApi'
-
-const api = useApi()
+import { api } from '@core/api/client'
 
 // ---------------------------------------------------------------------------
 // State (singleton across components)
