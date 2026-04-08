@@ -329,6 +329,11 @@ window.addEventListener('zugatheme:notify', ((e: CustomEvent) => {
   }
 }) as EventListener)
 
+// Auto-refresh themes when chat creates one
+window.addEventListener('zugatheme:installed', () => {
+  fetchInstalledThemes()
+})
+
 // ============================
 // GAMIFICATION
 // ============================
