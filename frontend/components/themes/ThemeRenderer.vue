@@ -88,7 +88,7 @@ const srcdoc = computed(() => {
   // CSP meta tag — blocks all network requests from inside the iframe
   const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https: data:; font-src https:;">`
 
-  // Base dark theme styles
+  // Base dark theme styles — mobile-first responsive defaults
   const baseStyles = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -99,12 +99,20 @@ const srcdoc = computed(() => {
       line-height: 1.6;
       overflow-x: hidden;
       padding: 12px;
+      max-width: 100%;
     }
     a { color: #60a5fa; text-decoration: none; }
     a:hover { text-decoration: underline; }
+    img, canvas, svg { max-width: 100%; height: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 4px 8px; text-align: left; border-bottom: 1px solid rgba(80,90,120,0.2); }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.3); border-radius: 3px; }
+    @media (max-width: 480px) {
+      body { font-size: 12px; padding: 8px; }
+      h1, h2, h3 { font-size: clamp(14px, 4vw, 20px); }
+    }
   `
 
   const SC = '<' + '/script>'
