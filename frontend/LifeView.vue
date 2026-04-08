@@ -21,8 +21,10 @@ import { useCelebration } from './composables/useCelebration'
 import { useOnboardingStore } from '@zugaapp/stores/onboarding'
 import { useTokenStore } from '@core/billing/useTokens'
 import { playXpSound, playBadgeSound, playLevelUpSound, playStreakSound, playPrestigeSound, playJackpotSound } from './composables/useCelebrationSounds'
+import { useNotifications } from './composables/useNotifications'
 
 const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const notif = useNotifications()
 
 // --- Token conversion (matches ZugaCore/credits/manager.py constants) ---
 const ZUGATOKENS_PER_DOLLAR = 100
@@ -2943,6 +2945,9 @@ onMounted(() => {
   // Tier 3 — non-critical: themes load in background, never block dashboard
   fetchInstalledThemes()
 
+  // Tier 4 — notifications: register SW and check subscription state
+  notif.init()
+
   // Greeting fetched on-demand in startTherapistSession() — don't block page load
 
   // Check studio onboarding state
@@ -3194,6 +3199,34 @@ onUnmounted(() => {
               >
                 {{ prestigeLoading ? 'Ascending...' : 'Prestige' }}
               </button>
+            </div>
+          </div>
+
+          <!-- Notification prompt (show after streak >= 3 or has badges, not on first visit) -->
+          <div
+            v-if="notif.shouldShowPrompt() && (gamificationData.xp.current_streak_days >= 3 || gamificationData.badges.length >= 1)"
+            class="mt-3 pt-3 border-t border-bdr/50"
+          >
+            <div class="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20">
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-cyan-300">Stay on track</p>
+                <p class="text-[10px] text-txt-muted mt-0.5">Get gentle reminders to keep your streak alive and hit your goals</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  @click="notif.subscribe()"
+                  :disabled="notif.isLoading.value"
+                  class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {{ notif.isLoading.value ? '...' : 'Enable' }}
+                </button>
+                <button
+                  @click="notif.dismissPrompt()"
+                  class="px-2 py-1.5 rounded-lg text-xs text-txt-muted hover:text-txt-secondary transition-colors"
+                >
+                  Later
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { X, Upload, Trash2, Image, Film } from 'lucide-vue-next'
+import { X, Upload, Trash2, Image, Film, Bell, BellOff } from 'lucide-vue-next'
+import { useNotifications } from './composables/useNotifications'
 import {
   type ThemeId,
   THEMES,
@@ -33,10 +34,60 @@ const presetThemes = computed(() => THEMES.filter(t => t.id !== 'custom'))
 const customTheme = computed(() => THEMES.find(t => t.id === 'custom')!)
 const hasCustomMedia = computed(() => !!customImage.value || !!customVideoUrl.value)
 
+// Notifications
+const notif = useNotifications()
+const notifQuietStart = ref('22:00')
+const notifQuietEnd = ref('08:00')
+const notifReminderHour = ref(9)
+const notifStreakWarnings = ref(true)
+const notifDailyNudges = ref(true)
+const notifMilestoneAlerts = ref(true)
+const notifEnabled = ref(true)
+
+async function initNotifPrefs() {
+  await notif.loadPreferences()
+  if (notif.preferences.value) {
+    const p = notif.preferences.value
+    notifEnabled.value = p.enabled
+    notifQuietStart.value = p.quiet_start || '22:00'
+    notifQuietEnd.value = p.quiet_end || '08:00'
+    notifReminderHour.value = p.reminder_hour
+    notifStreakWarnings.value = p.streak_warnings
+    notifDailyNudges.value = p.daily_nudges
+    notifMilestoneAlerts.value = p.milestone_alerts
+  }
+}
+
+async function saveNotifPrefs() {
+  await notif.savePreferences({
+    enabled: notifEnabled.value,
+    quiet_start: notifQuietStart.value,
+    quiet_end: notifQuietEnd.value,
+    reminder_hour: notifReminderHour.value,
+    streak_warnings: notifStreakWarnings.value,
+    daily_nudges: notifDailyNudges.value,
+    milestone_alerts: notifMilestoneAlerts.value,
+  })
+}
+
+async function handleNotifToggle() {
+  if (!notif.isSubscribed.value && notifEnabled.value) {
+    const ok = await notif.subscribe()
+    if (!ok) {
+      notifEnabled.value = false
+      return
+    }
+  } else if (notif.isSubscribed.value && !notifEnabled.value) {
+    await notif.unsubscribe()
+  }
+  await saveNotifPrefs()
+}
+
 onMounted(async () => {
   customImage.value = getCustomImage()
   customVideoUrl.value = await getCustomVideo()
   customMediaType.value = getCustomMediaType()
+  await initNotifPrefs()
 })
 
 function selectTheme(id: ThemeId) {
@@ -117,7 +168,7 @@ function onSpeedChange(e: Event) {
     >
       <!-- Header -->
       <div class="flex items-center justify-between p-5 border-b border-bdr sticky top-0 bg-surface-1 z-10">
-        <h2 class="text-lg font-semibold text-txt-primary">Wallpaper</h2>
+        <h2 class="text-lg font-semibold text-txt-primary">Settings</h2>
         <button @click="emit('close')" class="p-1.5 rounded-lg text-txt-muted hover:text-txt-primary hover:bg-surface-3 transition-colors">
           <X :size="18" />
         </button>
@@ -236,6 +287,86 @@ function onSpeedChange(e: Event) {
             </p>
             <input type="file" accept="image/*,video/mp4,video/webm" class="hidden" @change="onCustomImageUpload" />
           </label>
+        </div>
+
+        <!-- Notifications -->
+        <div class="border-t border-bdr pt-6">
+          <h3 class="text-sm font-semibold text-txt-secondary uppercase tracking-wider mb-3">Notifications</h3>
+
+          <!-- Master toggle -->
+          <label class="flex items-center justify-between py-2 cursor-pointer group">
+            <div class="flex items-center gap-2">
+              <component :is="notifEnabled ? Bell : BellOff" :size="16" class="text-txt-muted" />
+              <span class="text-sm text-txt-primary">Push notifications</span>
+            </div>
+            <div
+              class="relative w-10 h-5 rounded-full transition-colors"
+              :class="notifEnabled ? 'bg-accent' : 'bg-surface-3'"
+              @click.prevent="notifEnabled = !notifEnabled; handleNotifToggle()"
+            >
+              <div
+                class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                :class="notifEnabled ? 'translate-x-5' : 'translate-x-0.5'"
+              />
+            </div>
+          </label>
+
+          <p v-if="notif.permission.value === 'denied'" class="text-xs text-red-400 mt-1">
+            Notifications are blocked in your browser settings. Enable them in your browser to use this feature.
+          </p>
+
+          <!-- Expanded preferences (only when enabled) -->
+          <template v-if="notifEnabled && notif.isSubscribed.value">
+            <!-- Notification types -->
+            <div class="mt-4 space-y-2">
+              <label class="flex items-center justify-between py-1.5">
+                <span class="text-xs text-txt-secondary">Streak reminders</span>
+                <input type="checkbox" v-model="notifStreakWarnings" @change="saveNotifPrefs" class="accent-accent" />
+              </label>
+              <label class="flex items-center justify-between py-1.5">
+                <span class="text-xs text-txt-secondary">Daily nudges</span>
+                <input type="checkbox" v-model="notifDailyNudges" @change="saveNotifPrefs" class="accent-accent" />
+              </label>
+              <label class="flex items-center justify-between py-1.5">
+                <span class="text-xs text-txt-secondary">Milestone alerts</span>
+                <input type="checkbox" v-model="notifMilestoneAlerts" @change="saveNotifPrefs" class="accent-accent" />
+              </label>
+            </div>
+
+            <!-- Quiet hours -->
+            <div class="mt-4 space-y-2">
+              <p class="text-xs font-medium text-txt-secondary">Quiet hours</p>
+              <div class="flex items-center gap-2">
+                <input
+                  type="time"
+                  v-model="notifQuietStart"
+                  @change="saveNotifPrefs"
+                  class="bg-surface-2 border border-bdr rounded px-2 py-1 text-xs text-txt-primary w-24"
+                />
+                <span class="text-xs text-txt-muted">to</span>
+                <input
+                  type="time"
+                  v-model="notifQuietEnd"
+                  @change="saveNotifPrefs"
+                  class="bg-surface-2 border border-bdr rounded px-2 py-1 text-xs text-txt-primary w-24"
+                />
+              </div>
+            </div>
+
+            <!-- Reminder hour -->
+            <div class="mt-4 space-y-1.5">
+              <p class="text-xs font-medium text-txt-secondary">Daily reminder time</p>
+              <select
+                v-model.number="notifReminderHour"
+                @change="saveNotifPrefs"
+                class="bg-surface-2 border border-bdr rounded px-2 py-1.5 text-xs text-txt-primary w-full"
+              >
+                <option v-for="h in 24" :key="h - 1" :value="h - 1">
+                  {{ (h - 1).toString().padStart(2, '0') }}:00
+                </option>
+              </select>
+            </div>
+          </template>
         </div>
       </div>
     </div>
