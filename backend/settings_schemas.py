@@ -26,6 +26,7 @@ class LifeSettingsResponse(BaseModel):
     med_voice: str = "serene"
     med_ambience: str = "rain"
     onboarding_completed: bool = False
+    custom_colors: str | None = None
 
     model_config = {"from_attributes": True}
 

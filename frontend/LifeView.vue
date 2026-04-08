@@ -331,10 +331,41 @@ window.addEventListener('zugatheme:notify', ((e: CustomEvent) => {
   }
 }) as EventListener)
 
-// Auto-refresh themes when chat creates one
+// Auto-refresh themes when chat creates one (same-tab)
 window.addEventListener('zugatheme:installed', () => {
   fetchInstalledThemes()
 })
+
+// BroadcastChannel: cross-tab/cross-page theme + restyle events
+const themeBroadcast = new BroadcastChannel('zugatheme')
+themeBroadcast.onmessage = (e) => {
+  if (e.data?.type === 'installed') fetchInstalledThemes()
+  if (e.data?.type === 'restyled') applyCustomColors()
+}
+
+// ============================
+// CUSTOM STUDIO COLORS (Restyle)
+// ============================
+
+async function applyCustomColors() {
+  try {
+    const settings = await api.get<{ custom_colors?: string | null }>('/api/life/settings')
+    // Remove existing restyle tag
+    document.getElementById('zugabot-restyle')?.remove()
+
+    if (!settings.custom_colors) return
+
+    const parsed = JSON.parse(settings.custom_colors)
+    if (!parsed.css) return
+
+    const style = document.createElement('style')
+    style.id = 'zugabot-restyle'
+    style.textContent = parsed.css
+    document.head.appendChild(style)
+  } catch {
+    // Non-critical — fail silently
+  }
+}
 
 // ============================
 // GAMIFICATION
@@ -2942,8 +2973,9 @@ onMounted(() => {
   Promise.all([fetchTherapistStatus(), fetchTherapistNotes()])
     .finally(() => { loadingTherapist.value = false })
 
-  // Tier 3 — non-critical: themes load in background, never block dashboard
+  // Tier 3 — non-critical: themes + custom colors load in background
   fetchInstalledThemes()
+  applyCustomColors()
 
   // Tier 4 — notifications: register SW and check subscription state
   notif.init()

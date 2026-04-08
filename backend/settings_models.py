@@ -4,7 +4,7 @@ One row per user. Auto-created with defaults on first GET.
 Each studio owns its own settings table — no cross-studio sharing.
 """
 
-from sqlalchemy import Boolean, Float, Integer, String
+from sqlalchemy import Boolean, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database.base import Base, TimestampMixin
@@ -30,3 +30,6 @@ class LifeUserSettings(Base, TimestampMixin):
 
     # Onboarding
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Custom studio colors (JSON: {"colors": {...}, "css": "..."})
+    custom_colors: Mapped[str | None] = mapped_column(Text, nullable=True)
