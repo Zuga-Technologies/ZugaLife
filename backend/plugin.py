@@ -62,10 +62,11 @@ _schemas = _load_sibling("schemas")
 _routes = _load_sibling("routes")
 
 
-# Load journal submodule: models → schemas → prompts → routes
+# Load journal submodule: models → schemas → prompts → prompt_library → routes
 _j_models = _load_submodule("journal", "models")
 _j_schemas = _load_submodule("journal", "schemas")
 _j_prompts = _load_submodule("journal", "prompts")
+_j_prompt_lib = _load_submodule("journal", "prompt_library")
 _j_routes = _load_submodule("journal", "routes")
 
 # Load habits submodule: models → schemas → prompts → routes
@@ -96,18 +97,21 @@ _t_prompts = _load_submodule("therapist", "prompts")
 _t_context = _load_submodule("therapist", "context")
 _t_routes = _load_submodule("therapist", "routes")
 
-# Load forecasting submodule: engine → schemas → context → routes
+# Load forecasting submodule: models → engine → schemas → context → narrative → routes
+_f_models = _load_submodule("forecasting", "models")
 _f_engine = _load_submodule("forecasting", "engine")
 _f_schemas = _load_submodule("forecasting", "schemas")
 _f_context = _load_submodule("forecasting", "context")
+_f_narrative = _load_submodule("forecasting", "narrative")
 _f_routes = _load_submodule("forecasting", "routes")
 
-# Load gamification submodule: models → schemas → engine → ai_challenges → routes
+# Load gamification submodule: models → schemas → engine → ai_challenges → insights → routes
 # engine must come after schemas (build_badge_response resolves BadgeResponse via sys.modules)
 _gam_models = _load_submodule("gamification", "models")
 _gam_schemas = _load_submodule("gamification", "schemas")
 _gam_engine = _load_submodule("gamification", "engine")
 _gam_ai = _load_submodule("gamification", "ai_challenges")
+_gam_insights = _load_submodule("gamification", "insights")
 _gam_routes = _load_submodule("gamification", "routes")
 _gam_notif = _load_submodule("gamification", "notifications")
 _gam_notif_routes = _load_submodule("gamification", "notification_routes")
@@ -116,6 +120,9 @@ _gam_notif_routes = _load_submodule("gamification", "notification_routes")
 _th_models = _load_submodule("themes", "models")
 _th_schemas = _load_submodule("themes", "schemas")
 _th_routes = _load_submodule("themes", "routes")
+
+# Load ecosystem integration (cross-studio signals)
+_ecosystem = _load_sibling("ecosystem")
 
 # Load data management (reset endpoints) — must come after all domain modules
 _data_mgmt = _load_sibling("data_management")
@@ -196,7 +203,9 @@ class ZugaLifePlugin(StudioPlugin):
             _t_models.TherapistSessionNote,
             _gam_models.UserXP, _gam_models.XPTransaction,
             _gam_models.UserBadge, _gam_models.DailyChallenge,
-            _gam_models.WeeklyQuest,
+            _gam_models.WeeklyQuest, _gam_models.UserInsight,
+            _f_models.WeeklyNarrative,
+            _ecosystem.CrossStudioSignal,
             _th_models.Theme, _th_models.ThemeInstall, _th_models.ThemeState,
             _th_models.ThemePurchase, _th_models.ThemeReview,
         ]
@@ -233,6 +242,18 @@ class ZugaLifePlugin(StudioPlugin):
                 "ALTER TABLE life_user_xp ADD COLUMN prestige_level INTEGER DEFAULT 0",
                 # Onboarding state
                 "ALTER TABLE life_user_settings ADD COLUMN onboarding_completed BOOLEAN DEFAULT FALSE",
+                # WOOP goal psychology fields (Phase 2)
+                "ALTER TABLE goal_definitions ADD COLUMN identity_statement VARCHAR(500)",
+                "ALTER TABLE goal_definitions ADD COLUMN obstacle VARCHAR(500)",
+                "ALTER TABLE goal_definitions ADD COLUMN implementation_plan TEXT",
+                "ALTER TABLE goal_definitions ADD COLUMN approach_reframe VARCHAR(500)",
+                # Goal-connected daily challenges (Phase 2)
+                "ALTER TABLE life_daily_challenges ADD COLUMN goal_connection VARCHAR(200)",
+                # Zugabot personalization layer (Phase 4)
+                "ALTER TABLE life_user_settings ADD COLUMN player_type VARCHAR(20) DEFAULT 'achiever'",
+                "ALTER TABLE life_user_settings ADD COLUMN challenge_difficulty VARCHAR(10) DEFAULT 'medium'",
+                "ALTER TABLE life_user_settings ADD COLUMN gamification_emphasis FLOAT DEFAULT 0.7",
+                "ALTER TABLE life_user_settings ADD COLUMN personalization_source VARCHAR(10) DEFAULT 'system'",
             ]
             for sql in migrations:
                 try:
@@ -241,3 +262,7 @@ class ZugaLifePlugin(StudioPlugin):
                     pass  # column already exists
 
         logger.info("ZugaLife tables initialized (mood + settings + journal + habits + goals + meditation + therapist + gamification)")
+
+        # Register ecosystem event handler for cross-studio signals
+        if _ecosystem and hasattr(_ecosystem, "register_event_handler"):
+            _ecosystem.register_event_handler()

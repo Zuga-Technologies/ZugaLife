@@ -53,10 +53,15 @@ class MoodEntryResponse(BaseModel):
     created_at: datetime
 
 
+class MoodSuggestion(BaseModel):
+    type: str       # "breathwork", "meditation", etc.
+    message: str
+
 class MoodLogResponse(BaseModel):
     entry: MoodEntryResponse
     streak: int
     today_count: int
+    suggestion: MoodSuggestion | None = None
 
 
 class MoodHistoryResponse(BaseModel):

@@ -29,6 +29,9 @@ class XPStatusResponse(BaseModel):
     streak_freeze_used: bool = False
     bonus_label: str | None = None
     bonus_tier: str | None = None
+    # Soft streak reframing — consistency rate (Lally: missed days don't reset formation)
+    consistency_30d: int = 0       # Days active in last 30
+    consistency_pct: float = 0.0   # Percentage (0-100)
 
 
 class XPGainResponse(BaseModel):
@@ -56,6 +59,7 @@ class DailyChallengeResponse(BaseModel):
     xp_reward: int
     is_completed: bool
     is_ai_generated: bool | None = False
+    goal_connection: str | None = None
 
 
 class WeeklyQuestResponse(BaseModel):

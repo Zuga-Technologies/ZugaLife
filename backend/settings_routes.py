@@ -2,11 +2,14 @@
 
 GET  /api/life/settings  → return current settings (auto-create if missing)
 PUT  /api/life/settings  → upsert settings (partial update)
+GET  /api/life/settings/personalization → Zugabot/user personalization config
+PATCH /api/life/settings/personalization → update personalization (Zugabot or user)
 """
 
 import sys
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from core.auth.middleware import get_current_user
@@ -132,3 +135,79 @@ async def reset_life_onboarding(
         settings = await _get_or_create_settings(session, user.id)
         settings.onboarding_completed = False
     return {"status": "ok"}
+
+
+# ── Zugabot Personalization Layer ────────────────────────────────
+
+
+VALID_PLAYER_TYPES = {"achiever", "explorer", "socializer"}
+VALID_DIFFICULTIES = {"easy", "medium", "hard"}
+VALID_SOURCES = {"user", "zugabot", "system"}
+
+
+class PersonalizationResponse(BaseModel):
+    player_type: str
+    challenge_difficulty: str
+    gamification_emphasis: float
+    personalization_source: str
+
+
+class PersonalizationUpdate(BaseModel):
+    player_type: str | None = Field(None, description="achiever|explorer|socializer")
+    challenge_difficulty: str | None = Field(None, description="easy|medium|hard")
+    gamification_emphasis: float | None = Field(None, ge=0.0, le=1.0)
+    source: str | None = Field(None, description="user|zugabot")
+
+
+@router.get("/settings/personalization", response_model=PersonalizationResponse)
+async def get_personalization(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get current personalization config (readable by frontend and Zugabot)."""
+    async with get_session() as session:
+        settings = await _get_or_create_settings(session, user.id)
+    return PersonalizationResponse(
+        player_type=settings.player_type or "achiever",
+        challenge_difficulty=settings.challenge_difficulty or "medium",
+        gamification_emphasis=settings.gamification_emphasis if settings.gamification_emphasis is not None else 0.7,
+        personalization_source=settings.personalization_source or "system",
+    )
+
+
+@router.patch("/settings/personalization", response_model=PersonalizationResponse)
+async def update_personalization(
+    body: PersonalizationUpdate,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Update personalization config. Writable by both the user and Zugabot agent.
+
+    Zugabot can learn which gamification style works for each user (Bartle player types)
+    and adjust challenge difficulty in real-time (Csikszentmihalyi's flow channel).
+    """
+    async with get_session() as session:
+        settings = await _get_or_create_settings(session, user.id)
+
+        if body.player_type is not None:
+            if body.player_type not in VALID_PLAYER_TYPES:
+                raise HTTPException(400, f"Invalid player_type. Allowed: {sorted(VALID_PLAYER_TYPES)}")
+            settings.player_type = body.player_type
+
+        if body.challenge_difficulty is not None:
+            if body.challenge_difficulty not in VALID_DIFFICULTIES:
+                raise HTTPException(400, f"Invalid difficulty. Allowed: {sorted(VALID_DIFFICULTIES)}")
+            settings.challenge_difficulty = body.challenge_difficulty
+
+        if body.gamification_emphasis is not None:
+            settings.gamification_emphasis = body.gamification_emphasis
+
+        settings.personalization_source = body.source or "user"
+
+        await session.flush()
+        await session.refresh(settings)
+
+    return PersonalizationResponse(
+        player_type=settings.player_type,
+        challenge_difficulty=settings.challenge_difficulty,
+        gamification_emphasis=settings.gamification_emphasis,
+        personalization_source=settings.personalization_source,
+    )

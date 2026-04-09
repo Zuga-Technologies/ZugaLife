@@ -129,6 +129,10 @@ async def _goal_to_response(
         created_at=goal.created_at,
         updated_at=goal.updated_at,
         template_key=goal.template_key,
+        identity_statement=goal.identity_statement,
+        obstacle=goal.obstacle,
+        implementation_plan=goal.implementation_plan,
+        approach_reframe=goal.approach_reframe,
         milestones=[MilestoneResponse.model_validate(m) for m in milestones],
         milestone_count=len(milestones),
         milestone_done=sum(1 for m in milestones if m.is_completed),
@@ -276,6 +280,10 @@ async def create_goal(
             description=body.description,
             deadline=body.deadline,
             sort_order=next_order,
+            identity_statement=body.identity_statement,
+            obstacle=body.obstacle,
+            implementation_plan=body.implementation_plan,
+            approach_reframe=body.approach_reframe,
         )
         session.add(goal)
         await session.flush()
@@ -302,6 +310,15 @@ async def update_goal(
             goal.deadline = body.deadline
         if body.sort_order is not None:
             goal.sort_order = body.sort_order
+        # WOOP fields
+        if "identity_statement" in body.model_fields_set:
+            goal.identity_statement = body.identity_statement
+        if "obstacle" in body.model_fields_set:
+            goal.obstacle = body.obstacle
+        if "implementation_plan" in body.model_fields_set:
+            goal.implementation_plan = body.implementation_plan
+        if "approach_reframe" in body.model_fields_set:
+            goal.approach_reframe = body.approach_reframe
 
         await session.flush()
         await session.refresh(goal)

@@ -59,6 +59,68 @@ const soundEnabled = ref(true)
 
 let _toastId = 0
 let _snapshot: GamificationSnapshot | null = null
+let _lastActionSource: string | null = null
+
+// ---------------------------------------------------------------------------
+// Identity language — maps action sources to psychologically-grounded phrases
+// (James Clear: "Every action is a vote for the type of person you want to become")
+// ---------------------------------------------------------------------------
+
+const IDENTITY_MESSAGES: Record<string, string[]> = {
+  mood_log:             ['You checked in with yourself', 'You paused to notice how you feel'],
+  habit_check:          ['You showed up for your health', 'You kept a promise to yourself'],
+  journal_entry:        ['You processed your thoughts', 'You made sense of your day'],
+  meditation_complete:  ['You chose presence over noise', 'You gave your mind space to breathe'],
+  therapist_session:    ['You invested in your growth', 'You chose to understand yourself better'],
+  goal_milestone:       ['You moved closer to who you want to be', 'You proved something to yourself'],
+  daily_challenge:      ['You rose to the challenge', 'You pushed yourself today'],
+}
+
+function getIdentityMessage(source: string): string {
+  const messages = IDENTITY_MESSAGES[source]
+  if (!messages) return ''
+  return messages[Math.floor(Math.random() * messages.length)]
+}
+
+function setActionSource(source: string) {
+  _lastActionSource = source
+}
+
+/**
+ * Compute an intrinsic benefit message from the action source and current XP data.
+ * Shows the REAL reward (data-driven insight) alongside the game reward (XP).
+ * Psychology: prevents overjustification by making the intrinsic benefit visible.
+ */
+function getIntrinsicBenefit(
+  source: string,
+  xpData: { consistency_30d?: number; consistency_pct?: number; current_streak_days: number },
+): string | null {
+  const consistency = xpData.consistency_30d ?? 0
+  const streak = xpData.current_streak_days
+
+  switch (source) {
+    case 'meditation_complete':
+      return consistency > 5
+        ? `You've meditated ${consistency} of the last 30 days`
+        : null
+    case 'habit_check':
+      return consistency > 7
+        ? `${Math.round(xpData.consistency_pct ?? 0)}% consistency this month`
+        : null
+    case 'journal_entry':
+      return streak > 3
+        ? `${streak} days of showing up for yourself`
+        : null
+    case 'mood_log':
+      return consistency > 3
+        ? 'Tracking builds self-awareness \u2014 the foundation of change'
+        : null
+    case 'therapist_session':
+      return 'Research: therapeutic alliance forms within 5 sessions'
+    default:
+      return null
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Toast management
@@ -113,28 +175,51 @@ function celebrateChanges(
   const oldSnap = _snapshot
   const xpGained = newData.xp.total_xp - oldSnap.total_xp
 
-  // --- XP toast ---
+  // --- XP toast with identity language ---
   if (xpGained > 0) {
     const multiplierNote = newData.xp.streak_multiplier > 1
       ? ` (${newData.xp.streak_multiplier}x streak)`
       : ''
+    const identity = _lastActionSource ? getIdentityMessage(_lastActionSource) : ''
+    const identitySuffix = identity ? ` — ${identity}` : ''
     pushToast({
       type: 'xp',
-      message: `+${xpGained} XP${multiplierNote}`,
+      message: `+${xpGained} XP${multiplierNote}${identitySuffix}`,
       xp: xpGained,
-      duration: 3000,
+      duration: identity ? 4000 : 3000, // Slightly longer when showing identity message
     })
   }
 
-  // --- Streak milestone toast ---
+  // --- Intrinsic benefit toast (delayed, shows the REAL reward alongside XP) ---
+  if (xpGained > 0 && _lastActionSource) {
+    const benefit = getIntrinsicBenefit(_lastActionSource, newData.xp)
+    if (benefit) {
+      setTimeout(() => {
+        pushToast({
+          type: 'info',
+          message: benefit,
+          duration: 4500,
+        })
+      }, 1500)
+    }
+  }
+
+  // --- Streak milestone toast (identity-framed) ---
   if (newData.xp.current_streak_days > oldSnap.current_streak_days) {
     const days = newData.xp.current_streak_days
-    // Only celebrate milestone streaks (7, 14, 21, 30, 50, 100)
     if ([7, 14, 21, 30, 50, 100].includes(days)) {
+      const streakMessages: Record<number, string> = {
+        7:   "A week of showing up — this is becoming who you are",
+        14:  "Two weeks strong — your consistency is building something real",
+        21:  "Three weeks — you're proving this isn't a phase",
+        30:  "A full month — this is part of your identity now",
+        50:  "50 days — you've rewired how you show up for yourself",
+        100: "100 days — you are the living proof",
+      }
       pushToast({
         type: 'streak',
-        message: `${days}-day streak!`,
-        duration: 4000,
+        message: streakMessages[days] || `You've shown up ${days} days straight`,
+        duration: 5000,
       })
     }
   }
@@ -175,8 +260,9 @@ function celebrateChanges(
     triggerConfetti()
   }
 
-  // Clear snapshot after processing
+  // Clear snapshot and action source after processing
   _snapshot = null
+  _lastActionSource = null
 }
 
 // ---------------------------------------------------------------------------
@@ -249,8 +335,16 @@ function celebrateBonus(label: string, tier: 'rare' | 'epic' | 'legendary', xpGa
 function celebrateFreezeSaved(streakDays: number) {
   pushToast({
     type: 'freeze',
-    message: `Streak Freeze saved your ${streakDays}-day streak! 🧊→🔥`,
+    message: `Safety net kept your ${streakDays}-day momentum going 🧊→🔥`,
     duration: 5000,
+  })
+}
+
+function celebrateStreakRecovery() {
+  pushToast({
+    type: 'info',
+    message: 'Welcome back — you can pick up right where you left off',
+    duration: 4000,
   })
 }
 
@@ -303,7 +397,8 @@ export function useCelebration() {
     triggerConfetti,
     toggleSound,
 
-    // Snapshot flow: call takeSnapshot BEFORE action, celebrateChanges AFTER re-fetch
+    // Snapshot flow: call setActionSource + takeSnapshot BEFORE action, celebrateChanges AFTER re-fetch
+    setActionSource,
     takeSnapshot,
     celebrateChanges,
     celebratePrestige,
@@ -312,5 +407,6 @@ export function useCelebration() {
     celebrateBonus,
     celebrateFreezeSaved,
     celebrateFreezeEarned,
+    celebrateStreakRecovery,
   }
 }

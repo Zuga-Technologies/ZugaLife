@@ -12,6 +12,11 @@ class GoalCreateRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     deadline: date | None = None
+    # WOOP fields (all optional — wizard populates them, quick-create skips)
+    identity_statement: str | None = Field(None, max_length=500)
+    obstacle: str | None = Field(None, max_length=500)
+    implementation_plan: str | None = Field(None, max_length=2000)
+    approach_reframe: str | None = Field(None, max_length=500)
 
 
 class GoalFromTemplateRequest(BaseModel):
@@ -23,6 +28,10 @@ class GoalUpdateRequest(BaseModel):
     description: str | None = Field(None, max_length=2000)
     deadline: date | None = None
     sort_order: int | None = Field(None, ge=0)
+    identity_statement: str | None = Field(None, max_length=500)
+    obstacle: str | None = Field(None, max_length=500)
+    implementation_plan: str | None = Field(None, max_length=2000)
+    approach_reframe: str | None = Field(None, max_length=500)
 
 
 class MilestoneCreateRequest(BaseModel):
@@ -75,6 +84,11 @@ class GoalResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     template_key: str | None = None
+    # WOOP fields
+    identity_statement: str | None = None
+    obstacle: str | None = None
+    implementation_plan: str | None = None
+    approach_reframe: str | None = None
     milestones: list[MilestoneResponse]
     milestone_count: int = 0
     milestone_done: int = 0

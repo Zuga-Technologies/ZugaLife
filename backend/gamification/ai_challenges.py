@@ -85,6 +85,10 @@ async def _gather_user_context(session, user_id: str) -> dict:
             "milestones_total": total_ms,
             "next_milestone": next_milestone,
             "deadline": g.deadline.isoformat() if g.deadline else None,
+            # WOOP fields for goal-connected challenge generation
+            "obstacle": getattr(g, "obstacle", None),
+            "implementation_plan": getattr(g, "implementation_plan", None),
+            "identity_statement": getattr(g, "identity_statement", None),
         })
 
     # Streak and level
@@ -96,6 +100,15 @@ async def _gather_user_context(session, user_id: str) -> dict:
     streak_days = user_xp.current_streak_days if user_xp else 0
     level = user_xp.level if user_xp else 1
 
+    # Cross-studio ecosystem signals
+    ecosystem_signals = []
+    try:
+        _ecosystem = sys.modules.get("zugalife.ecosystem")
+        if _ecosystem:
+            ecosystem_signals = await _ecosystem.get_recent_signals(session, user_id, days=3, limit=3)
+    except Exception:
+        pass
+
     return {
         "habits": habit_context,
         "goals": goal_context,
@@ -103,7 +116,26 @@ async def _gather_user_context(session, user_id: str) -> dict:
         "level": level,
         "today": today.isoformat(),
         "day_of_week": today.strftime("%A"),
+        "ecosystem_signals": ecosystem_signals,
+        "challenge_difficulty": await _get_challenge_difficulty(session, user_id),
     }
+
+
+async def _get_challenge_difficulty(session, user_id: str) -> str:
+    """Read the user's preferred challenge difficulty from personalization config."""
+    try:
+        _settings = sys.modules.get("zugalife.settings_models")
+        if _settings:
+            result = await session.execute(
+                select(_settings.LifeUserSettings.challenge_difficulty)
+                .where(_settings.LifeUserSettings.user_id == user_id)
+            )
+            row = result.scalar_one_or_none()
+            if row:
+                return row
+    except Exception:
+        pass
+    return "medium"
 
 
 # ---------------------------------------------------------------------------
@@ -131,10 +163,18 @@ def _build_challenge_prompt(context: dict, challenge_type: str = "daily") -> str
         for g in context["goals"]:
             progress = f"{g['milestones_done']}/{g['milestones_total']} milestones"
             next_ms = f" — next: {g['next_milestone']}" if g.get("next_milestone") else ""
-            lines.append(f"- {g['title']}: {progress}{next_ms}")
+            obstacle = f" | obstacle: {g['obstacle']}" if g.get("obstacle") else ""
+            plan = f" | plan: {g['implementation_plan']}" if g.get("implementation_plan") else ""
+            lines.append(f"- {g['title']}: {progress}{next_ms}{obstacle}{plan}")
         goals_text = "\n".join(lines)
     else:
         goals_text = "No active goals yet."
+
+    # Ecosystem signals
+    eco_text = ""
+    if context.get("ecosystem_signals"):
+        eco_lines = [f"- {s['summary']}" for s in context["ecosystem_signals"]]
+        eco_text = "\n\nRecent cross-app activity:\n" + "\n".join(eco_lines)
 
     if challenge_type == "daily":
         return f"""Generate 3 daily challenges for a wellness app user. Today is {context['day_of_week']}, {context['today']}.
@@ -142,12 +182,14 @@ def _build_challenge_prompt(context: dict, challenge_type: str = "daily") -> str
 <user_context>
 Level: {context['level']}
 Current streak: {context['streak_days']} days
+Preferred difficulty: {context.get('challenge_difficulty', 'medium')}
 
 Active habits:
 {habits_text}
 
 Active goals:
 {goals_text}
+{eco_text}
 </user_context>
 
 Rules:
@@ -159,10 +201,11 @@ Rules:
 6. NEVER suggest something unrealistic. If user completes a habit 2/7 days, don't ask for "perfect day".
 7. If user has no habits or goals, generate general wellness challenges only.
 8. Each challenge MUST include a "source" field — the action that completes it. Valid sources: mood_log, habit_check, journal_entry, meditation_complete, therapist_session, goal_milestone.
+9. If user has active goals with obstacles or plans, AT LEAST 1 challenge MUST directly address a goal's obstacle or implementation plan. Include a "goal_connection" field with the goal title it supports. Goals without obstacles get no goal_connection.
 
 Return ONLY valid JSON array, no markdown, no explanation:
 [
-  {{"key": "unique_key", "title": "Two Words", "desc": "Short description under 60 chars", "xp": 25, "source": "mood_log"}},
+  {{"key": "unique_key", "title": "Two Words", "desc": "Short description under 60 chars", "xp": 25, "source": "mood_log", "goal_connection": null}},
   ...
 ]"""
 
@@ -172,6 +215,7 @@ Return ONLY valid JSON array, no markdown, no explanation:
 <user_context>
 Level: {context['level']}
 Current streak: {context['streak_days']} days
+Preferred difficulty: {context.get('challenge_difficulty', 'medium')}
 
 Active habits:
 {habits_text}
@@ -337,12 +381,20 @@ async def generate_challenges(
             if source not in VALID_SOURCES:
                 source = _infer_source_from_desc(desc)
 
+            # Goal connection (optional — links challenge to a user's WOOP goal)
+            goal_conn = c.get("goal_connection")
+            if goal_conn and isinstance(goal_conn, str):
+                goal_conn = goal_conn.strip()[:200]
+            else:
+                goal_conn = None
+
             validated.append({
                 "key": f"ai_{key}" if not key.startswith("ai_") else key,
                 "title": title,
                 "desc": desc,
                 "xp": xp,
                 "source": source,
+                "goal_connection": goal_conn,
             })
 
         if not validated:

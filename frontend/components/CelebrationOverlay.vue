@@ -90,10 +90,10 @@ const levelNames: Record<number, string> = {
           <div class="cel-badge-icon">
             <component v-if="badgeIcons[activeBadge.badge_key]" :is="badgeIcons[activeBadge.badge_key]" :size="48" class="text-purple-400" />
           </div>
-          <div class="cel-modal__label">Badge Earned!</div>
+          <div class="cel-modal__label">You've proven something</div>
           <div class="cel-modal__title">{{ activeBadge.title }}</div>
           <div class="cel-modal__desc">{{ activeBadge.description }}</div>
-          <button class="cel-modal__btn" @click="dismissBadge">Awesome!</button>
+          <button class="cel-modal__btn" @click="dismissBadge">That's who I am</button>
         </div>
       </div>
     </Transition>
@@ -115,9 +115,9 @@ const levelNames: Record<number, string> = {
           <div class="cel-modal__label">Level Up!</div>
           <div class="cel-modal__title">{{ activeLevelUp.newLevelName }}</div>
           <div class="cel-modal__desc">
-            You advanced from Level {{ activeLevelUp.oldLevel }} to Level {{ activeLevelUp.newLevel }}
+            Your consistency is building something real — Level {{ activeLevelUp.newLevel }}
           </div>
-          <button class="cel-modal__btn cel-modal__btn--gold" @click="dismissLevelUp">Let's go!</button>
+          <button class="cel-modal__btn cel-modal__btn--gold" @click="dismissLevelUp">Onward</button>
         </div>
       </div>
     </Transition>

@@ -91,6 +91,18 @@ async def _infer_mood(entry_id: int, content: str, user_id: str = "", user_email
             entry.mood_label = label
 
 
+@router.get("/prompt")
+async def get_daily_prompt(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get today's guided journal prompt (Pennebaker-informed, rotating by category)."""
+    _prompt_lib = sys.modules.get("zugalife.journal.prompt_library")
+    if not _prompt_lib:
+        return {"title": "Free Write", "prompt": "What's on your mind today?", "category": "expressive"}
+    prompt = _prompt_lib.get_daily_prompt(user.id)
+    return prompt
+
+
 @router.post("", response_model=JournalEntryResponse, status_code=201)
 async def create_journal_entry(
     body: JournalCreateRequest,

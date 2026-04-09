@@ -94,6 +94,23 @@ class DailyChallenge(Base):
     )
     is_ai_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     completion_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    goal_connection: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
+class UserInsight(Base):
+    """Tracks which contextual insight cards have been shown to a user."""
+
+    __tablename__ = "life_user_insights"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    insight_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    shown_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+    )
+    dismissed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
 
 
 class WeeklyQuest(Base):

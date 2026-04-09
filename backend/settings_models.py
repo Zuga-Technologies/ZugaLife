@@ -33,3 +33,10 @@ class LifeUserSettings(Base, TimestampMixin):
 
     # Custom studio colors (JSON: {"colors": {...}, "css": "..."})
     custom_colors: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Zugabot personalization layer (Bartle player types + adaptive difficulty)
+    # These fields are writable by both the user and Zugabot agent
+    player_type: Mapped[str] = mapped_column(String(20), default="achiever")  # achiever|explorer|socializer
+    challenge_difficulty: Mapped[str] = mapped_column(String(10), default="medium")  # easy|medium|hard
+    gamification_emphasis: Mapped[float] = mapped_column(Float, default=0.7)  # 0.0=intrinsic only, 1.0=full gamification
+    personalization_source: Mapped[str] = mapped_column(String(10), default="system")  # user|zugabot|system

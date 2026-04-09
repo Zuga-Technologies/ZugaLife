@@ -34,6 +34,25 @@ async def get_mood_forecast(
     return result
 
 
+@router.get("/forecasting/narrative")
+async def get_weekly_narrative(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """AI-generated weekly narrative synthesis — mood trends, habit patterns, goal progress.
+
+    Cached: one generation per user per week (Monday-Sunday).
+    The #1 gap in mood tracking research is lack of interpretation — this fills it.
+    """
+    _narrative = sys.modules.get("zugalife.forecasting.narrative")
+    if not _narrative:
+        return {"narrative": None, "highlights": [], "error": "Narrative module not loaded"}
+
+    async with get_session() as session:
+        return await _narrative.generate_weekly_narrative(
+            session, user_id=user.id, user_email=user.email,
+        )
+
+
 @router.get("/mood/forecast/arima", response_model=ArimaForecastResponse)
 async def get_arima_forecast(
     days: int = Query(30, ge=7, le=365, description="Analysis window in days"),

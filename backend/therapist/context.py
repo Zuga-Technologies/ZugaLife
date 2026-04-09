@@ -56,6 +56,20 @@ async def build_user_context(user_id: str) -> str:
         import logging
         logging.getLogger(__name__).warning("Forecast context failed, skipping", exc_info=True)
 
+    # Cross-studio ecosystem signals (gaming, trading activity)
+    try:
+        _ecosystem = sys.modules.get("zugalife.ecosystem")
+        if _ecosystem:
+            async with get_session() as session:
+                signals = await _ecosystem.get_recent_signals(session, user_id, days=7)
+            if signals:
+                lines = ["Recent activity from other apps:"]
+                for s in signals:
+                    lines.append(f"- {s['summary']}")
+                sections.append("\n".join(lines))
+    except Exception:
+        pass
+
     async with get_session() as session:
         session_notes = await _recent_session_notes(session, user_id)
         if session_notes:

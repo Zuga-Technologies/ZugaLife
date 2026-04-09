@@ -54,16 +54,27 @@ INSIGHT_COOLDOWN_DAYS = _prompts.INSIGHT_COOLDOWN_DAYS
 router = APIRouter(prefix="/api/life/habits", tags=["life-habits"])
 
 # 8 preset habits auto-seeded on first access
+# Tiny Habits defaults — start absurdly small so users never fail (BJ Fogg).
+# The identity is the goal, not the amount. Users can escalate when ready.
 _PRESETS = [
-    {"name": "Sleep", "emoji": "\U0001f634", "unit": "hours", "default_target": 8, "sort_order": 0},
-    {"name": "Exercise", "emoji": "\U0001f3cb", "unit": "minutes", "default_target": 30, "sort_order": 1},
-    {"name": "Water", "emoji": "\U0001f4a7", "unit": "glasses", "default_target": 8, "sort_order": 2},
-    {"name": "Meditation", "emoji": "\U0001f9d8", "unit": "minutes", "default_target": 10, "sort_order": 3},
-    {"name": "Reading", "emoji": "\U0001f4d6", "unit": "minutes", "default_target": 20, "sort_order": 4},
+    {"name": "Sleep", "emoji": "\U0001f634", "unit": "hours", "default_target": 7, "sort_order": 0},
+    {"name": "Exercise", "emoji": "\U0001f3cb", "unit": "minutes", "default_target": 5, "sort_order": 1},
+    {"name": "Water", "emoji": "\U0001f4a7", "unit": "glasses", "default_target": 2, "sort_order": 2},
+    {"name": "Meditation", "emoji": "\U0001f9d8", "unit": "minutes", "default_target": 2, "sort_order": 3},
+    {"name": "Reading", "emoji": "\U0001f4d6", "unit": "minutes", "default_target": 5, "sort_order": 4},
     {"name": "Healthy Eating", "emoji": "\U0001f957", "unit": None, "default_target": None, "sort_order": 5},
     {"name": "No Screens Before Bed", "emoji": "\U0001f4f5", "unit": None, "default_target": None, "sort_order": 6},
     {"name": "Gratitude", "emoji": "\U0001f64f", "unit": None, "default_target": None, "sort_order": 7},
 ]
+
+# Escalation targets — "full" targets users can grow toward, with step increments
+_ESCALATION = {
+    "Sleep":      {"full_target": 8, "step": 0.5},
+    "Exercise":   {"full_target": 30, "step": 5},
+    "Water":      {"full_target": 8, "step": 1},
+    "Meditation": {"full_target": 15, "step": 3},
+    "Reading":    {"full_target": 20, "step": 5},
+}
 
 
 async def _ensure_presets(session, user_id: str) -> None:
@@ -119,7 +130,15 @@ async def list_habits(
         )
         habits = result.scalars().all()
 
-    return [HabitDefinitionResponse.model_validate(h) for h in habits]
+    responses = []
+    for h in habits:
+        resp = HabitDefinitionResponse.model_validate(h)
+        esc = _ESCALATION.get(h.name)
+        if esc and h.default_target is not None:
+            resp.full_target = esc["full_target"]
+            resp.can_escalate = h.default_target < esc["full_target"]
+        responses.append(resp)
+    return responses
 
 
 @router.post("", response_model=HabitDefinitionResponse, status_code=201)
@@ -301,6 +320,56 @@ async def delete_habit(
             )
 
         await session.delete(habit)
+
+
+# --- Habit Escalation (Tiny Habits → Full Targets) ---
+
+
+@router.post("/{habit_id}/escalate", response_model=HabitDefinitionResponse)
+async def escalate_habit(
+    habit_id: int,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Bump a habit's target one step toward its full target.
+
+    Psychology: BJ Fogg's Tiny Habits — start absurdly small, escalate only
+    when the user feels ready. Never risk failure.
+    """
+    async with get_session() as session:
+        result = await session.execute(
+            select(HabitDefinition).where(HabitDefinition.id == habit_id)
+        )
+        habit = result.scalar_one_or_none()
+
+        if not habit or habit.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Habit not found")
+
+        if habit.default_target is None:
+            raise HTTPException(
+                status_code=400,
+                detail="This habit has no numeric target to escalate",
+            )
+
+        esc = _ESCALATION.get(habit.name)
+        if not esc:
+            # Custom habit — bump by 20% or 1, whichever is larger
+            step = max(1, round(habit.default_target * 0.2, 1))
+            habit.default_target = round(habit.default_target + step, 1)
+        else:
+            if habit.default_target >= esc["full_target"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Already at full target ({esc['full_target']} {habit.unit})",
+                )
+            habit.default_target = min(
+                round(habit.default_target + esc["step"], 1),
+                esc["full_target"],
+            )
+
+        await session.flush()
+        await session.refresh(habit)
+
+    return HabitDefinitionResponse.model_validate(habit)
 
 
 # --- Habit Logging ---

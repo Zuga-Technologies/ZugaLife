@@ -57,6 +57,9 @@ class HabitDefinitionResponse(BaseModel):
     weekly_target: int | None
     trigger: str | None
     created_at: datetime
+    # Escalation info (computed, not stored) — for Tiny Habits "I'm ready for more"
+    full_target: float | None = None
+    can_escalate: bool = False
 
 
 class HabitLogResponse(BaseModel):

@@ -83,6 +83,7 @@ async def get_gamification_dashboard(
                 xp_reward=c.xp_reward,
                 is_completed=c.is_completed,
                 is_ai_generated=getattr(c, "is_ai_generated", False),
+                goal_connection=getattr(c, "goal_connection", None),
             )
             for c in challenge_rows
         ]
@@ -109,6 +110,32 @@ async def get_gamification_dashboard(
         daily_challenges=challenges,
         weekly_quests=weekly_quests,
     )
+
+
+@router.get("/insights")
+async def get_insights(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get contextual psychological insight cards triggered by user activity."""
+    _insights = sys.modules.get("zugalife.gamification.insights")
+    if not _insights:
+        return []
+    async with get_session() as session:
+        return await _insights.get_pending_insights(session, user.id)
+
+
+@router.post("/insights/{insight_key}/dismiss")
+async def dismiss_insight(
+    insight_key: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Dismiss an insight card so it won't show again."""
+    _insights = sys.modules.get("zugalife.gamification.insights")
+    if not _insights:
+        return {"dismissed": False}
+    async with get_session() as session:
+        dismissed = await _insights.dismiss_insight(session, user.id, insight_key)
+    return {"dismissed": dismissed}
 
 
 @router.get("/xp", response_model=XPStatusResponse)

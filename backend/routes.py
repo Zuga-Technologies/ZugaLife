@@ -28,7 +28,15 @@ MoodLogResponse = _schemas.MoodLogResponse
 MoodEntryResponse = _schemas.MoodEntryResponse
 MoodHistoryResponse = _schemas.MoodHistoryResponse
 MoodStreakResponse = _schemas.MoodStreakResponse
+MoodSuggestion = _schemas.MoodSuggestion
 EMOJI_TO_LABEL = _schemas.EMOJI_TO_LABEL
+
+# Valence scores for breathwork intervention trigger (negative = suggest breathwork)
+_MOOD_VALENCE: dict[str, int] = {
+    "Happy": 2, "Excited": 3, "Loved": 2, "Motivated": 3,
+    "Calm": 1, "Thoughtful": 0, "Neutral": 0, "Tired": -1,
+    "Sad": -2, "Frustrated": -2, "Anxious": -2, "Angry": -3,
+}
 
 logger = logging.getLogger(__name__)
 
@@ -116,10 +124,20 @@ async def log_mood(
         except Exception:
             pass  # Never block mood logging on event emission
 
+        # Suggest breathwork for negative moods (valence <= -2)
+        suggestion = None
+        valence = _MOOD_VALENCE.get(label, 0)
+        if valence <= -2:
+            suggestion = MoodSuggestion(
+                type="breathwork",
+                message="A 2-minute breathing exercise can help shift how you feel right now.",
+            )
+
         response = MoodLogResponse(
             entry=MoodEntryResponse.model_validate(entry),
             streak=streak,
             today_count=today_count,
+            suggestion=suggestion,
         )
 
         gam = _get_gam_engine()

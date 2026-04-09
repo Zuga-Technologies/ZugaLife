@@ -430,8 +430,27 @@ async def award_xp(
         xp_gained = max(1, round(base_amount * streak_mult * prestige_mult))
 
     # --- Variable reward roll (slot machine bonus) ---
+    # Respect personalization: low gamification_emphasis suppresses variable rewards
+    _settings_model = sys.modules.get("zugalife.settings_models")
+    gam_emphasis = 0.7  # default
+    challenge_diff = "medium"
+    if _settings_model:
+        try:
+            settings_result = await session.execute(
+                select(_settings_model.LifeUserSettings.gamification_emphasis,
+                       _settings_model.LifeUserSettings.challenge_difficulty)
+                .where(_settings_model.LifeUserSettings.user_id == user_id)
+            )
+            row = settings_result.one_or_none()
+            if row:
+                gam_emphasis = row[0] if row[0] is not None else 0.7
+                challenge_diff = row[1] or "medium"
+        except Exception:
+            pass
+
     bonus_reward = None
-    if source not in ("streak_bonus", "daily_challenge"):
+    # Only roll variable rewards if gamification emphasis > 0.3
+    if source not in ("streak_bonus", "daily_challenge") and gam_emphasis > 0.3:
         bonus_reward = roll_variable_reward()
         if bonus_reward:
             xp_gained = max(1, round(xp_gained * bonus_reward["multiplier"]))
@@ -756,6 +775,7 @@ async def ensure_daily_challenges(
             xp_reward=pick["xp"],
             is_ai_generated=is_ai,
             completion_source=source,
+            goal_connection=pick.get("goal_connection"),
         )
         session.add(challenge)
         new_rows.append(challenge)
@@ -856,6 +876,20 @@ async def build_xp_status(session, user_id: str) -> object:
 
     can_prestige = level >= PRESTIGE_LEVEL
 
+    # Consistency rate: distinct active days in last 30 (from XP transactions)
+    XPTransaction = _models.XPTransaction
+    from datetime import timedelta
+    cutoff_30d = date.today() - timedelta(days=30)
+    consistency_result = await session.execute(
+        select(func.count(func.distinct(func.date(XPTransaction.created_at))))
+        .where(
+            XPTransaction.user_id == user_id,
+            func.date(XPTransaction.created_at) >= cutoff_30d,
+        )
+    )
+    consistency_30d = consistency_result.scalar_one() or 0
+    consistency_pct = round(consistency_30d / 30 * 100, 1)
+
     status = _schemas.XPStatusResponse(
         total_xp=user_xp.total_xp,
         level=level,
@@ -872,6 +906,8 @@ async def build_xp_status(session, user_id: str) -> object:
         streak_freeze_used=user_xp.last_freeze_used,
         bonus_label=user_xp.last_bonus_label,
         bonus_tier=user_xp.last_bonus_tier,
+        consistency_30d=consistency_30d,
+        consistency_pct=consistency_pct,
     )
 
     # Clear transient state after reading (read-once pattern)

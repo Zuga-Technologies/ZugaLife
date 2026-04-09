@@ -37,6 +37,20 @@ class GoalDefinition(Base, TimestampMixin):
         String(50), nullable=True,
     )
 
+    # WOOP fields (Oettingen) — doubles goal follow-through in RCTs
+    identity_statement: Mapped[str | None] = mapped_column(
+        String(500), nullable=True,
+    )
+    obstacle: Mapped[str | None] = mapped_column(
+        String(500), nullable=True,
+    )
+    implementation_plan: Mapped[str | None] = mapped_column(
+        Text, nullable=True,
+    )
+    approach_reframe: Mapped[str | None] = mapped_column(
+        String(500), nullable=True,
+    )
+
     milestones: Mapped[list["GoalMilestone"]] = relationship(
         back_populates="goal",
         cascade="all, delete-orphan",

@@ -16,6 +16,9 @@ import BackgroundTheme from './BackgroundTheme.vue'
 import AnalyticsDashboard from './AnalyticsDashboard.vue'
 import CelebrationOverlay from './components/CelebrationOverlay.vue'
 import LifeOnboarding from './components/LifeOnboarding.vue'
+import WoopGoalWizard from './components/WoopGoalWizard.vue'
+import WeeklyNarrative from './components/WeeklyNarrative.vue'
+import InsightCard from './components/InsightCard.vue'
 import ThemeRenderer from './components/themes/ThemeRenderer.vue'
 import { useCelebration } from './composables/useCelebration'
 import { useOnboardingStore } from '@zugaapp/stores/onboarding'
@@ -50,8 +53,9 @@ const celebration = useCelebration()
  * Wrap any XP-awarding action: snapshot before, re-fetch after, celebrate diff.
  * Usage: await withCelebration(() => api.post('/api/life/mood', { ... }))
  */
-async function withCelebration<T>(action: () => Promise<T>): Promise<T> {
+async function withCelebration<T>(action: () => Promise<T>, source?: string): Promise<T> {
   if (gamificationData.value) {
+    if (source) celebration.setActionSource(source)
     celebration.takeSnapshot(gamificationData.value)
   }
   const prevFreezes = gamificationData.value?.xp.streak_freezes ?? 0
@@ -387,6 +391,8 @@ interface XPStatus {
   streak_freeze_used: boolean
   bonus_label: string | null
   bonus_tier: string | null
+  consistency_30d: number
+  consistency_pct: number
 }
 
 interface Badge {
@@ -404,6 +410,7 @@ interface DailyChallenge {
   xp_reward: number
   is_completed: boolean
   is_ai_generated?: boolean
+  goal_connection?: string | null
 }
 
 interface WeeklyQuest {
@@ -423,6 +430,26 @@ interface GamificationData {
 }
 
 const gamificationData = ref<GamificationData | null>(null)
+
+// Contextual insight cards (Deepstash-style micro-learning)
+interface InsightCardData {
+  key: string
+  title: string
+  content: string
+  category: string
+}
+const insightCards = ref<InsightCardData[]>([])
+
+async function fetchInsightCards() {
+  try {
+    insightCards.value = await api.get<InsightCardData[]>('/api/life/gamification/insights')
+  } catch { /* silent */ }
+}
+
+async function dismissInsight(key: string) {
+  insightCards.value = insightCards.value.filter(c => c.key !== key)
+  try { await api.post(`/api/life/gamification/insights/${key}/dismiss`) } catch { /* silent */ }
+}
 
 const STATIC_BADGES: Array<{ key: string; title: string; description: string }> = [
   { key: 'first_mood',       title: 'Mood Tracker',        description: 'Log your first mood' },
@@ -615,6 +642,7 @@ const dashMoodSubmitting = ref(false)
 const dashMoodSuccess = ref<string | null>(null)
 const dashMoodError = ref<string | null>(null)
 const dashMoodCooldownUntil = ref<string | null>(null)
+const dashBreathworkSuggestion = ref<string | null>(null)  // Shown after negative mood log
 
 const dashMoodOnCooldown = computed(() => {
   if (!dashMoodCooldownUntil.value) return false
@@ -638,14 +666,20 @@ async function logDashMood(emoji: string) {
   dashMoodSuccess.value = null
   try {
     const res = await withCelebration(() =>
-      api.post<{ entry: { emoji: string; label: string }; streak: number; today_count: number }>('/api/life/mood', {
+      api.post<{ entry: { emoji: string; label: string }; streak: number; today_count: number; suggestion: { type: string; message: string } | null }>('/api/life/mood', {
         emoji,
         note: dashMoodNote.value.trim() || null,
-      })
+      }), 'mood_log'
     )
     dashMoodSuccess.value = `${res.entry.label} logged! (${res.today_count}/4 today)`
     dashMoodNote.value = ''
     setTimeout(() => { dashMoodSuccess.value = null }, 3000)
+    // Show breathwork suggestion for negative moods
+    if (res.suggestion?.type === 'breathwork') {
+      dashBreathworkSuggestion.value = res.suggestion.message
+    } else {
+      dashBreathworkSuggestion.value = null
+    }
     // Set cooldown for 6 hours from now
     dashMoodCooldownUntil.value = new Date(Date.now() + 6 * 3600000).toISOString()
     await fetchDashboard()
@@ -666,7 +700,8 @@ async function logDashMood(emoji: string) {
 
 // Re-fetch dashboard when switching back to overview
 watch(activeTab, (tab) => {
-  if (tab === 'dashboard') { fetchDashboard(); fetchGamification() }
+  if (tab === 'dashboard') { fetchDashboard(); fetchGamification(); fetchInsightCards() }
+  if (tab === 'journal' && !dailyJournalPrompt.value) { fetchDailyJournalPrompt() }
   // Clear stale errors when switching tabs
   journalError.value = null
   habitError.value = null
@@ -774,6 +809,7 @@ const loadingJournal = ref(true)
 const composeTitle = ref('')
 const composeContent = ref('')
 const showJournalPrompts = ref(false)
+const dailyJournalPrompt = ref<{ title: string; prompt: string; category: string } | null>(null)
 const composeMood = ref<string | null>(null)
 const composeTags = ref<string[]>([])
 const journalSubmitting = ref(false)
@@ -949,6 +985,12 @@ async function fetchJournalEntries() {
   }
 }
 
+async function fetchDailyJournalPrompt() {
+  try {
+    dailyJournalPrompt.value = await api.get<{ title: string; prompt: string; category: string }>('/api/life/journal/prompt')
+  } catch { /* silent */ }
+}
+
 async function saveEntry() {
   if (!composeContent.value.trim() || journalSubmitting.value) return
 
@@ -962,7 +1004,7 @@ async function saveEntry() {
         content: composeContent.value.trim(),
         mood_emoji: composeMood.value,
         tags: composeTags.value.length ? composeTags.value : null,
-      })
+      }), 'journal_entry'
     )
     journalSuccess.value = 'Journal entry saved!'
     setTimeout(() => { journalSuccess.value = null }, 2000)
@@ -1103,7 +1145,11 @@ interface HabitDefinition {
   is_active: boolean
   sort_order: number
   weekly_target: number | null
+  trigger: string | null
   created_at: string
+  // Tiny Habits escalation
+  full_target: number | null
+  can_escalate: boolean
 }
 
 interface HabitCheckInItem {
@@ -1232,7 +1278,7 @@ async function toggleHabit(item: HabitCheckInItem) {
           habit_id: item.habit.id,
           completed: true,
           amount: amt ? parseFloat(amt) : null,
-        })
+        }), 'habit_check'
       )
       await fetchHabitCheckin()
       fetchGamification()
@@ -1298,6 +1344,18 @@ async function createCustomHabit() {
     }
   } finally {
     habitSubmitting.value = false
+  }
+}
+
+async function escalateHabit(habitId: number) {
+  try {
+    await api.post(`/api/life/habits/${habitId}/escalate`)
+    celebration.pushToast({ type: 'info', message: 'Target raised — you\'re ready for more', duration: 3000 })
+    await Promise.all([fetchAllHabits(), fetchHabitCheckin()])
+  } catch (e) {
+    if (e instanceof ApiError) {
+      habitError.value = (e.body as Record<string, string>).detail ?? 'Escalation failed'
+    }
   }
 }
 
@@ -1442,6 +1500,11 @@ interface Goal {
   created_at: string
   updated_at: string
   template_key: string | null
+  // WOOP fields
+  identity_statement: string | null
+  obstacle: string | null
+  implementation_plan: string | null
+  approach_reframe: string | null
   milestones: GoalMilestone[]
   milestone_count: number
   milestone_done: number
@@ -1486,7 +1549,7 @@ const goalError = ref<string | null>(null)
 const goalSuccess = ref<string | null>(null)
 
 // Create goal form
-type GoalCreateMode = 'none' | 'templates' | 'custom'
+type GoalCreateMode = 'none' | 'templates' | 'custom' | 'woop'
 const goalCreateMode = ref<GoalCreateMode>('none')
 const goalTemplates = ref<GoalTemplate[]>([])
 const templateAdopting = ref<string | null>(null)
@@ -1669,6 +1732,34 @@ async function createGoal() {
   }
 }
 
+async function createWoopGoal(goalData: {
+  title: string
+  description: string | null
+  deadline: string | null
+  identity_statement: string | null
+  obstacle: string | null
+  implementation_plan: string | null
+  approach_reframe: string | null
+}) {
+  goalSubmitting.value = true
+  goalError.value = null
+  try {
+    await api.post('/api/life/goals', goalData)
+    goalCreateMode.value = 'none'
+    goalSuccess.value = 'Goal created with your plan!'
+    setTimeout(() => { goalSuccess.value = null }, 3000)
+    await fetchGoals()
+  } catch (e) {
+    if (e instanceof ApiError) {
+      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
+    } else {
+      goalError.value = 'Network error'
+    }
+  } finally {
+    goalSubmitting.value = false
+  }
+}
+
 async function toggleGoalComplete(goal: Goal) {
   goalError.value = null
   try {
@@ -1726,7 +1817,7 @@ async function toggleMilestone(goalId: number, milestone: GoalMilestone) {
       await withCelebration(() =>
         api.patch(`/api/life/goals/${goalId}/milestones/${milestone.id}`, {
           is_completed: true,
-        })
+        }), 'goal_milestone'
       )
     } else {
       // Unchecking — no celebration
@@ -2108,6 +2199,7 @@ async function _pollUntilDone(sessionId: number) {
         await fetchMedRemaining()
         await fetchMedSessions()
         if (gamificationData.value) {
+          celebration.setActionSource('meditation_complete')
           celebration.takeSnapshot(gamificationData.value)
           try {
             const newGam = await api.get<GamificationData>('/api/life/gamification')
@@ -2390,7 +2482,8 @@ async function loadAndPlayAudio() {
       if (medSession.value) {
         try {
           await withCelebration(() =>
-            api.post(`/api/life/meditation/sessions/${medSession.value!.id}/complete`)
+            api.post(`/api/life/meditation/sessions/${medSession.value!.id}/complete`),
+            'meditation_complete'
           )
           await fetchGamification()
         } catch { /* non-critical */ }
@@ -2945,7 +3038,7 @@ async function endTherapistSession() {
       mood_before: therapistMoodBefore.value,
       mood_after: therapistMoodAfter.value,
       rating: therapistRating.value,
-    })
+    }), 'therapist_session'
   ).then(async (savedNote) => {
     await fetchTherapistStatus()
     await fetchTherapistNotes()
@@ -3097,11 +3190,12 @@ onUnmounted(() => {
             class="text-[9px] font-bold text-purple-300 bg-purple-500/20 px-1 rounded">P{{ gamificationData.xp.prestige_level }}</span>
         </div>
         <div
-          v-if="gamificationData.xp.current_streak_days > 0"
+          v-if="gamificationData.xp.consistency_30d > 0 || gamificationData.xp.current_streak_days > 0"
           class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-500/20"
+          :title="`${gamificationData.xp.consistency_30d} of last 30 days (${gamificationData.xp.consistency_pct}%)`"
         >
           <FlameIcon :size="12" class="text-orange-400" />
-          <span class="text-xs font-bold text-orange-300">{{ gamificationData.xp.current_streak_days }}</span>
+          <span class="text-xs font-bold text-orange-300">{{ gamificationData.xp.consistency_30d }}/30</span>
           <span
             v-if="gamificationData.xp.streak_multiplier > 1"
             class="text-[9px] font-bold text-amber-300 bg-amber-500/20 px-1 rounded"
@@ -3253,11 +3347,11 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <!-- Streak flame -->
+            <!-- Consistency (reframed from streak) -->
             <div class="flex-shrink-0 flex flex-col items-center gap-0.5">
               <div class="flex items-center gap-1">
                 <FlameIcon :size="16" class="text-amber-400" />
-                <span class="text-sm font-bold text-txt-primary">{{ gamificationData.xp.current_streak_days }}</span>
+                <span class="text-sm font-bold text-txt-primary">{{ gamificationData.xp.consistency_30d }}/30</span>
               </div>
               <div
                 v-if="gamificationData.xp.streak_multiplier > 1"
@@ -3265,7 +3359,7 @@ onUnmounted(() => {
               >
                 {{ gamificationData.xp.streak_multiplier }}x
               </div>
-              <span v-else class="text-[10px] text-txt-muted leading-none">streak</span>
+              <span v-else class="text-[10px] text-txt-muted leading-none">consistency</span>
               <div
                 v-if="gamificationData.xp.streak_freezes > 0"
                 class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400 leading-none"
@@ -3358,6 +3452,25 @@ onUnmounted(() => {
           <p v-if="dashMoodSuccess" class="text-xs text-emerald-400 text-center">{{ dashMoodSuccess }}</p>
           <p v-if="dashMoodError" class="text-xs text-red-400 text-center">{{ dashMoodError }}</p>
 
+          <!-- Breathwork suggestion (acute intervention for negative moods) -->
+          <div
+            v-if="dashBreathworkSuggestion"
+            class="mt-3 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 animate-fade-in"
+          >
+            <p class="text-xs text-cyan-300 mb-2">{{ dashBreathworkSuggestion }}</p>
+            <div class="flex gap-2">
+              <a
+                href="https://boxbreather.com"
+                target="_blank"
+                class="text-xs font-medium text-cyan-400 hover:text-cyan-300 transition-colors"
+              >Take 2 minutes to breathe &rarr;</a>
+              <button
+                @click="dashBreathworkSuggestion = null"
+                class="text-xs text-txt-muted hover:text-txt-secondary transition-colors ml-auto"
+              >I'm okay, thanks</button>
+            </div>
+          </div>
+
           <!-- Recent moods sparkline -->
           <div v-if="dashboardData?.mood.has_data && dashboardData.mood.recent.length > 0" class="flex items-center gap-1.5 mt-3 pt-3 border-t border-bdr/50">
             <template v-for="(entry, i) in dashboardData.mood.recent.slice(0, 5)" :key="i">
@@ -3407,6 +3520,7 @@ onUnmounted(() => {
                   :class="challenge.is_completed ? 'text-txt-muted line-through' : 'text-txt-primary'"
                 >{{ challenge.title }}</p>
                 <p class="text-[10px] text-txt-muted leading-tight mt-0.5">{{ challenge.description }}</p>
+                <p v-if="challenge.goal_connection" class="text-[9px] text-purple-400 leading-tight mt-0.5">Supports: {{ challenge.goal_connection }}</p>
               </div>
               <span
                 class="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded leading-none"
@@ -3458,6 +3572,24 @@ onUnmounted(() => {
 
         </div><!-- /right column (challenges + quests) -->
         </div><!-- /mood+challenges grid -->
+
+        <!-- Contextual Insight Cards (Deepstash-style micro-learning) -->
+        <div v-if="insightCards.length > 0" class="space-y-3 mb-4">
+          <InsightCard
+            v-for="card in insightCards"
+            :key="card.key"
+            :insight-key="card.key"
+            :title="card.title"
+            :content="card.content"
+            :category="card.category"
+            @dismiss="dismissInsight"
+          />
+        </div>
+
+        <!-- Weekly Narrative (AI-generated summary) -->
+        <div class="mb-4">
+          <WeeklyNarrative :api="api" />
+        </div>
 
         <!-- Badges + XP Activity row -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
@@ -3874,6 +4006,15 @@ onUnmounted(() => {
                 />
                 <span class="text-xs text-txt-muted w-12">{{ item.habit.unit }}</span>
               </div>
+              <!-- Tiny Habits escalation button -->
+              <button
+                v-if="item.habit.can_escalate && item.logged"
+                @click="escalateHabit(item.habit.id)"
+                class="text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors whitespace-nowrap"
+                :title="`Level up to ${item.habit.full_target} ${item.habit.unit || ''}`"
+              >
+                Ready for more
+              </button>
             </div>
           </div>
 
@@ -4063,14 +4204,30 @@ onUnmounted(() => {
               class="input-field w-24 text-sm"
             />
           </div>
-          <!-- Implementation intention trigger -->
-          <input
-            v-model="newHabitTrigger"
-            type="text"
-            placeholder="I'll do this after... (e.g. morning coffee)"
-            maxlength="200"
-            class="input-field text-sm"
-          />
+          <!-- Habit anchor — "After what routine?" (habit stacking) -->
+          <div>
+            <label class="text-[11px] text-txt-muted mb-1 block">After what existing routine?</label>
+            <div class="flex flex-wrap gap-1.5 mb-2">
+              <button
+                v-for="anchor in ['morning coffee', 'brushing teeth', 'lunch', 'getting home', 'dinner', 'before bed']"
+                :key="anchor"
+                @click="newHabitTrigger = anchor"
+                class="px-2 py-1 text-[11px] rounded-full border transition-colors"
+                :class="newHabitTrigger === anchor
+                  ? 'bg-accent/20 border-accent text-accent'
+                  : 'border-bdr text-txt-muted hover:border-accent/50'"
+              >
+                {{ anchor }}
+              </button>
+            </div>
+            <input
+              v-model="newHabitTrigger"
+              type="text"
+              placeholder="Or type a custom anchor..."
+              maxlength="200"
+              class="input-field text-sm"
+            />
+          </div>
           <button
             @click="createCustomHabit"
             :disabled="!newHabitName.trim() || !newHabitIcon || habitSubmitting"
@@ -4181,14 +4338,28 @@ onUnmounted(() => {
               <span v-if="templateAdopting === tmpl.key" class="text-xs text-accent mt-1 block">Creating...</span>
             </button>
           </div>
-          <div class="text-center">
+          <div class="flex justify-center gap-4">
+            <button
+              @click="goalCreateMode = 'woop'"
+              class="text-xs text-accent hover:text-accent/80 transition-colors font-medium"
+            >
+              Guided goal wizard &rarr;
+            </button>
             <button
               @click="goalCreateMode = 'custom'"
               class="text-xs text-txt-muted hover:text-accent transition-colors"
             >
-              Or create a custom goal &rarr;
+              Quick create &rarr;
             </button>
           </div>
+        </div>
+
+        <!-- WOOP Goal Wizard -->
+        <div v-if="goalCreateMode === 'woop'" class="glass-card mb-4 animate-fade-in">
+          <WoopGoalWizard
+            @create="createWoopGoal"
+            @cancel="goalCreateMode = 'none'"
+          />
         </div>
 
         <!-- Custom goal form -->
@@ -4369,6 +4540,22 @@ onUnmounted(() => {
 
             <!-- Expanded: linked habits + milestones + actions -->
             <div v-if="expandedGoals.has(goal.id)" class="border-t border-bdr px-4 py-3 space-y-3 animate-fade-in">
+
+              <!-- WOOP Psychology Fields -->
+              <div v-if="goal.identity_statement || goal.obstacle || goal.implementation_plan" class="space-y-2 pb-2 border-b border-bdr/50">
+                <div v-if="goal.identity_statement" class="flex gap-2">
+                  <span class="text-[10px] font-bold uppercase text-purple-400 w-16 flex-shrink-0 pt-0.5">Identity</span>
+                  <p class="text-xs text-txt-secondary">{{ goal.identity_statement }}</p>
+                </div>
+                <div v-if="goal.obstacle" class="flex gap-2">
+                  <span class="text-[10px] font-bold uppercase text-red-400 w-16 flex-shrink-0 pt-0.5">Obstacle</span>
+                  <p class="text-xs text-txt-secondary">{{ goal.obstacle }}</p>
+                </div>
+                <div v-if="goal.implementation_plan" class="flex gap-2">
+                  <span class="text-[10px] font-bold uppercase text-emerald-400 w-16 flex-shrink-0 pt-0.5">Plan</span>
+                  <p class="text-xs text-txt-secondary">{{ goal.implementation_plan }}</p>
+                </div>
+              </div>
 
               <!-- Linked habits -->
               <div v-if="goal.linked_habits.length > 0" class="space-y-1.5">
@@ -5430,8 +5617,38 @@ onUnmounted(() => {
           <h2 class="text-xl font-bold text-txt-primary">New Entry</h2>
         </div>
 
-        <!-- Writing prompts (shown when content is empty) -->
-        <div v-if="!composeContent.trim()" class="mb-4">
+        <!-- Daily guided prompt (psychology-informed, from backend) -->
+        <div v-if="!composeContent.trim() && dailyJournalPrompt" class="mb-4 animate-fade-in">
+          <div class="p-4 rounded-xl border transition-colors"
+            :class="{
+              'bg-purple-500/8 border-purple-500/20': dailyJournalPrompt.category === 'expressive',
+              'bg-amber-500/8 border-amber-500/20': dailyJournalPrompt.category === 'gratitude',
+              'bg-cyan-500/8 border-cyan-500/20': dailyJournalPrompt.category === 'reflection',
+            }"
+          >
+            <p class="text-[10px] font-bold uppercase tracking-wider mb-1"
+              :class="{
+                'text-purple-400': dailyJournalPrompt.category === 'expressive',
+                'text-amber-400': dailyJournalPrompt.category === 'gratitude',
+                'text-cyan-400': dailyJournalPrompt.category === 'reflection',
+              }"
+            >Today's prompt &mdash; {{ dailyJournalPrompt.category }}</p>
+            <p class="text-sm text-txt-primary font-medium mb-3">{{ dailyJournalPrompt.prompt }}</p>
+            <div class="flex gap-3">
+              <button
+                @click="usePrompt(dailyJournalPrompt!.prompt)"
+                class="text-xs font-medium text-accent hover:text-accent/80 transition-colors"
+              >Use this prompt</button>
+              <button
+                @click="dailyJournalPrompt = null"
+                class="text-xs text-txt-muted hover:text-txt-secondary transition-colors"
+              >Write freely</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- More prompts (shown when daily prompt dismissed or content empty) -->
+        <div v-if="!composeContent.trim() && !dailyJournalPrompt" class="mb-4">
           <button
             @click="showJournalPrompts = !showJournalPrompts"
             class="flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-secondary uppercase tracking-wider transition-colors mb-2"
