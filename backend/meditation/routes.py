@@ -134,8 +134,7 @@ async def generate_meditation(
         from core.ai.gateway import _estimate_call_cost
         credit_client = get_credit_client()
         # Estimate: script generation + TTS (rough upper bound)
-        from meditation.prompts import _MAX_TOKENS
-        script_max_tokens = _MAX_TOKENS.get(body.length.value, 3000)
+        script_max_tokens = _prompts._MAX_TOKENS.get(body.length.value, 3000)
         estimated_cost = _estimate_call_cost(script_max_tokens) + 0.02  # +$0.02 TTS buffer
         estimated_tokens = dollars_to_tokens(estimated_cost)
         if not await credit_client.can_spend(user.id, user.email, estimated_tokens):
@@ -217,8 +216,7 @@ async def _generate_in_background(
         prev_titles = await _get_previous_titles(user_id)
 
         # 2. Generate script
-        from meditation.prompts import _MAX_TOKENS
-        script_max_tokens = _MAX_TOKENS.get(body.length.value, 3000)
+        script_max_tokens = _prompts._MAX_TOKENS.get(body.length.value, 3000)
         is_long = body.length.value == "long"
 
         if is_long:
