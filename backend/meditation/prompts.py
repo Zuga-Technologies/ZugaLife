@@ -26,27 +26,29 @@ _EMOJI_LABELS: dict[str, str] = {
 }
 
 # Word targets by length category (min, max).
-# Calibrated against OpenAI TTS at speed 0.9 (~140 wpm effective).
+# Calibrated against Cartesia/OpenAI TTS at speed 0.75-0.9 (~130 wpm effective).
+# Pause markers add ~40% silence on top of speech. Formula:
+#   total_minutes ≈ (words / 130) * 1.4
 # Hard ceiling prevents LLM from overshooting.
 _WORD_TARGETS = {
-    "quick": (200, 350),     # ~1-2 min
-    "short": (500, 800),     # ~3-5 min
-    "medium": (1200, 1800),  # ~8-10 min
-    "long": (2500, 3500),    # ~15-20 min
+    "quick": (250, 400),     # ~2-3 min
+    "short": (700, 1000),    # ~5-7 min
+    "medium": (1400, 2000),  # ~10-12 min
+    "long": (2800, 3800),    # ~18-20 min
 }
 
 _MAX_TOKENS = {
-    "quick": 600,
-    "short": 1400,
-    "medium": 3000,
-    "long": 4096,
+    "quick": 800,
+    "short": 1800,
+    "medium": 3500,
+    "long": 5000,
 }
 
 _LENGTH_LABELS = {
-    "quick": "1 to 2 minutes",
-    "short": "3 to 5 minutes",
-    "medium": "8 to 10 minutes",
-    "long": "15 to 20 minutes",
+    "quick": "2 to 3 minutes",
+    "short": "5 to 7 minutes",
+    "medium": "10 to 12 minutes",
+    "long": "18 to 20 minutes",
 }
 
 # --- Content modes for variety ---
