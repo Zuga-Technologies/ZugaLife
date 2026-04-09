@@ -46,6 +46,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { THEME_SDK_SOURCE } from './ThemeSDK'
 import { ThemeBridge } from './ThemeBridge'
+import { TraderThemeBridge } from './TraderThemeBridge'
 import type { ThemePermission } from './ThemeBridge'
 
 export interface ThemeData {
@@ -75,7 +76,7 @@ defineEmits<{
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
-let bridge: ThemeBridge | null = null
+let bridge: ThemeBridge | TraderThemeBridge | null = null
 
 // Sandbox flags — allow-scripts ONLY. No allow-same-origin, no allow-forms.
 const sandboxFlags = 'allow-scripts'
@@ -154,15 +155,15 @@ function setupBridge() {
 
   if (!iframeRef.value) return
 
-  bridge = new ThemeBridge(
-    iframeRef.value,
-    props.theme.permissions,
-    {
-      themeId: props.theme.id,
-      title: props.theme.title,
-      studio: props.studio,
-    }
-  )
+  const meta = {
+    themeId: props.theme.id,
+    title: props.theme.title,
+    studio: props.studio,
+  }
+
+  // Select bridge based on studio — each studio has its own permission allowlist
+  const BridgeClass = props.studio === 'trader' ? TraderThemeBridge : ThemeBridge
+  bridge = new BridgeClass(iframeRef.value, props.theme.permissions, meta)
 }
 
 function renderTheme() {
