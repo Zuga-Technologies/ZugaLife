@@ -1992,23 +1992,72 @@ const filteredMedSessions = computed(() => {
   return medSessions.value.filter(s => s.is_favorite)
 })
 
-const transcriptParagraphs = computed(() => {
-  if (!medSession.value) return []
-  return medSession.value.transcript
-    .replace(/\[PAUSE\s*\d+s?\]/g, '')
-    .split('\n\n')
-    .map(p => p.trim())
-    .filter(p => p.length > 0)
+/** Parse transcript into timed segments using [PAUSE Xs] markers.
+ *  Each segment gets an estimated start/end time based on character count
+ *  proportional to total speech duration (total - silence). */
+interface TranscriptSegment {
+  text: string
+  startTime: number
+  endTime: number
+}
+
+const transcriptSegments = computed<TranscriptSegment[]>(() => {
+  if (!medSession.value?.transcript || !medDurationSec.value) return []
+  const raw = medSession.value.transcript
+  const pausePattern = /\[PAUSE\s*(\d+)s?\]/gi
+
+  // Split on pause markers, keep pause durations
+  const texts: string[] = []
+  const pauses: number[] = []
+  let lastEnd = 0
+  let match: RegExpExecArray | null
+  while ((match = pausePattern.exec(raw)) !== null) {
+    const chunk = raw.slice(lastEnd, match.index).trim()
+    if (chunk) {
+      texts.push(chunk)
+      pauses.push(parseInt(match[1], 10))
+    }
+    lastEnd = match.index + match[0].length
+  }
+  const remainder = raw.slice(lastEnd).trim()
+  if (remainder) {
+    texts.push(remainder)
+    pauses.push(0)
+  }
+  if (!texts.length) return []
+
+  // Total silence from pause markers
+  const totalSilence = pauses.reduce((a, b) => a + b, 0)
+  // Speech duration = total audio minus silences
+  const speechDuration = Math.max(medDurationSec.value - totalSilence, 1)
+  // Total chars across all segments (for proportional timing)
+  const totalChars = texts.reduce((a, t) => a + t.length, 0) || 1
+
+  const segments: TranscriptSegment[] = []
+  let cursor = 0
+  for (let i = 0; i < texts.length; i++) {
+    const segSpeech = (texts[i].length / totalChars) * speechDuration
+    const startTime = cursor
+    const endTime = cursor + segSpeech
+    segments.push({ text: texts[i], startTime, endTime })
+    cursor = endTime + pauses[i]
+  }
+  return segments
 })
 
-const activeParagraphIndex = computed(() => {
-  if (!transcriptParagraphs.value.length) return 0
-  const idx = Math.floor((medProgress.value / 100) * transcriptParagraphs.value.length)
-  return Math.min(idx, transcriptParagraphs.value.length - 1)
+const activeSegmentIndex = computed(() => {
+  const t = medCurrentTime.value
+  const segs = transcriptSegments.value
+  if (!segs.length) return 0
+  // Find the segment whose time range contains current playback time
+  for (let i = segs.length - 1; i >= 0; i--) {
+    if (t >= segs[i].startTime) return i
+  }
+  return 0
 })
 
-// Auto-scroll transcript to keep the active paragraph visible
-watch(activeParagraphIndex, () => {
+// Auto-scroll transcript to keep the active segment visible
+watch(activeSegmentIndex, () => {
   nextTick(() => {
     if (activeParagraphEl && transcriptContainer.value) {
       activeParagraphEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -4899,17 +4948,17 @@ onUnmounted(() => {
           <h3 class="text-xs font-semibold text-txt-muted uppercase tracking-wide mb-3">Transcript</h3>
           <div class="space-y-3">
             <p
-              v-for="(para, i) in transcriptParagraphs"
+              v-for="(seg, i) in transcriptSegments"
               :key="i"
-              :ref="el => { if (i === activeParagraphIndex) activeParagraphEl = el as HTMLElement }"
+              :ref="el => { if (i === activeSegmentIndex) activeParagraphEl = el as HTMLElement }"
               class="text-sm leading-relaxed transition-all duration-500"
-              :class="i === activeParagraphIndex
+              :class="i === activeSegmentIndex
                 ? 'text-txt-primary font-medium'
-                : i < activeParagraphIndex
+                : i < activeSegmentIndex
                   ? 'text-txt-secondary'
                   : 'text-txt-muted/40'"
             >
-              {{ para }}
+              {{ seg.text }}
             </p>
           </div>
         </div>
