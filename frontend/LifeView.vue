@@ -1974,6 +1974,8 @@ const medProgress = ref(0)
 const medCurrentTime = ref(0)
 const medDurationSec = ref(0)
 const medAmbientVolume = ref(0.4)
+const transcriptContainer = ref<HTMLElement | null>(null)
+let activeParagraphEl: HTMLElement | null = null
 
 // History
 const medSessions = ref<MeditationBrief[]>([])
@@ -2003,6 +2005,15 @@ const activeParagraphIndex = computed(() => {
   if (!transcriptParagraphs.value.length) return 0
   const idx = Math.floor((medProgress.value / 100) * transcriptParagraphs.value.length)
   return Math.min(idx, transcriptParagraphs.value.length - 1)
+})
+
+// Auto-scroll transcript to keep the active paragraph visible
+watch(activeParagraphIndex, () => {
+  nextTick(() => {
+    if (activeParagraphEl && transcriptContainer.value) {
+      activeParagraphEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  })
 })
 
 async function fetchMedRemaining() {
@@ -4884,16 +4895,19 @@ onUnmounted(() => {
         </div>
 
         <!-- Live transcript -->
-        <div class="glass-card p-5 mb-4 max-h-64 overflow-y-auto">
+        <div ref="transcriptContainer" class="glass-card p-5 mb-4 max-h-64 overflow-y-auto scroll-smooth">
           <h3 class="text-xs font-semibold text-txt-muted uppercase tracking-wide mb-3">Transcript</h3>
           <div class="space-y-3">
             <p
               v-for="(para, i) in transcriptParagraphs"
               :key="i"
+              :ref="el => { if (i === activeParagraphIndex) activeParagraphEl = el as HTMLElement }"
               class="text-sm leading-relaxed transition-all duration-500"
-              :class="i <= activeParagraphIndex
-                ? 'text-txt-secondary'
-                : 'text-txt-muted/40'"
+              :class="i === activeParagraphIndex
+                ? 'text-txt-primary font-medium'
+                : i < activeParagraphIndex
+                  ? 'text-txt-secondary'
+                  : 'text-txt-muted/40'"
             >
               {{ para }}
             </p>
