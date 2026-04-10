@@ -145,7 +145,8 @@ def _build_narrative_prompt(analytics: dict, goals: list[dict], user_xp) -> str:
     trend_avg = trend.get("avg_valence", 0)
 
     # Habit correlations
-    habit_corrs = analytics.get("habit_correlations", [])
+    habit_corrs_data = analytics.get("habit_correlations", {})
+    habit_corrs = habit_corrs_data.get("habits", []) if isinstance(habit_corrs_data, dict) else []
     top_habits = []
     for hc in habit_corrs[:3]:
         if isinstance(hc, dict) and hc.get("correlation_label"):
