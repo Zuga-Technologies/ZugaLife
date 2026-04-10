@@ -61,17 +61,16 @@ const config = categoryConfig[props.category] || categoryConfig.psychology
 <style scoped>
 .insight-card {
   position: relative;
-  border-radius: 0.875rem;
-  background: rgba(15, 15, 28, 0.6);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(var(--accent-rgb), 0.12);
+  border-radius: 0.75rem;
+  background: rgba(17, 17, 17, 0.75);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(38, 38, 38, 1);
   overflow: hidden;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s;
 }
 
 .insight-card:hover {
   border-color: rgba(var(--accent-rgb), 0.25);
-  box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.08);
 }
 
 .insight-accent {

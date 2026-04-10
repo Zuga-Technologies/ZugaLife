@@ -92,7 +92,7 @@ const trendColor = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="space-y-6">
     <!-- Loading -->
     <div v-if="loading" class="flex items-center justify-center py-12">
       <Loader2 :size="24" class="text-accent animate-spin" />
@@ -107,10 +107,19 @@ const trendColor = computed(() => {
     </div>
 
     <!-- No data -->
-    <div v-else-if="!data || data.total_entries < 3" class="glass-card p-6 text-center">
-      <Activity :size="32" class="mx-auto text-txt-muted mb-3" />
-      <p class="text-sm text-txt-muted">Log a few moods and habits to unlock analytics.</p>
-      <p class="text-xs text-txt-muted mt-1">Need at least 3 mood entries to start.</p>
+    <div v-else-if="!data || data.total_entries < 3" class="glass-card p-8 text-center">
+      <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4">
+        <Activity :size="24" class="text-accent" />
+      </div>
+      <p class="text-sm font-medium text-txt-primary mb-1">Unlock your analytics</p>
+      <p class="text-xs text-txt-muted max-w-xs mx-auto">Log a few moods and habits to see trends, forecasts, and personalized insights.</p>
+      <p class="text-[10px] text-txt-muted mt-3">{{ data?.total_entries || 0 }}/3 mood entries logged</p>
+      <div class="w-24 bg-surface-3 rounded-full h-1.5 mx-auto mt-2 overflow-hidden">
+        <div
+          class="h-1.5 rounded-full bg-accent transition-all"
+          :style="{ width: Math.min(100, Math.round(((data?.total_entries || 0) / 3) * 100)) + '%' }"
+        ></div>
+      </div>
     </div>
 
     <!-- Analytics -->
