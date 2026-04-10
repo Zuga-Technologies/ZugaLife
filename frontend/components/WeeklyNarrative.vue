@@ -43,8 +43,8 @@ onMounted(fetchNarrative)
   <div class="glass-card p-5 sm:p-6 animate-fade-in h-full flex flex-col">
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center">
-          <BookOpen :size="16" class="text-purple-400" />
+        <div class="w-8 h-8 rounded-lg bg-accent-alt/15 flex items-center justify-center">
+          <BookOpen :size="16" class="text-accent-alt" />
         </div>
         <div>
           <h3 class="text-sm font-semibold text-txt-primary leading-none">Your Week in Review</h3>
@@ -63,7 +63,7 @@ onMounted(fetchNarrative)
 
     <!-- Loading -->
     <div v-if="loading" class="flex-1 flex items-center gap-3 justify-center">
-      <Sparkles :size="16" class="text-purple-400 animate-pulse" />
+      <Sparkles :size="16" class="text-accent-alt animate-pulse" />
       <span class="text-sm text-txt-muted">Synthesizing your week...</span>
     </div>
 

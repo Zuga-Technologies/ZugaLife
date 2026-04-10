@@ -1,0 +1,90 @@
+/**
+ * ZugaLife Theme Preset Registry
+ *
+ * Each preset maps to a [data-theme="..."] block in theme-vars.css.
+ * The preset metadata here drives the UI picker and marketplace publishing.
+ *
+ * To add a new preset:
+ * 1. Add CSS vars in ZugaCore/frontend/theme/theme-vars.css under [data-theme="your-id"]
+ * 2. Add a PresetDefinition here
+ * 3. (Optional) Add mood overrides in mood-presets.ts
+ */
+
+export interface PresetDefinition {
+  id: string
+  name: string
+  description: string
+  /** CSS gradient for the preview swatch in the picker */
+  preview: string
+  /** Google Font to load (if not Inter) */
+  googleFont?: string
+  /** Category for marketplace filtering */
+  category: 'default' | 'spiritual' | 'aesthetic' | 'minimal' | 'custom'
+}
+
+export const THEME_PRESETS: PresetDefinition[] = [
+  {
+    id: 'default',
+    name: 'Default',
+    description: 'Clean amber & dark — the original ZugaLife look',
+    preview: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #f59e0b 100%)',
+    category: 'default',
+  },
+  {
+    id: 'tarot',
+    name: 'Tarot',
+    description: 'Mystic gold & deep indigo — for the spiritually inclined',
+    preview: 'linear-gradient(135deg, #0d0a1a 0%, #1c1632 50%, #c4a747 100%)',
+    googleFont: 'Cinzel',
+    category: 'spiritual',
+  },
+  {
+    id: 'biblical',
+    name: 'Devotional',
+    description: 'Warm parchment tones & classic serif — scripture & prayer',
+    preview: 'linear-gradient(135deg, #1a1510 0%, #2c1c12 50%, #8b6914 100%)',
+    googleFont: 'EB+Garamond',
+    category: 'spiritual',
+  },
+]
+
+/** Look up a preset by ID, falling back to default */
+export function getPreset(id: string): PresetDefinition {
+  return THEME_PRESETS.find(p => p.id === id) || THEME_PRESETS[0]
+}
+
+/** Apply a theme preset to the document. Sets data-theme and loads fonts. */
+export function applyPreset(id: string): void {
+  const preset = getPreset(id)
+
+  // Set or remove the data-theme attribute
+  if (id === 'default') {
+    document.documentElement.removeAttribute('data-theme')
+  } else {
+    document.documentElement.setAttribute('data-theme', id)
+  }
+
+  // Load Google Font if needed
+  if (preset.googleFont) {
+    loadGoogleFont(preset.googleFont)
+  }
+}
+
+/** Get the currently active preset ID from the DOM */
+export function getActivePresetId(): string {
+  return document.documentElement.getAttribute('data-theme') || 'default'
+}
+
+// --- Internal ---
+
+const loadedFonts = new Set<string>()
+
+function loadGoogleFont(font: string): void {
+  if (loadedFonts.has(font)) return
+  loadedFonts.add(font)
+
+  const link = document.createElement('link')
+  link.rel = 'stylesheet'
+  link.href = `https://fonts.googleapis.com/css2?family=${font}:wght@400;600;700&display=swap`
+  document.head.appendChild(link)
+}

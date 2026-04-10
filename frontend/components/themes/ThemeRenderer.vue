@@ -89,27 +89,31 @@ const srcdoc = computed(() => {
   // CSP meta tag — blocks all network requests from inside the iframe
   const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https: data:; font-src https:;">`
 
-  // Base dark theme styles — mobile-first responsive defaults
+  // Base theme styles — inherits parent's CSS vars via computed style extraction
+  // Note: iframes are sandboxed so they can't access parent CSS vars directly.
+  // We inject the resolved RGB values from the parent's computed theme.
+  const rs = getComputedStyle(document.documentElement)
+  const cv = (name: string) => rs.getPropertyValue(`--${name}`).trim() || '163 163 163'
   const baseStyles = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: transparent;
-      color: #cbd5e1;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      color: rgb(${cv('txt-secondary')});
+      font-family: ${cv('font-sans') || "'Inter', system-ui, sans-serif"};
       font-size: 13px;
       line-height: 1.6;
       overflow-x: hidden;
       padding: 12px;
       max-width: 100%;
     }
-    a { color: #60a5fa; text-decoration: none; }
+    a { color: rgb(${cv('color-info')}); text-decoration: none; }
     a:hover { text-decoration: underline; }
     img, canvas, svg { max-width: 100%; height: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { padding: 4px 8px; text-align: left; border-bottom: 1px solid rgba(80,90,120,0.2); }
+    th, td { padding: 4px 8px; text-align: left; border-bottom: 1px solid rgba(${cv('bdr')}, 0.2); }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.3); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: rgba(${cv('txt-muted')}, 0.3); border-radius: 3px; }
     @media (max-width: 480px) {
       body { font-size: 12px; padding: 8px; }
       h1, h2, h3 { font-size: clamp(14px, 4vw, 20px); }
@@ -199,8 +203,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .theme-renderer {
-  background: rgba(30, 35, 50, 0.6);
-  border: 1px solid rgba(80, 90, 120, 0.3);
+  background: rgb(var(--surface-1) / 0.6);
+  border: 1px solid rgb(var(--bdr) / 0.3);
   border-radius: 10px;
   overflow: hidden;
   display: flex;
@@ -213,8 +217,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 6px 10px;
-  background: rgba(15, 18, 30, 0.5);
-  border-bottom: 1px solid rgba(80, 90, 120, 0.2);
+  background: rgb(var(--surface-0) / 0.5);
+  border-bottom: 1px solid rgb(var(--bdr) / 0.2);
   min-height: 30px;
   flex-shrink: 0;
 }
@@ -222,7 +226,7 @@ onBeforeUnmount(() => {
 .theme-title {
   font-size: 12px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: rgb(var(--txt-primary));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -240,18 +244,18 @@ onBeforeUnmount(() => {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 12px;
-  color: #94a3b8;
+  color: rgb(var(--txt-secondary));
   transition: all 0.15s;
 }
 .theme-btn:hover {
-  background: rgba(100, 116, 139, 0.2);
-  color: #e2e8f0;
+  background: rgb(var(--txt-muted) / 0.2);
+  color: rgb(var(--txt-primary));
 }
-.theme-btn-remove:hover { color: #f87171; }
+.theme-btn-remove:hover { color: rgb(var(--color-danger)); }
 .theme-btn-retry {
   margin-top: 8px;
-  color: #60a5fa;
-  border: 1px solid rgba(96, 165, 250, 0.3);
+  color: rgb(var(--color-info));
+  border: 1px solid rgb(var(--color-info) / 0.3);
   padding: 4px 12px;
 }
 
@@ -269,7 +273,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  color: #64748b;
+  color: rgb(var(--txt-muted));
   font-size: 13px;
   gap: 8px;
   flex: 1;
@@ -278,13 +282,13 @@ onBeforeUnmount(() => {
 .theme-spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid rgba(100, 116, 139, 0.3);
-  border-top-color: #60a5fa;
+  border: 2px solid rgb(var(--txt-muted) / 0.3);
+  border-top-color: rgb(var(--accent));
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
-.theme-error-msg { color: #f87171; }
+.theme-error-msg { color: rgb(var(--color-danger)); }
 
 @keyframes spin {
   to { transform: rotate(360deg); }

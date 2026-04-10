@@ -254,6 +254,8 @@ class ZugaLifePlugin(StudioPlugin):
                 "ALTER TABLE life_user_settings ADD COLUMN challenge_difficulty VARCHAR(10) DEFAULT 'medium'",
                 "ALTER TABLE life_user_settings ADD COLUMN gamification_emphasis FLOAT DEFAULT 0.7",
                 "ALTER TABLE life_user_settings ADD COLUMN personalization_source VARCHAR(10) DEFAULT 'system'",
+                # Theme preset system (color scheme + typography + mood icons)
+                "ALTER TABLE life_user_settings ADD COLUMN theme_preset VARCHAR(30) DEFAULT 'default'",
             ]
             for sql in migrations:
                 try:

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { X, Upload, Trash2, Image, Film, Bell, BellOff } from 'lucide-vue-next'
+import { X, Upload, Trash2, Image, Film, Bell, BellOff, Palette } from 'lucide-vue-next'
 import { useNotifications } from './composables/useNotifications'
 import {
   type ThemeId,
@@ -20,6 +20,8 @@ import {
   getCustomMediaType,
   setCustomVideoFlag,
 } from './background-themes'
+import { THEME_PRESETS, applyPreset, getActivePresetId, type PresetDefinition } from './theme-presets'
+import { api } from '@core/api/client'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -30,7 +32,16 @@ const customOpacity = ref(getCustomOpacity())
 const customVideoSpeed = ref(getCustomVideoSpeed())
 const customMediaType = ref<'image' | 'video' | null>(getCustomMediaType())
 
+const activePreset = ref(getActivePresetId())
 const presetThemes = computed(() => THEMES.filter(t => t.id !== 'custom'))
+
+async function selectPreset(id: string) {
+  activePreset.value = id
+  applyPreset(id)
+  try {
+    await api.put('/api/life/settings', { theme_preset: id })
+  } catch { /* non-critical */ }
+}
 const customTheme = computed(() => THEMES.find(t => t.id === 'custom')!)
 const hasCustomMedia = computed(() => !!customImage.value || !!customVideoUrl.value)
 
@@ -175,9 +186,30 @@ function onSpeedChange(e: Event) {
       </div>
 
       <div class="p-5 space-y-6">
-        <!-- Theme grid -->
+        <!-- Color Scheme Presets -->
         <div>
-          <h3 class="text-sm font-semibold text-txt-secondary uppercase tracking-wider mb-3">Presets</h3>
+          <h3 class="text-sm font-semibold text-txt-secondary uppercase tracking-wider mb-3">Color Scheme</h3>
+          <div class="grid grid-cols-3 gap-2">
+            <button
+              v-for="preset in THEME_PRESETS"
+              :key="preset.id"
+              @click="selectPreset(preset.id)"
+              class="group relative rounded-xl overflow-hidden border-2 transition-all duration-200 p-3"
+              :class="activePreset === preset.id ? 'border-accent shadow-lg shadow-accent/20' : 'border-bdr hover:border-txt-muted'"
+            >
+              <div
+                class="w-full h-8 rounded-lg mb-2"
+                :style="{ background: preset.preview }"
+              />
+              <p class="text-[11px] font-medium text-txt-primary text-center">{{ preset.name }}</p>
+              <p class="text-[9px] text-txt-muted text-center leading-tight mt-0.5">{{ preset.description }}</p>
+            </button>
+          </div>
+        </div>
+
+        <!-- Background Theme grid -->
+        <div>
+          <h3 class="text-sm font-semibold text-txt-secondary uppercase tracking-wider mb-3">Background</h3>
           <div class="grid grid-cols-2 gap-3">
             <button
               v-for="theme in presetThemes"
