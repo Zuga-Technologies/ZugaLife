@@ -74,8 +74,19 @@ async def ai_call(
         response.cost,
     )
 
-    # Record token spend
-    if user_id:
+    # Atomic token deduction (per-user lock prevents overdraw)
+    if user_id and user_email:
+        await credit_client.try_spend(
+            user_id=user_id,
+            email=user_email,
+            tokens=dollars_to_tokens(response.cost),
+            cost_usd=response.cost,
+            service="venice",
+            reason=task,
+            model=response.model,
+        )
+    elif user_id:
+        # No email available — fall back to non-atomic record
         await credit_client.record_spend(
             user_id=user_id,
             tokens=dollars_to_tokens(response.cost),

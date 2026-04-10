@@ -3455,19 +3455,27 @@ onUnmounted(() => {
           <!-- Breathwork suggestion (acute intervention for negative moods) -->
           <div
             v-if="dashBreathworkSuggestion"
-            class="mt-3 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 animate-fade-in"
+            class="mt-3 p-4 rounded-xl bg-cyan-500/8 border border-cyan-500/15 animate-fade-in relative overflow-hidden"
           >
-            <p class="text-xs text-cyan-300 mb-2">{{ dashBreathworkSuggestion }}</p>
-            <div class="flex gap-2">
-              <a
-                href="https://boxbreather.com"
-                target="_blank"
-                class="text-xs font-medium text-cyan-400 hover:text-cyan-300 transition-colors"
-              >Take 2 minutes to breathe &rarr;</a>
-              <button
-                @click="dashBreathworkSuggestion = null"
-                class="text-xs text-txt-muted hover:text-txt-secondary transition-colors ml-auto"
-              >I'm okay, thanks</button>
+            <div class="absolute top-0 left-0 bottom-0 w-[3px] bg-gradient-to-b from-cyan-400 to-cyan-600" />
+            <div class="flex items-start gap-3 pl-2">
+              <div class="w-8 h-8 rounded-lg bg-cyan-500/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M8 12h8M12 8v8"/></svg>
+              </div>
+              <div class="flex-1">
+                <p class="text-xs text-cyan-200 font-medium mb-1.5">{{ dashBreathworkSuggestion }}</p>
+                <div class="flex items-center gap-3">
+                  <a
+                    href="https://boxbreather.com"
+                    target="_blank"
+                    class="text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
+                  >Breathe now &rarr;</a>
+                  <button
+                    @click="dashBreathworkSuggestion = null"
+                    class="text-[10px] text-txt-muted hover:text-txt-secondary transition-colors"
+                  >Dismiss</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -3573,8 +3581,13 @@ onUnmounted(() => {
         </div><!-- /right column (challenges + quests) -->
         </div><!-- /mood+challenges grid -->
 
+        <!-- Weekly Narrative (AI-generated summary) — above insights for reading flow -->
+        <div class="mb-4">
+          <WeeklyNarrative :api="api" />
+        </div>
+
         <!-- Contextual Insight Cards (Deepstash-style micro-learning) -->
-        <div v-if="insightCards.length > 0" class="space-y-3 mb-4">
+        <div v-if="insightCards.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
           <InsightCard
             v-for="card in insightCards"
             :key="card.key"
@@ -3584,11 +3597,6 @@ onUnmounted(() => {
             :category="card.category"
             @dismiss="dismissInsight"
           />
-        </div>
-
-        <!-- Weekly Narrative (AI-generated summary) -->
-        <div class="mb-4">
-          <WeeklyNarrative :api="api" />
         </div>
 
         <!-- Badges + XP Activity row -->
@@ -5618,31 +5626,46 @@ onUnmounted(() => {
         </div>
 
         <!-- Daily guided prompt (psychology-informed, from backend) -->
-        <div v-if="!composeContent.trim() && dailyJournalPrompt" class="mb-4 animate-fade-in">
-          <div class="p-4 rounded-xl border transition-colors"
+        <div v-if="!composeContent.trim() && dailyJournalPrompt" class="mb-5 animate-fade-in">
+          <div class="relative p-5 rounded-xl border overflow-hidden transition-colors backdrop-blur-sm"
             :class="{
-              'bg-purple-500/8 border-purple-500/20': dailyJournalPrompt.category === 'expressive',
-              'bg-amber-500/8 border-amber-500/20': dailyJournalPrompt.category === 'gratitude',
-              'bg-cyan-500/8 border-cyan-500/20': dailyJournalPrompt.category === 'reflection',
+              'bg-purple-500/6 border-purple-500/15': dailyJournalPrompt.category === 'expressive',
+              'bg-amber-500/6 border-amber-500/15': dailyJournalPrompt.category === 'gratitude',
+              'bg-cyan-500/6 border-cyan-500/15': dailyJournalPrompt.category === 'reflection',
             }"
           >
-            <p class="text-[10px] font-bold uppercase tracking-wider mb-1"
+            <!-- Side accent -->
+            <div class="absolute top-0 left-0 bottom-0 w-[3px]"
               :class="{
-                'text-purple-400': dailyJournalPrompt.category === 'expressive',
-                'text-amber-400': dailyJournalPrompt.category === 'gratitude',
-                'text-cyan-400': dailyJournalPrompt.category === 'reflection',
+                'bg-gradient-to-b from-purple-400 to-purple-600': dailyJournalPrompt.category === 'expressive',
+                'bg-gradient-to-b from-amber-400 to-amber-600': dailyJournalPrompt.category === 'gratitude',
+                'bg-gradient-to-b from-cyan-400 to-cyan-600': dailyJournalPrompt.category === 'reflection',
               }"
-            >Today's prompt &mdash; {{ dailyJournalPrompt.category }}</p>
-            <p class="text-sm text-txt-primary font-medium mb-3">{{ dailyJournalPrompt.prompt }}</p>
-            <div class="flex gap-3">
-              <button
-                @click="usePrompt(dailyJournalPrompt!.prompt)"
-                class="text-xs font-medium text-accent hover:text-accent/80 transition-colors"
-              >Use this prompt</button>
-              <button
-                @click="dailyJournalPrompt = null"
-                class="text-xs text-txt-muted hover:text-txt-secondary transition-colors"
-              >Write freely</button>
+            />
+            <div class="pl-3">
+              <p class="text-[9px] font-bold uppercase tracking-[0.15em] mb-2 opacity-70"
+                :class="{
+                  'text-purple-400': dailyJournalPrompt.category === 'expressive',
+                  'text-amber-400': dailyJournalPrompt.category === 'gratitude',
+                  'text-cyan-400': dailyJournalPrompt.category === 'reflection',
+                }"
+              >Today's prompt &mdash; {{ dailyJournalPrompt.category }}</p>
+              <p class="text-[15px] text-txt-primary font-medium mb-4 leading-relaxed">{{ dailyJournalPrompt.prompt }}</p>
+              <div class="flex items-center gap-4">
+                <button
+                  @click="usePrompt(dailyJournalPrompt!.prompt)"
+                  class="px-4 py-2 text-xs font-semibold rounded-lg transition-all"
+                  :class="{
+                    'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30': dailyJournalPrompt.category === 'expressive',
+                    'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30': dailyJournalPrompt.category === 'gratitude',
+                    'bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30': dailyJournalPrompt.category === 'reflection',
+                  }"
+                >Use this prompt</button>
+                <button
+                  @click="dailyJournalPrompt = null"
+                  class="text-xs text-txt-muted hover:text-txt-secondary transition-colors"
+                >Write freely</button>
+              </div>
             </div>
           </div>
         </div>

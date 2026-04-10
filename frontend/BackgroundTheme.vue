@@ -61,7 +61,13 @@ function handleRateEnforce(which: 'a' | 'b') {
 }
 
 // Crossfade: when active video nears end, fade to the other
+// Throttled — timeupdate fires ~4x/sec, we only need ~4 checks/sec near the end
+let lastTimeUpdate = 0
 function handleTimeUpdate(which: 'a' | 'b') {
+  const now = performance.now()
+  if (now - lastTimeUpdate < 250) return
+  lastTimeUpdate = now
+
   const video = which === 'a' ? videoA.value : videoB.value
   const other = which === 'a' ? videoB.value : videoA.value
   if (!video || !other || activeVideo.value !== which) return
@@ -220,7 +226,7 @@ onUnmounted(() => document.removeEventListener('zugalife-theme-change', handleTh
     <template v-if="hasVideo && !isCustomVideo && !prefersReducedMotion">
       <video
         ref="videoA"
-        class="absolute inset-0 w-full h-full object-cover transition-opacity duration-[1500ms]"
+        class="absolute inset-0 w-full h-full object-cover transition-opacity duration-[1500ms] will-change-[opacity]"
         :class="activeVideo === 'a' ? 'opacity-100' : 'opacity-0'"
         autoplay
         loop
@@ -232,7 +238,7 @@ onUnmounted(() => document.removeEventListener('zugalife-theme-change', handleTh
       />
       <video
         ref="videoB"
-        class="absolute inset-0 w-full h-full object-cover transition-opacity duration-[1500ms]"
+        class="absolute inset-0 w-full h-full object-cover transition-opacity duration-[1500ms] will-change-[opacity]"
         :class="activeVideo === 'b' ? 'opacity-100' : 'opacity-0'"
         autoplay
         loop
