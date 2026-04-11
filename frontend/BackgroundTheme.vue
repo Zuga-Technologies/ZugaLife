@@ -92,14 +92,19 @@ function handleTimeUpdate(which: 'a' | 'b') {
 }
 
 // When theme changes, reset videos — only load A immediately, B is lazy
-// Video A uses <source> tags in the template, so just call load() to let the browser pick format
-function loadVideo(_src: string) {
+function loadVideo(mp4Src: string) {
   videoLoaded.value = false
   videoBLoaded.value = false
   activeVideo.value = 'a'
   nextTick(() => {
     if (videoA.value) {
-      // Don't set .src — let <source> tags handle format selection (WebM > MP4)
+      // Set .src directly — <source> tags have race conditions with Vue reactivity
+      const webmSrc = theme.value.videoWebm
+      if (webmSrc && videoA.value.canPlayType('video/webm; codecs="vp9"')) {
+        videoA.value.src = webmSrc
+      } else {
+        videoA.value.src = mp4Src
+      }
       videoA.value.load()
       videoA.value.playbackRate = theme.value.speed ?? DEFAULT_SPEED
       videoA.value.play().catch(() => {})
@@ -260,10 +265,7 @@ onUnmounted(() => document.removeEventListener('zugalife-theme-change', handleTh
         @loadeddata="videoLoaded = true; handleRateEnforce('a')"
         @playing="handleRateEnforce('a')"
         @timeupdate="handleTimeUpdate('a')"
-      >
-        <source v-if="theme.videoWebm" :src="theme.videoWebm" type="video/webm" />
-        <source v-if="theme.video" :src="theme.video" type="video/mp4" />
-      </video>
+      />
       <video
         ref="videoB"
         class="absolute inset-0 w-full h-full object-cover transition-opacity duration-[1500ms] will-change-[opacity]"
