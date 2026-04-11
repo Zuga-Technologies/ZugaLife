@@ -5,7 +5,7 @@ export default {
   presets: [preset],
   content: [
     './index.html',
-    './*.{vue,ts}',
+    './**/*.{vue,ts}',
     '../core/frontend/**/*.{ts,css}',
   ],
   plugins: [],
