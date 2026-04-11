@@ -803,11 +803,11 @@ onMounted(async () => {
                 {{ gamificationData.badges.filter(b => b.earned_at !== null).length }}/{{ ALL_BADGES.length }} earned
               </span>
             </div>
-            <div class="grid grid-cols-5 sm:grid-cols-7 md:grid-cols-8 lg:grid-cols-10 gap-2.5">
+            <div class="flex flex-wrap gap-1.5">
               <div
                 v-for="badge in ALL_BADGES"
                 :key="badge.key"
-                class="flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-all"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all"
                 :class="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at)
                   ? 'bg-accent/8 border-accent/20 hover:border-accent/40'
                   : 'bg-surface-2/40 border-bdr/30 opacity-40'"
@@ -816,11 +816,11 @@ onMounted(async () => {
                 <component
                   v-if="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at) && (badgeIcons[badge.key] || (badge.key.startsWith('prestige_') && prestigeIcons[(parseInt(badge.key.split('_')[1]) - 1) % prestigeIcons.length]))"
                   :is="badgeIcons[badge.key] || prestigeIcons[(parseInt(badge.key.split('_')[1]) - 1) % prestigeIcons.length]"
-                  :size="24"
+                  :size="16"
                   :class="badge.key.startsWith('prestige_') ? 'text-accent-alt' : 'text-accent'"
                 />
-                <Lock v-else :size="18" class="text-txt-muted" />
-                <span class="text-[9px] text-txt-muted text-center leading-tight line-clamp-2">{{ badge.title }}</span>
+                <Lock v-else :size="14" class="text-txt-muted" />
+                <span class="text-[10px] text-txt-muted whitespace-nowrap">{{ badge.title }}</span>
               </div>
             </div>
           </div>
