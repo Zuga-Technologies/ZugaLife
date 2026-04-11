@@ -7,12 +7,17 @@ PATCH /api/life/settings/personalization → update personalization (Zugabot or 
 POST /api/life/internal/apply-theme → service-to-service theme application (Zugabot → ZugaLife)
 """
 
+import json
+import logging
 import os
 import sys
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+
+logger = logging.getLogger(__name__)
 
 from core.auth.middleware import get_current_user
 from core.auth.models import CurrentUser
@@ -235,24 +240,53 @@ async def internal_apply_theme(
     body: InternalThemeRequest,
     x_service_key: str = Header(alias="X-Service-Key", default=""),
 ):
-    """Service-to-service endpoint for Zugabot to apply themes to a user's settings.
+    """Service-to-service endpoint for Zugabot to apply themes.
 
-    Authenticated via shared ZUGABOT_SERVICE_KEY env var (not user JWT).
-    This allows Manus to generate and apply themes from chat without needing
-    the user's auth token.
+    Now forwards to ZugaApp's theme override system instead of writing
+    to custom_colors. This ensures themes show in Settings > My Themes
+    and can be scoped to any studio.
     """
-    # Validate service key
     if not _SERVICE_KEY or x_service_key != _SERVICE_KEY:
         raise HTTPException(403, "Invalid service key")
 
-    async with get_session() as session:
-        settings = await _get_or_create_settings(session, body.user_id)
-        settings.custom_colors = body.custom_colors
+    # Parse the custom_colors JSON to extract CSS, name, font
+    try:
+        parsed = json.loads(body.custom_colors)
+        css = parsed.get("css", "")
+        name = parsed.get("name", "Custom Theme")
+        font = parsed.get("font")
+    except (json.JSONDecodeError, AttributeError):
+        raise HTTPException(400, "custom_colors must be valid JSON with a 'css' field")
 
-        if body.theme_preset and body.theme_preset in VALID_THEME_PRESETS:
+    if not css:
+        raise HTTPException(400, "No CSS found in custom_colors")
+
+    # Forward to ZugaApp's theme override API (scope=life by default)
+    zugaapp_url = os.environ.get("ZUGAAPP_INTERNAL_URL", "http://localhost:8000")
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"{zugaapp_url}/api/theme/internal/apply",
+                json={
+                    "user_id": body.user_id,
+                    "scope": "life",
+                    "css_override": css,
+                    "theme_name": name,
+                    "font": font,
+                },
+                headers={"X-Service-Key": _SERVICE_KEY},
+            )
+            if resp.status_code != 200:
+                logger.warning(f"[Theme] ZugaApp override API returned {resp.status_code}: {resp.text[:200]}")
+                raise HTTPException(502, "Failed to apply theme via override system")
+    except httpx.HTTPError as e:
+        logger.error(f"[Theme] Failed to reach ZugaApp: {e}")
+        raise HTTPException(502, "Could not reach ZugaApp theme API")
+
+    # Also apply preset if specified
+    if body.theme_preset and body.theme_preset in VALID_THEME_PRESETS:
+        async with get_session() as session:
+            settings = await _get_or_create_settings(session, body.user_id)
             settings.theme_preset = body.theme_preset
-
-        await session.flush()
-        await session.refresh(settings)
 
     return {"status": "ok", "user_id": body.user_id, "applied": True}

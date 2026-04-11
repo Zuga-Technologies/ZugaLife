@@ -183,18 +183,26 @@ async function applyCustomColors() {
       applyPreset(settings.theme_preset)
     }
 
-    // Remove existing restyle tag
+    // Remove legacy restyle tag — theme overrides system handles this now
     document.getElementById('zugabot-restyle')?.remove()
 
     if (!settings.custom_colors) return
 
-    const parsed = JSON.parse(settings.custom_colors)
-    if (!parsed.css) return
-
-    const style = document.createElement('style')
-    style.id = 'zugabot-restyle'
-    style.textContent = parsed.css
-    document.head.appendChild(style)
+    // One-time migration: move custom_colors → theme overrides system
+    try {
+      const parsed = JSON.parse(settings.custom_colors)
+      if (parsed.css) {
+        await api.put('/api/theme/overrides/life', {
+          css_override: parsed.css,
+          theme_name: parsed.name || 'Custom Theme',
+          font: parsed.font || null,
+        })
+        // Clear custom_colors now that it's migrated
+        await api.put('/api/life/settings', { custom_colors: null })
+      }
+    } catch {
+      // Migration failed — not critical, will retry next load
+    }
   } catch {
     // Non-critical — fail silently
   }

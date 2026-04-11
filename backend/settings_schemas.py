@@ -64,3 +64,4 @@ class LifeSettingsUpdate(BaseModel):
     med_length: str | None = Field(None, max_length=10)
     med_voice: str | None = Field(None, max_length=20)
     med_ambience: str | None = Field(None, max_length=20)
+    custom_colors: str | None = Field(None, max_length=10_000)
