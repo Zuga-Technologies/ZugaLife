@@ -216,7 +216,9 @@ async def create_from_template(
         session.add(goal)
         await session.flush()
 
-        # Auto-link matching habits
+        # Auto-link matching habits — use session.add() instead of
+        # goal.habit_links.append() to avoid triggering the selectin
+        # lazy loader in an async context (MissingGreenlet error).
         habit_mod = _get_habit_models()
         HabitDefinition = habit_mod.HabitDefinition
         habits_result = await session.execute(
@@ -227,7 +229,7 @@ async def create_from_template(
             )
         )
         for habit in habits_result.scalars().all():
-            goal.habit_links.append(GoalHabitLink(habit_id=habit.id))
+            session.add(GoalHabitLink(goal_id=goal.id, habit_id=habit.id))
 
         await session.flush()
         await session.refresh(goal)
