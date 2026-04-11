@@ -649,48 +649,6 @@ Be direct and specific. Use the actual numbers."""
         return {"insight": fallback, "cost": 0}
 
 
-# --- One-time admin fix (remove after use) ---
-
-
-class SwapMilestonesRequest(_BaseModel):
-    goal_id_a: int
-    goal_id_b: int
-
-
-@router.post("/admin/swap-milestones")
-async def swap_milestones(
-    body: SwapMilestonesRequest,
-    user: CurrentUser = Depends(get_current_user),
-):
-    """Swap milestones between two goals to fix selectin misassignment.
-    Temporary endpoint — remove after the fix is applied."""
-    async with get_session() as session:
-        goal_a = await _get_user_goal(session, body.goal_id_a, user.id)
-        goal_b = await _get_user_goal(session, body.goal_id_b, user.id)
-
-        # Fetch milestones for each goal
-        ms_a = (await session.execute(
-            select(GoalMilestone).where(GoalMilestone.goal_id == goal_a.id)
-        )).scalars().all()
-        ms_b = (await session.execute(
-            select(GoalMilestone).where(GoalMilestone.goal_id == goal_b.id)
-        )).scalars().all()
-
-        # Swap goal_id on all milestones
-        for m in ms_a:
-            m.goal_id = goal_b.id
-        for m in ms_b:
-            m.goal_id = goal_a.id
-
-        await session.flush()
-
-    return {
-        "swapped": True,
-        "goal_a": {"id": goal_a.id, "title": goal_a.title, "milestones_received": len(ms_b)},
-        "goal_b": {"id": goal_b.id, "title": goal_b.title, "milestones_received": len(ms_a)},
-    }
-
-
 # --- Private helpers ---
 
 
