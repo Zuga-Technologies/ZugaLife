@@ -367,8 +367,7 @@ const levelNames: Record<number, string> = {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.7);
   padding: 1rem;
   -webkit-tap-highlight-color: transparent;
 }
@@ -623,5 +622,26 @@ const levelNames: Record<number, string> = {
 .cel-modal__btn--prestige {
   background: linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #f59e0b 100%);
   box-shadow: 0 4px 16px rgba(168, 85, 247, 0.4);
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .cel-confetti__particle,
+  .cel-badge-icon,
+  .cel-star,
+  .cel-levelup-number,
+  .cel-prestige-badge,
+  .cel-prestige-tier,
+  .cel-modal__shine,
+  .cel-toast--bonus {
+    animation: none !important;
+  }
+  .modal-enter-active,
+  .modal-leave-active,
+  .toast-enter-active,
+  .toast-leave-active {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 </style>

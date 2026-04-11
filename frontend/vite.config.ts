@@ -10,6 +10,18 @@ export default defineConfig({
     },
     dedupe: ['vue', 'pinia', 'vue-router'],
   },
+  build: {
+    target: 'es2020',
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-vue': ['vue', 'pinia', 'vue-router'],
+          'vendor-icons': ['lucide-vue-next'],
+        },
+      },
+    },
+  },
   server: {
     host: true,
     port: 5174,
