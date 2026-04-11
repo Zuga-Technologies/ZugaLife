@@ -63,6 +63,8 @@ function handleRateEnforce(which: 'a' | 'b') {
 // Crossfade: when active video nears end, fade to the other
 // Throttled — timeupdate fires ~4x/sec, we only need ~4 checks/sec near the end
 let lastTimeUpdate = 0
+const videoBLoaded = ref(false)
+
 function handleTimeUpdate(which: 'a' | 'b') {
   const now = performance.now()
   if (now - lastTimeUpdate < 250) return
@@ -75,7 +77,13 @@ function handleTimeUpdate(which: 'a' | 'b') {
   enforceRate(video)
 
   const remaining = video.duration - video.currentTime
-  if (remaining < 1.5 && remaining > 0) {
+
+  // Lazy-load video B: only set its src when A is ~5s from ending
+  if (!videoBLoaded.value && remaining < 5 && remaining > 0 && theme.value.video) {
+    loadVideoB(theme.value.video)
+  }
+
+  if (remaining < 1.5 && remaining > 0 && videoBLoaded.value) {
     other.currentTime = 0
     other.play().catch(() => {})
     enforceRate(other)
@@ -83,27 +91,43 @@ function handleTimeUpdate(which: 'a' | 'b') {
   }
 }
 
-// When theme changes, reset videos
-function loadVideo(src: string) {
+// When theme changes, reset videos — only load A immediately, B is lazy
+// Video A uses <source> tags in the template, so just call load() to let the browser pick format
+function loadVideo(_src: string) {
   videoLoaded.value = false
+  videoBLoaded.value = false
   activeVideo.value = 'a'
   nextTick(() => {
     if (videoA.value) {
-      videoA.value.src = src
+      // Don't set .src — let <source> tags handle format selection (WebM > MP4)
       videoA.value.load()
       videoA.value.playbackRate = theme.value.speed ?? DEFAULT_SPEED
       videoA.value.play().catch(() => {})
     }
-    if (videoB.value) {
-      videoB.value.src = src
-      videoB.value.load()
-      videoB.value.playbackRate = theme.value.speed ?? DEFAULT_SPEED
-    }
+    // Video B is NOT loaded here — lazy-loaded in handleTimeUpdate when A nears end
   })
 }
 
-// Custom video: enforce user-chosen speed
+// Lazy-load video B just before it's needed — prefer WebM if available
+function loadVideoB(mp4Src: string) {
+  if (videoBLoaded.value || !videoB.value) return
+  const webmSrc = theme.value.videoWebm
+  if (webmSrc && videoB.value.canPlayType('video/webm; codecs="vp9"')) {
+    videoB.value.src = webmSrc
+  } else {
+    videoB.value.src = mp4Src
+  }
+  videoB.value.load()
+  videoB.value.playbackRate = theme.value.speed ?? DEFAULT_SPEED
+  videoBLoaded.value = true
+}
+
+// Custom video: enforce user-chosen speed (throttled to avoid per-frame overhead)
+let lastCustomRateCheck = 0
 function enforceCustomVideoRate() {
+  const now = performance.now()
+  if (now - lastCustomRateCheck < 1000) return
+  lastCustomRateCheck = now
   if (customVideoRef.value) {
     enforceRate(customVideoRef.value, getCustomVideoSpeed())
   }
@@ -228,6 +252,7 @@ onUnmounted(() => document.removeEventListener('zugalife-theme-change', handleTh
         ref="videoA"
         class="absolute inset-0 w-full h-full object-cover transition-opacity duration-[1500ms] will-change-[opacity]"
         :class="activeVideo === 'a' ? 'opacity-100' : 'opacity-0'"
+        :poster="theme.poster"
         autoplay
         loop
         muted
@@ -235,12 +260,15 @@ onUnmounted(() => document.removeEventListener('zugalife-theme-change', handleTh
         @loadeddata="videoLoaded = true; handleRateEnforce('a')"
         @playing="handleRateEnforce('a')"
         @timeupdate="handleTimeUpdate('a')"
-      />
+      >
+        <source v-if="theme.videoWebm" :src="theme.videoWebm" type="video/webm" />
+        <source v-if="theme.video" :src="theme.video" type="video/mp4" />
+      </video>
       <video
         ref="videoB"
         class="absolute inset-0 w-full h-full object-cover transition-opacity duration-[1500ms] will-change-[opacity]"
         :class="activeVideo === 'b' ? 'opacity-100' : 'opacity-0'"
-        autoplay
+        preload="none"
         loop
         muted
         playsinline

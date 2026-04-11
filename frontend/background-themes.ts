@@ -16,7 +16,9 @@ export interface ThemeDefinition {
   name: string
   description: string
   preview: string
-  video?: string        // path under /backgrounds/
+  video?: string        // path under /backgrounds/ (MP4)
+  videoWebm?: string    // WebM/VP9 alternative (smaller, better decode perf)
+  poster?: string       // JPEG poster frame for instant display
   overlay?: number      // dark overlay opacity (0-1) for bright videos
   fallbackBg?: string   // CSS gradient fallback while video loads
   speed?: number        // playback rate (default 0.6) — lower = slower
@@ -34,7 +36,9 @@ export const THEMES: ThemeDefinition[] = [
     name: 'Cyberpunk City',
     description: 'AI-generated neon cityscape — powered by ZugaVideo',
     preview: 'linear-gradient(135deg, #1a0a2e, #3b1f7c, #0ea5e9)',
-    video: '/backgrounds/cyberpunk-city-v2.mp4',
+    video: '/backgrounds/cyberpunk-city-v3.mp4',
+    videoWebm: '/backgrounds/cyberpunk-city-v3.webm',
+    poster: '/backgrounds/cyberpunk-city-poster.jpg',
     overlay: 0.3,
     speed: 1.0,
     fallbackBg: 'linear-gradient(135deg, #0a0a1a, #1a0a2e)',
