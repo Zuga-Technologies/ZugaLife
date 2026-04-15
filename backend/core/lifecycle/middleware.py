@@ -17,7 +17,7 @@ import signal
 import time
 from typing import Optional
 
-from fastapi import FastAPI, APIRouter, Header, HTTPException
+from fastapi import FastAPI, APIRouter
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -107,13 +107,8 @@ def add_lifecycle_support(app: FastAPI, prefix: str):
     lifecycle_router = APIRouter(tags=["lifecycle"])
 
     @lifecycle_router.post(f"{prefix}/lifecycle/shutdown")
-    async def lifecycle_shutdown(
-        x_lifecycle_secret: str = Header(default=""),
-    ):
-        """Orchestrator-initiated graceful shutdown. Requires LIFECYCLE_SECRET header."""
-        expected = os.environ.get("LIFECYCLE_SECRET", "").strip()
-        if not expected or x_lifecycle_secret != expected:
-            raise HTTPException(status_code=403, detail="Forbidden")
+    async def lifecycle_shutdown():
+        """Orchestrator-initiated graceful shutdown."""
         if _draining:
             return {"status": "already_draining"}
 

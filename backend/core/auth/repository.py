@@ -1,0 +1,189 @@
+"""User persistence — upsert and lookup by email."""
+
+import os
+import uuid
+
+from sqlalchemy import select
+
+from core.auth.models import UserRecord
+from core.database.session import get_session
+
+
+def _parse_allowed_emails() -> dict[str, str]:
+    """Parse ALLOWED_EMAILS into {email: role} map.
+
+    Format: 'email:admin,email2,email3:admin' — no suffix means 'user'.
+    """
+    raw = os.environ.get("ALLOWED_EMAILS", "").strip()
+    if not raw:
+        return {}
+    result = {}
+    for entry in raw.split(","):
+        entry = entry.strip().lower()
+        if not entry:
+            continue
+        if ":" in entry:
+            email, role = entry.rsplit(":", 1)
+            result[email.strip()] = role.strip()
+        else:
+            result[entry] = "user"
+    return result
+
+
+def _is_admin_email(email: str) -> bool:
+    """Check if email has admin role in ALLOWED_EMAILS."""
+    return _parse_allowed_emails().get(email.lower()) == "admin"
+
+
+async def upsert_user(
+    email: str,
+    name: str | None = None,
+    avatar_url: str | None = None,
+    auth_provider: str = "dev",
+) -> UserRecord:
+    """Create or update a user record. Returns the user.
+
+    Google users are auto-verified (trusted identity provider).
+    """
+    async with get_session() as session:
+        result = await session.execute(
+            select(UserRecord).where(UserRecord.email == email)
+        )
+        user = result.scalar_one_or_none()
+
+        role = "admin" if _is_admin_email(email) else "user"
+        auto_verify = auth_provider == "google"
+
+        if user is None:
+            user = UserRecord(
+                id=str(uuid.uuid4()),
+                email=email,
+                name=name,
+                avatar_url=avatar_url,
+                auth_provider=auth_provider,
+                role=role,
+                email_verified=auto_verify,
+            )
+            session.add(user)
+        else:
+            if name is not None:
+                user.name = name
+            if avatar_url is not None:
+                user.avatar_url = avatar_url
+            user.auth_provider = auth_provider
+            user.role = role
+            if auto_verify:
+                user.email_verified = True
+
+        return user
+
+
+async def get_user_by_email(email: str) -> UserRecord | None:
+    """Look up a user by email."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(UserRecord).where(UserRecord.email == email)
+        )
+        return result.scalar_one_or_none()
+
+
+async def set_email_verified(email: str) -> None:
+    """Mark a user's email as verified."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(UserRecord).where(UserRecord.email == email)
+        )
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise ValueError("User not found")
+        user.email_verified = True
+
+
+async def get_user_by_supertokens_id(st_user_id: str) -> UserRecord | None:
+    """Look up a user by their SuperTokens user ID."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(UserRecord).where(UserRecord.supertokens_user_id == st_user_id)
+        )
+        return result.scalar_one_or_none()
+
+
+async def get_user_by_id(user_id: str) -> UserRecord | None:
+    """Look up a user by their app-level ID."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(UserRecord).where(UserRecord.id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+
+async def link_supertokens_id(email: str, st_user_id: str) -> None:
+    """Link a SuperTokens user ID to an existing user record."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(UserRecord).where(UserRecord.email == email)
+        )
+        user = result.scalar_one_or_none()
+        if user is not None:
+            user.supertokens_user_id = st_user_id
+
+
+async def provision_allowed_emails() -> int:
+    """Auto-create verified user records for all ALLOWED_EMAILS entries.
+
+    Called at startup. Ensures every whitelisted email has a row in
+    the users table with email_verified=True so they can log in
+    immediately via any auth method (password, Google, GitHub).
+    Returns the number of newly created users.
+    """
+    import logging
+    _logger = logging.getLogger(__name__)
+    allowed = _parse_allowed_emails()
+    if not allowed:
+        return 0
+
+    created = 0
+    async with get_session() as session:
+        for email, role in allowed.items():
+            result = await session.execute(
+                select(UserRecord).where(UserRecord.email == email)
+            )
+            user = result.scalar_one_or_none()
+            if user is None:
+                user = UserRecord(
+                    id=str(uuid.uuid4()),
+                    email=email,
+                    auth_provider="pending",
+                    role=role,
+                    email_verified=True,
+                )
+                session.add(user)
+                _logger.info("Provisioned user: %s (role=%s)", email, role)
+                created += 1
+            elif not user.email_verified:
+                user.email_verified = True
+                _logger.info("Auto-verified existing user: %s", email)
+
+    return created
+
+
+async def get_onboarding_state(user_id: str) -> bool:
+    """Return whether the user has completed app-level onboarding."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(UserRecord.onboarding_completed).where(UserRecord.id == user_id)
+        )
+        value = result.scalar_one_or_none()
+        return bool(value)
+
+
+async def set_onboarding_state(user_id: str, completed: bool) -> None:
+    """Mark app-level onboarding as completed or reset it."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(UserRecord).where(UserRecord.id == user_id)
+        )
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise ValueError("User not found")
+        user.onboarding_completed = completed

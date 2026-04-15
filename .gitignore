@@ -6,7 +6,3 @@ __pycache__/
 data/
 
 # Backend symlinks to ZugaCore submodule (created by setup.sh)
-/backend/core/auth
-/backend/core/database
-/backend/core/plugins
-/backend/core/credits
