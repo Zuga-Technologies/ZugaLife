@@ -116,10 +116,10 @@ _gam_routes = _load_submodule("gamification", "routes")
 _gam_notif = _load_submodule("gamification", "notifications")
 _gam_notif_routes = _load_submodule("gamification", "notification_routes")
 
-# Load themes submodule: models → schemas → routes
-_th_models = _load_submodule("themes", "models")
-_th_schemas = _load_submodule("themes", "schemas")
-_th_routes = _load_submodule("themes", "routes")
+# Themes are now a Forge creation type (type=widget). Retired from ZugaLife
+# 2026-04-17 via γ cutover — existing data migrated to forge_* tables via
+# ZugaApp /api/forge/internal/migrate-zugalife-themes; callers point at
+# /api/forge/*.
 
 # Load ecosystem integration (cross-studio signals)
 _ecosystem = _load_sibling("ecosystem")
@@ -142,7 +142,6 @@ _combined_router.include_router(_s_routes.router)
 _combined_router.include_router(_f_routes.router)
 _combined_router.include_router(_gam_routes.router)
 _combined_router.include_router(_gam_notif_routes.router)
-_combined_router.include_router(_th_routes.router)
 _combined_router.include_router(_data_mgmt.router)
 _combined_router.include_router(_dashboard.router)
 
@@ -206,8 +205,6 @@ class ZugaLifePlugin(StudioPlugin):
             _gam_models.WeeklyQuest, _gam_models.UserInsight,
             _f_models.WeeklyNarrative,
             _ecosystem.CrossStudioSignal,
-            _th_models.Theme, _th_models.ThemeInstall, _th_models.ThemeState,
-            _th_models.ThemePurchase, _th_models.ThemeReview,
         ]
 
     async def on_startup(self) -> None:
