@@ -132,10 +132,16 @@ async def generate_meditation(
     try:
         from core.credits.client import get_credit_client, dollars_to_tokens
         from core.ai.gateway import _estimate_call_cost
+        import inspect
         credit_client = get_credit_client()
         # Estimate: script generation + TTS (rough upper bound)
         script_max_tokens = _prompts._MAX_TOKENS.get(body.length.value, 3000)
-        estimated_cost = _estimate_call_cost(script_max_tokens) + 0.02  # +$0.02 TTS buffer
+        # ZugaApp gateway takes (task, max_tokens); standalone takes (max_tokens).
+        _sig_params = inspect.signature(_estimate_call_cost).parameters
+        if "task" in _sig_params:
+            estimated_cost = _estimate_call_cost("creative", script_max_tokens) + 0.02
+        else:
+            estimated_cost = _estimate_call_cost(script_max_tokens) + 0.02
         estimated_tokens = dollars_to_tokens(estimated_cost)
         if not await credit_client.can_spend(user.id, user.email, estimated_tokens):
             raise HTTPException(
@@ -285,7 +291,7 @@ async def _generate_in_background(
 
         # Pre-flight billing check for TTS (estimate cost from total script chars)
         from core.credits.client import get_credit_client, dollars_to_tokens
-        from core.ai.providers import estimate_tts_cost
+        from core.gateway.providers import estimate_tts_cost
         total_chars = sum(len(seg[0]) for seg in segments)
         estimated_tts_usd = estimate_tts_cost(total_chars, "tts-1-hd")
         credit_client = get_credit_client()
@@ -374,9 +380,12 @@ async def _generate_in_background(
                 model="tts-1-hd",
             )
 
+        tts_model_name = "cartesia-sonic" if _use_cartesia else "tts-1-hd"
+
         class _AudioResult:
             audio_bytes = merged_audio
             cost = tts_cost
+            model = tts_model_name
         tts_result = _AudioResult()
         print(f"[MEDITATION] {session_id} TTS done, {len(tts_result.audio_bytes)} bytes, provider={tts_provider}", flush=True)
 
@@ -578,7 +587,7 @@ async def generate_from_script(
 
     # Pre-flight billing check for TTS
     from core.credits.client import get_credit_client, dollars_to_tokens
-    from core.ai.providers import estimate_tts_cost
+    from core.gateway.providers import estimate_tts_cost
     total_chars = sum(len(seg[0]) for seg in segments)
     estimated_tts_usd = estimate_tts_cost(total_chars, "tts-1-hd")
     credit_client = get_credit_client()

@@ -332,7 +332,7 @@ async def generate_challenges(
         response = await _asyncio.wait_for(
             ai_call(
                 prompt=prompt,
-                task=f"challenge_gen_{challenge_type}",
+                task="summarization",
                 max_tokens=512,
                 user_id=user_id,
                 user_email=user_email,

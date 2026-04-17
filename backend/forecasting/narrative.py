@@ -33,14 +33,18 @@ async def generate_weekly_narrative(
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
 
-    # Check cache
+    # Check cache — use first() + created_at desc in case a race produced duplicates
+    # (no unique index on (user_id, week_start), so concurrent requests can double-insert)
     cached = await session.execute(
-        select(WeeklyNarrative).where(
+        select(WeeklyNarrative)
+        .where(
             WeeklyNarrative.user_id == user_id,
             WeeklyNarrative.week_start == week_start,
         )
+        .order_by(desc(WeeklyNarrative.created_at))
+        .limit(1)
     )
-    existing = cached.scalar_one_or_none()
+    existing = cached.scalars().first()
     if existing:
         return {
             "narrative": existing.narrative,
@@ -90,7 +94,7 @@ async def generate_weekly_narrative(
         from core.ai.gateway import ai_call, CreditBlockedError
         response = await ai_call(
             prompt=prompt,
-            task="weekly_narrative",
+            task="summarization",
             max_tokens=600,
             user_id=user_id,
             user_email=user_email,

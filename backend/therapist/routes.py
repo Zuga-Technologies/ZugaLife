@@ -407,8 +407,8 @@ async def end_session(
             total_cost = 0.0
         else:
             logger.exception("Failed to generate session summary")
-        response = None
-        summary_handled = False
+            response = None
+            summary_handled = False
     else:
         summary_handled = False
 

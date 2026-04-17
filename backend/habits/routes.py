@@ -867,6 +867,12 @@ async def generate_insight(
                 status_code=400,
                 detail="Content blocked by security filter",
             )
+        except Exception:
+            logger.exception("Habit insight generation failed for user %s", user.id)
+            raise HTTPException(
+                status_code=502,
+                detail="AI service temporarily unavailable",
+            )
 
         insight = HabitInsight(
             user_id=user.id,

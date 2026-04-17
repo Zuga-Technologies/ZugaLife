@@ -590,6 +590,11 @@ async def reflect_on_entry(
             raise HTTPException(
                 status_code=400, detail="Content blocked by security filter",
             )
+        except Exception:
+            log.exception("Journal reflection failed for entry %s", entry_id)
+            raise HTTPException(
+                status_code=502, detail="AI service temporarily unavailable",
+            )
 
         reflection = JournalReflection(
             journal_entry_id=entry.id,
