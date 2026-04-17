@@ -130,8 +130,8 @@ async function fetchDashboard() {
 // ============================
 
 interface InstalledTheme {
-  id: string
-  theme_id: string
+  id: number
+  theme_id: number
   studio: string
   pos_x: number
   pos_y: number
@@ -149,20 +149,68 @@ interface InstalledTheme {
   }
 }
 
+interface ForgeInstall {
+  id: number
+  creation_id: number
+  studio: string
+  pos_x: number
+  pos_y: number
+  pos_w: number
+  pos_h: number
+  enabled: boolean
+}
+
+interface ForgeCreationDetail {
+  id: number
+  name: string
+  type: string
+  source_html: string | null
+  source_css: string | null
+  source_js: string | null
+  permissions: string | null
+}
+
 const installedThemes = ref<InstalledTheme[]>([])
 
 async function fetchInstalledThemes() {
   try {
-    const res = await api.get<InstalledTheme[]>('/api/life/themes/my/installed?studio=life')
-    installedThemes.value = res.filter(t => t.enabled)
+    const installs = await api.get<ForgeInstall[]>('/api/forge/installs?studio=life')
+    const enabled = installs.filter(i => i.enabled)
+    const creations = await Promise.all(
+      enabled.map(i => api.get<ForgeCreationDetail>(`/api/forge/creations/${i.creation_id}`))
+    )
+    installedThemes.value = enabled
+      .map((inst, idx): InstalledTheme | null => {
+        const c = creations[idx]
+        if (c.type !== 'widget') return null
+        return {
+          id: inst.id,
+          theme_id: inst.creation_id,
+          studio: inst.studio,
+          pos_x: inst.pos_x,
+          pos_y: inst.pos_y,
+          pos_w: inst.pos_w,
+          pos_h: inst.pos_h,
+          enabled: inst.enabled,
+          theme: {
+            id: String(c.id),
+            title: c.name,
+            html: c.source_html || '',
+            css: c.source_css,
+            js: c.source_js || '',
+            permissions: c.permissions ? JSON.parse(c.permissions) : [],
+          },
+        }
+      })
+      .filter((t): t is InstalledTheme => t !== null)
   } catch {
     // Themes are non-critical — don't block dashboard
   }
 }
 
-async function uninstallTheme(installId: string) {
+async function uninstallTheme(installId: number) {
   try {
-    await api.delete(`/api/life/themes/install/${installId}`)
+    await api.delete(`/api/forge/installs/${installId}`)
     installedThemes.value = installedThemes.value.filter(t => t.id !== installId)
   } catch (e) {
     console.error('Theme uninstall failed:', e)

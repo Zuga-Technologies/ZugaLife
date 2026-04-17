@@ -170,7 +170,7 @@ export class TraderThemeBridge {
       case 'watchlist':
         return api.get('/api/trader/strategies')
       case 'theme_state':
-        return api.get(`/api/life/themes/state/${this.meta.themeId}`)
+        return api.get(`/api/forge/creations/${this.meta.themeId}/state`)
       default:
         throw new Error(`Unknown data key: ${key}`)
     }
@@ -187,7 +187,7 @@ export class TraderThemeBridge {
         if (stateStr.length > 102_400) {
           throw new Error('theme_state exceeds 100KB limit')
         }
-        return api.put(`/api/life/themes/state/${this.meta.themeId}`, { state: value })
+        return api.put(`/api/forge/creations/${this.meta.themeId}/state`, { state: value })
       }
       default:
         throw new Error(`Write not allowed for key: ${key}. Only theme_state is writable.`)

@@ -190,7 +190,7 @@ export class ThemeBridge {
       case 'user_profile':
         return api.get('/api/life/settings')
       case 'theme_state':
-        return api.get(`/api/life/themes/state/${this.meta.themeId}`)
+        return api.get(`/api/forge/creations/${this.meta.themeId}/state`)
       default:
         throw new Error(`Unknown data key: ${key}`)
     }
@@ -213,7 +213,7 @@ export class ThemeBridge {
         if (stateStr.length > 102_400) {
           throw new Error('theme_state exceeds 100KB limit')
         }
-        return api.put(`/api/life/themes/state/${this.meta.themeId}`, { state: value })
+        return api.put(`/api/forge/creations/${this.meta.themeId}/state`, { state: value })
       }
       default:
         throw new Error(`Unknown write key: ${key}`)
