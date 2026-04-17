@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from core.auth.middleware import get_current_user
 from core.auth.models import CurrentUser
 from core.database.session import get_session
+from core.forge.models import ForgeCreation
 
 _models = sys.modules["zugalife.themes.models"]
 _schemas = sys.modules["zugalife.themes.schemas"]
@@ -88,6 +89,27 @@ async def create_theme(body: ThemeCreateRequest, user: CurrentUser = Depends(get
         await session.commit()
 
         result = _theme_to_dict(theme)
+
+    try:
+        async with get_session() as fsession:
+            fcreation = ForgeCreation(
+                creator_id=user.id,
+                name=body.title[:100],
+                description=(body.description[:500] if body.description else None),
+                type="widget",
+                category=(body.category or "widget")[:30],
+                source_html=body.html,
+                source_css=body.css,
+                source_js=body.js,
+                tags=(",".join(body.tags)[:200] if body.tags else None),
+                status="draft",
+                visibility="private",
+                version=1,
+            )
+            fsession.add(fcreation)
+            await fsession.commit()
+    except Exception as e:
+        logger.warning(f"[Themes] Forge dual-write failed for theme={theme_id}: {e}")
 
     # Auto-install if position was provided
     if body.position:
