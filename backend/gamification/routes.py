@@ -1,9 +1,10 @@
 """ZugaLife gamification endpoints — XP status, badges, daily challenges, and award."""
 
+import os
 import sys
 from datetime import timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy import desc, select
 
 from core.auth.middleware import get_current_user
@@ -253,3 +254,18 @@ async def prestige(
         except ValueError:
             raise HTTPException(status_code=400, detail="Prestige requirements not met")
     return result
+
+
+@router.post("/prewarm", include_in_schema=False)
+async def prewarm_challenges(x_admin_token: str | None = Header(default=None)):
+    """Manually run a challenge/quest pre-warm sweep for all active users.
+
+    Protected by the ZUGALIFE_ADMIN_TOKEN env var so Railway cron, ops, or
+    a post-deploy hook can trigger it without waiting for the next scheduled
+    UTC-midnight tick.  Returns per-sweep counts.
+    """
+    expected = os.getenv("ZUGALIFE_ADMIN_TOKEN")
+    if not expected or x_admin_token != expected:
+        raise HTTPException(status_code=403, detail="forbidden")
+    prewarm = sys.modules["zugalife.gamification.prewarm"]
+    return await prewarm.prewarm_all_active_users()

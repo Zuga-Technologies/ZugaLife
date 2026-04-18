@@ -1,5 +1,6 @@
 """ZugaLife studio plugin — mood, journal, habits, goals, meditation, and therapist."""
 
+import asyncio
 import importlib.util
 import logging
 import sys
@@ -115,6 +116,7 @@ _gam_insights = _load_submodule("gamification", "insights")
 _gam_routes = _load_submodule("gamification", "routes")
 _gam_notif = _load_submodule("gamification", "notifications")
 _gam_notif_routes = _load_submodule("gamification", "notification_routes")
+_gam_prewarm = _load_submodule("gamification", "prewarm")
 
 # Themes are now a Forge creation type (type=widget). Retired from ZugaLife
 # 2026-04-17 via γ cutover — existing data migrated to forge_* tables via
@@ -265,3 +267,19 @@ class ZugaLifePlugin(StudioPlugin):
         # Register ecosystem event handler for cross-studio signals
         if _ecosystem and hasattr(_ecosystem, "register_event_handler"):
             _ecosystem.register_event_handler()
+
+        # Arm the daily challenge / weekly quest pre-warm scheduler so the
+        # dashboard read path no longer triggers LLM generation on the first
+        # request of the day. Task handle is stashed for on_shutdown cancel.
+        self._prewarm_task = _gam_prewarm.start_scheduler_task()
+
+    async def on_shutdown(self) -> None:
+        """Cancel the prewarm scheduler cleanly so uvicorn shuts down fast."""
+        task = getattr(self, "_prewarm_task", None)
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
