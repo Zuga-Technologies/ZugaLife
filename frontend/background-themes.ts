@@ -7,6 +7,7 @@
 
 export type ThemeId =
   | 'none'
+  | 'cyberpunk-city'
   | 'ai-ambient'
   | 'custom'
 
@@ -29,6 +30,18 @@ export const THEMES: ThemeDefinition[] = [
     name: 'Default Dark',
     description: 'Clean dark background — no animation',
     preview: 'linear-gradient(135deg, #0a0a0a, #1a1a1a)',
+  },
+  {
+    id: 'cyberpunk-city',
+    name: 'Cyberpunk City',
+    description: 'AI-generated neon cityscape — powered by ZugaVideo',
+    preview: 'linear-gradient(135deg, #1a0a2e, #3b1f7c, #0ea5e9)',
+    video: '/backgrounds/cyberpunk-city-v3.mp4',
+    videoWebm: '/backgrounds/cyberpunk-city-v3.webm',
+    poster: '/backgrounds/cyberpunk-city-poster.jpg',
+    overlay: 0.3,
+    speed: 1.0,
+    fallbackBg: 'linear-gradient(135deg, #0a0a1a, #1a0a2e)',
   },
   {
     id: 'ai-ambient',
@@ -74,11 +87,11 @@ const CUSTOM_OPACITY_KEY = 'zugalife-bg-custom-opacity'
 export function getSavedTheme(): ThemeId {
   const saved = localStorage.getItem(STORAGE_KEY) as ThemeId
   if (saved && THEMES.some(t => t.id === saved)) return saved
-  return 'none'
+  return 'cyberpunk-city'
 }
 export function saveTheme(id: ThemeId) { localStorage.setItem(STORAGE_KEY, id) }
 export function getTheme(id: ThemeId): ThemeDefinition {
-  return THEMES.find(t => t.id === id) || THEMES[0]
+  return THEMES.find(t => t.id === id) || THEMES.find(t => t.id === 'cyberpunk-city') || THEMES[0]
 }
 
 export function getCustomImage(): string | null { return localStorage.getItem(CUSTOM_IMG_KEY) }
