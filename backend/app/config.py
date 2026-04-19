@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     # AI Gateway API keys
     anthropic_api_key: str = ""
     openai_api_key: str = ""
-    moonshot_api_key: str = ""
     venice_api_key: str = ""
 
     # Budget
