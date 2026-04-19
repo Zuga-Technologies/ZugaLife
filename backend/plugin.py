@@ -258,6 +258,11 @@ class ZugaLifePlugin(StudioPlugin):
                 # would 500 on journal create. Railway fresh-create has this
                 # column; MM stale DBs will pick it up on next boot.)
                 "ALTER TABLE journal_entries ADD COLUMN tags VARCHAR(500)",
+                # Habit implementation-intention trigger (added in 4d2dcf7;
+                # migration was missed. `_ensure_presets` omits the kwarg so
+                # preset-seeding still worked, but `create_habit` explicitly
+                # sets trigger=None and would 500 on stale DBs.)
+                "ALTER TABLE habit_definitions ADD COLUMN trigger VARCHAR(200)",
             ]
             for sql in additive_migrations:
                 try:
