@@ -253,6 +253,11 @@ class ZugaLifePlugin(StudioPlugin):
                 "ALTER TABLE life_user_settings ADD COLUMN personalization_source VARCHAR(10) DEFAULT 'system'",
                 # Theme preset system (color scheme + typography + mood icons)
                 "ALTER TABLE life_user_settings ADD COLUMN theme_preset VARCHAR(30) DEFAULT 'default'",
+                # Journal activity tags (added 2026-04-02 in dc3fa70; migration
+                # was missed in that commit — stale DBs created before then
+                # would 500 on journal create. Railway fresh-create has this
+                # column; MM stale DBs will pick it up on next boot.)
+                "ALTER TABLE journal_entries ADD COLUMN tags VARCHAR(500)",
             ]
             for sql in additive_migrations:
                 try:
