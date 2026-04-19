@@ -21,6 +21,8 @@ import WeeklyNarrative from './components/WeeklyNarrative.vue'
 import InsightCard from './components/InsightCard.vue'
 import ThemeRenderer from './components/themes/ThemeRenderer.vue'
 import { useCelebration } from './composables/useCelebration'
+import { getMoods, type MoodDefinition } from './mood-presets'
+import { applyPreset, getActivePresetId } from './theme-presets'
 import { useOnboardingStore } from '@zugaapp/stores/onboarding'
 import { useTokenStore } from '@core/billing/useTokens'
 import { playXpSound, playBadgeSound, playLevelUpSound, playStreakSound, playPrestigeSound, playJackpotSound } from './composables/useCelebrationSounds'
@@ -353,7 +355,14 @@ themeBroadcast.onmessage = (e) => {
 
 async function applyCustomColors() {
   try {
-    const settings = await api.get<{ custom_colors?: string | null }>('/api/life/settings')
+    const settings = await api.get<{ custom_colors?: string | null; theme_preset?: string }>('/api/life/settings')
+
+    // Apply theme preset (color scheme + typography + mood icons)
+    if (settings.theme_preset && settings.theme_preset !== activePresetId.value) {
+      activePresetId.value = settings.theme_preset
+      applyPreset(settings.theme_preset)
+    }
+
     // Remove existing restyle tag
     document.getElementById('zugabot-restyle')?.remove()
 
@@ -735,23 +744,11 @@ function stripEmoji(s: string): string {
 }
 
 // ============================
-// MOOD DEFINITIONS (shared by journal compose)
+// MOOD DEFINITIONS (driven by active theme preset)
 // ============================
 
-const moods = [
-  { emoji: '😊', label: 'Happy' },
-  { emoji: '😢', label: 'Sad' },
-  { emoji: '😠', label: 'Angry' },
-  { emoji: '😰', label: 'Anxious' },
-  { emoji: '😴', label: 'Tired' },
-  { emoji: '🤩', label: 'Excited' },
-  { emoji: '😐', label: 'Neutral' },
-  { emoji: '🥰', label: 'Loved' },
-  { emoji: '😤', label: 'Frustrated' },
-  { emoji: '🤔', label: 'Thoughtful' },
-  { emoji: '😌', label: 'Calm' },
-  { emoji: '💪', label: 'Motivated' },
-]
+const activePresetId = ref(getActivePresetId())
+const moods = computed(() => getMoods(activePresetId.value))
 
 // ============================
 // JOURNAL
@@ -3164,7 +3161,7 @@ onUnmounted(() => {
     <transition name="fade">
       <div
         v-if="journalSuccess || habitSuccess || goalSuccess || medSuccess || therapistSuccess"
-        class="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg bg-emerald-600 text-white font-medium text-sm shadow-lg"
+        class="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg bg-success text-white font-medium text-sm shadow-lg"
       >
         {{ journalSuccess || habitSuccess || goalSuccess || medSuccess || therapistSuccess }}
       </div>
@@ -3183,26 +3180,26 @@ onUnmounted(() => {
       <div class="flex-1" />
       <!-- Persistent XP + Streak bar (visible on every non-dashboard tab) -->
       <div v-if="gamificationData" class="flex items-center gap-3">
-        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
-          <Star :size="12" class="text-amber-400" />
-          <span class="text-xs font-bold text-amber-400">Lv.{{ gamificationData.xp.level }}</span>
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-accent/10 border border-accent/20">
+          <Star :size="12" class="text-accent" />
+          <span class="text-xs font-bold text-accent">Lv.{{ gamificationData.xp.level }}</span>
           <span v-if="gamificationData.xp.prestige_level > 0"
-            class="text-[9px] font-bold text-purple-300 bg-purple-500/20 px-1 rounded">P{{ gamificationData.xp.prestige_level }}</span>
+            class="text-[9px] font-bold text-accent-alt-bright bg-accent-alt/20 px-1 rounded">P{{ gamificationData.xp.prestige_level }}</span>
         </div>
         <div
           v-if="gamificationData.xp.consistency_30d > 0 || gamificationData.xp.current_streak_days > 0"
-          class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-500/20"
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-streak/10 border border-streak/20"
           :title="`${gamificationData.xp.consistency_30d} of last 30 days (${gamificationData.xp.consistency_pct}%)`"
         >
-          <FlameIcon :size="12" class="text-orange-400" />
-          <span class="text-xs font-bold text-orange-300">{{ gamificationData.xp.consistency_30d }}/30</span>
+          <FlameIcon :size="12" class="text-streak" />
+          <span class="text-xs font-bold text-streak">{{ gamificationData.xp.consistency_30d }}/30</span>
           <span
             v-if="gamificationData.xp.streak_multiplier > 1"
-            class="text-[9px] font-bold text-amber-300 bg-amber-500/20 px-1 rounded"
+            class="text-[9px] font-bold text-accent-bright bg-accent/20 px-1 rounded"
           >{{ gamificationData.xp.streak_multiplier }}x</span>
           <span
             v-if="gamificationData.xp.streak_freezes > 0"
-            class="text-[9px] font-bold text-cyan-300 bg-cyan-500/20 px-1 rounded"
+            class="text-[9px] font-bold text-info bg-info/20 px-1 rounded"
             :title="`${gamificationData.xp.streak_freezes} streak freeze${gamificationData.xp.streak_freezes > 1 ? 's' : ''} available`"
           >🧊{{ gamificationData.xp.streak_freezes }}</span>
         </div>
@@ -3223,7 +3220,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Skeleton: XP bar -->
-        <div class="glass-card p-4 mb-4">
+        <div class="glass-card p-5 mb-6">
           <div class="flex items-center gap-3">
             <div class="skeleton-pulse w-12 h-12 rounded-2xl flex-shrink-0"></div>
             <div class="flex-1">
@@ -3237,25 +3234,31 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Skeleton: Mood + Challenges row -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          <div class="glass-card p-4">
+        <!-- Skeleton: Mood + Challenges + Narrative row -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <div class="glass-card p-5">
             <div class="skeleton-pulse h-4 w-36 rounded mb-3"></div>
-            <div class="grid grid-cols-6 gap-2 mb-3">
-              <div v-for="i in 6" :key="i" class="skeleton-pulse h-12 rounded-xl"></div>
+            <div class="grid grid-cols-3 gap-2 mb-3">
+              <div v-for="i in 6" :key="i" class="skeleton-pulse h-14 rounded-xl"></div>
             </div>
             <div class="skeleton-pulse h-3 w-24 rounded"></div>
           </div>
-          <div class="glass-card p-4">
+          <div class="glass-card p-5">
             <div class="skeleton-pulse h-4 w-32 rounded mb-3"></div>
             <div class="space-y-2">
-              <div v-for="i in 3" :key="i" class="skeleton-pulse h-10 rounded-xl"></div>
+              <div v-for="i in 3" :key="i" class="skeleton-pulse h-12 rounded-xl"></div>
             </div>
+          </div>
+          <div class="glass-card p-5">
+            <div class="skeleton-pulse h-4 w-36 rounded mb-3"></div>
+            <div class="skeleton-pulse h-3 w-full rounded mb-2"></div>
+            <div class="skeleton-pulse h-3 w-4/5 rounded mb-2"></div>
+            <div class="skeleton-pulse h-3 w-3/4 rounded"></div>
           </div>
         </div>
 
         <!-- Skeleton: Module Cards Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
           <div v-for="i in 3" :key="i" class="glass-card p-5">
             <div class="flex items-center gap-2.5 mb-4">
               <div class="skeleton-pulse w-9 h-9 rounded-xl"></div>
@@ -3300,14 +3303,14 @@ onUnmounted(() => {
         </div>
 
         <!-- XP + Level + Streak Bar -->
-        <div v-if="gamificationData" class="glass-card p-4 mb-4 animate-fade-in">
+        <div v-if="gamificationData" class="glass-card p-5 mb-6 animate-fade-in">
           <div class="flex items-center gap-3">
             <!-- Level badge + prestige stars -->
             <div class="flex-shrink-0 flex flex-col items-center gap-0.5">
               <div class="relative">
-                <div class="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center"
+                <div class="w-12 h-12 rounded-2xl bg-accent/15 border border-accent/30 flex items-center justify-center"
                   :class="{ 'prestige-glow': gamificationData.xp.prestige_level > 0 }">
-                  <span class="text-lg font-bold text-amber-400">{{ gamificationData.xp.level }}</span>
+                  <span class="text-lg font-bold text-accent">{{ gamificationData.xp.level }}</span>
                 </div>
                 <!-- Prestige stars -->
                 <div v-if="gamificationData.xp.prestige_level > 0"
@@ -3315,7 +3318,7 @@ onUnmounted(() => {
                   <span v-for="i in Math.min(gamificationData.xp.prestige_level, 5)" :key="i"
                     class="text-[8px] prestige-star">&#11088;</span>
                   <span v-if="gamificationData.xp.prestige_level > 5"
-                    class="text-[7px] font-bold text-amber-300">+{{ gamificationData.xp.prestige_level - 5 }}</span>
+                    class="text-[7px] font-bold text-accent-bright">+{{ gamificationData.xp.prestige_level - 5 }}</span>
                 </div>
               </div>
               <span class="text-[10px] text-txt-muted leading-none">{{ gamificationData.xp.level_name }}</span>
@@ -3325,12 +3328,12 @@ onUnmounted(() => {
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between mb-1">
                 <div class="flex items-center gap-1.5">
-                  <Zap :size="12" class="text-amber-400" />
+                  <Zap :size="12" class="text-accent" />
                   <span class="text-xs font-semibold text-txt-primary">{{ gamificationData.xp.xp_progress_in_level.toLocaleString() }} / {{ gamificationData.xp.xp_for_next_level.toLocaleString() }} XP</span>
                 </div>
                 <div class="flex items-center gap-1.5">
                   <span v-if="gamificationData.xp.prestige_multiplier > 1"
-                    class="text-[9px] font-bold text-purple-300 bg-purple-500/20 px-1 rounded multiplier-pulse">
+                    class="text-[9px] font-bold text-accent-alt-bright bg-accent-alt/20 px-1 rounded multiplier-pulse">
                     P{{ gamificationData.xp.prestige_level }} +{{ Math.round((gamificationData.xp.prestige_multiplier - 1) * 100) }}%
                   </span>
                   <span class="text-[10px] text-txt-muted">{{ gamificationData.xp.total_xp.toLocaleString() }} total</span>
@@ -3340,8 +3343,8 @@ onUnmounted(() => {
                 <div
                   class="h-2 rounded-full transition-all duration-700 ease-out"
                   :class="gamificationData.xp.can_prestige
-                    ? 'bg-gradient-to-r from-purple-500 via-amber-400 to-purple-500 prestige-bar-shimmer'
-                    : 'bg-gradient-to-r from-amber-500 to-yellow-400'"
+                    ? 'bg-gradient-to-r from-accent-alt via-accent to-accent-alt prestige-bar-shimmer'
+                    : 'bg-gradient-to-r from-accent to-accent-bright'"
                   :style="{ width: Math.min(100, Math.round((gamificationData.xp.xp_progress_in_level / gamificationData.xp.xp_for_next_level) * 100)) + '%' }"
                 ></div>
               </div>
@@ -3350,19 +3353,19 @@ onUnmounted(() => {
             <!-- Consistency (reframed from streak) -->
             <div class="flex-shrink-0 flex flex-col items-center gap-0.5">
               <div class="flex items-center gap-1">
-                <FlameIcon :size="16" class="text-amber-400" />
+                <FlameIcon :size="16" class="text-accent" />
                 <span class="text-sm font-bold text-txt-primary">{{ gamificationData.xp.consistency_30d }}/30</span>
               </div>
               <div
                 v-if="gamificationData.xp.streak_multiplier > 1"
-                class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 leading-none multiplier-pulse"
+                class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent/20 text-accent leading-none multiplier-pulse"
               >
                 {{ gamificationData.xp.streak_multiplier }}x
               </div>
               <span v-else class="text-[10px] text-txt-muted leading-none">consistency</span>
               <div
                 v-if="gamificationData.xp.streak_freezes > 0"
-                class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400 leading-none"
+                class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-info/15 text-info leading-none"
                 :title="`${gamificationData.xp.streak_freezes} streak freeze${gamificationData.xp.streak_freezes > 1 ? 's' : ''}`"
               >
                 🧊 {{ gamificationData.xp.streak_freezes }}
@@ -3373,15 +3376,15 @@ onUnmounted(() => {
           <!-- Prestige Available Banner -->
           <div v-if="gamificationData.xp.can_prestige"
             class="mt-3 pt-3 border-t border-bdr/50">
-            <div class="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-purple-500/10 via-amber-500/10 to-purple-500/10 border border-purple-500/20 prestige-banner-glow">
+            <div class="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-accent-alt/10 via-accent/10 to-accent-alt/10 border border-accent-alt/20 prestige-banner-glow">
               <div class="flex-1">
-                <p class="text-sm font-bold text-purple-300">Prestige Available!</p>
+                <p class="text-sm font-bold text-accent-alt-bright">Prestige Available!</p>
                 <p class="text-[10px] text-txt-muted mt-0.5">Reset to Lv.1 for a permanent +5% XP bonus and a unique badge</p>
               </div>
               <button
                 @click="doPrestige"
                 :disabled="prestigeLoading"
-                class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 transition-all active:scale-95 disabled:opacity-50 min-h-[36px]"
+                class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-accent-alt-dim to-accent hover:from-accent-alt hover:to-accent-bright transition-all active:scale-95 disabled:opacity-50 min-h-[36px]"
               >
                 {{ prestigeLoading ? 'Ascending...' : 'Prestige' }}
               </button>
@@ -3393,16 +3396,16 @@ onUnmounted(() => {
             v-if="notif.shouldShowPrompt() && (gamificationData.xp.current_streak_days >= 3 || gamificationData.badges.length >= 1)"
             class="mt-3 pt-3 border-t border-bdr/50"
           >
-            <div class="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20">
+            <div class="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-info/10 to-info/10 border border-info/20">
               <div class="flex-1">
-                <p class="text-sm font-semibold text-cyan-300">Stay on track</p>
+                <p class="text-sm font-semibold text-info">Stay on track</p>
                 <p class="text-[10px] text-txt-muted mt-0.5">Get gentle reminders to keep your streak alive and hit your goals</p>
               </div>
               <div class="flex items-center gap-2">
                 <button
                   @click="notif.subscribe()"
                   :disabled="notif.isLoading.value"
-                  class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 transition-all active:scale-95 disabled:opacity-50"
+                  class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-info hover:bg-info transition-all active:scale-95 disabled:opacity-50"
                 >
                   {{ notif.isLoading.value ? '...' : 'Enable' }}
                 </button>
@@ -3417,106 +3420,102 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Mood + Challenges row (side-by-side on desktop) -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <!-- Main dashboard grid — 3 columns on desktop, stacked on mobile -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
 
-        <!-- Mood Check-in -->
-        <div class="glass-card p-4 animate-fade-in">
-          <div class="flex items-center gap-2 mb-3">
+        <!-- Mood Check-in (col 1) -->
+        <div class="glass-card p-5 animate-fade-in flex flex-col">
+          <div class="flex items-center gap-2 mb-4">
             <span class="text-sm font-semibold text-txt-primary">How are you feeling?</span>
-            <span v-if="dashboardData?.mood.has_data" class="text-xs text-txt-muted ml-auto">{{ dashboardData.mood.total }} total logs</span>
           </div>
 
-          <!-- Mood grid -->
-          <div class="grid grid-cols-6 gap-2 mb-3" :class="dashMoodOnCooldown ? 'opacity-40 pointer-events-none' : ''">
+          <!-- Mood grid — 3 cols in this narrower card -->
+          <div class="grid grid-cols-3 gap-2 mb-4" :class="dashMoodOnCooldown ? 'opacity-40 pointer-events-none' : ''">
             <button
               v-for="m in moods"
               :key="m.emoji"
               @click="logDashMood(m.emoji)"
               :disabled="dashMoodSubmitting"
-              class="flex flex-col items-center gap-1 py-2 rounded-xl hover:bg-surface-3 transition-all active:scale-95"
+              class="flex flex-col items-center gap-1.5 py-3 rounded-xl bg-surface-2/50 border border-bdr/50 hover:bg-surface-3 hover:border-bdr-hover transition-all active:scale-95"
               :title="m.label"
             >
-              <component :is="moodIcons[m.emoji]" :size="22" class="text-amber-400" v-if="moodIcons[m.emoji]" />
-              <Meh v-else :size="22" class="text-amber-400" />
+              <component :is="moodIcons[m.emoji]" :size="22" class="text-accent" v-if="moodIcons[m.emoji]" />
+              <Meh v-else :size="22" class="text-accent" />
               <span class="text-[10px] text-txt-muted">{{ m.label }}</span>
             </button>
           </div>
 
           <!-- Cooldown notice -->
           <div v-if="dashMoodOnCooldown" class="text-center">
-            <p class="text-xs text-txt-muted">Next check-in available in <span class="text-accent">{{ dashMoodTimeLeft }}</span></p>
+            <p class="text-xs text-txt-muted">Next check-in in <span class="text-accent">{{ dashMoodTimeLeft }}</span></p>
           </div>
 
           <!-- Success / Error -->
-          <p v-if="dashMoodSuccess" class="text-xs text-emerald-400 text-center">{{ dashMoodSuccess }}</p>
+          <p v-if="dashMoodSuccess" class="text-xs text-success text-center">{{ dashMoodSuccess }}</p>
           <p v-if="dashMoodError" class="text-xs text-red-400 text-center">{{ dashMoodError }}</p>
 
           <!-- Breathwork suggestion (acute intervention for negative moods) -->
           <div
             v-if="dashBreathworkSuggestion"
-            class="mt-3 p-4 rounded-xl bg-cyan-500/8 border border-cyan-500/15 animate-fade-in relative overflow-hidden"
+            class="mt-3 p-3 rounded-xl bg-info/8 border border-info/15 animate-fade-in relative overflow-hidden"
           >
-            <div class="absolute top-0 left-0 bottom-0 w-[3px] bg-gradient-to-b from-cyan-400 to-cyan-600" />
-            <div class="flex items-start gap-3 pl-2">
-              <div class="w-8 h-8 rounded-lg bg-cyan-500/15 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M8 12h8M12 8v8"/></svg>
-              </div>
-              <div class="flex-1">
-                <p class="text-xs text-cyan-200 font-medium mb-1.5">{{ dashBreathworkSuggestion }}</p>
-                <div class="flex items-center gap-3">
-                  <a
-                    href="https://boxbreather.com"
-                    target="_blank"
-                    class="text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
-                  >Breathe now &rarr;</a>
-                  <button
-                    @click="dashBreathworkSuggestion = null"
-                    class="text-[10px] text-txt-muted hover:text-txt-secondary transition-colors"
-                  >Dismiss</button>
-                </div>
+            <div class="absolute top-0 left-0 bottom-0 w-[3px] bg-gradient-to-b from-info to-info" />
+            <div class="pl-3">
+              <p class="text-xs text-info font-medium mb-1.5">{{ dashBreathworkSuggestion }}</p>
+              <div class="flex items-center gap-3">
+                <a
+                  href="https://boxbreather.com"
+                  target="_blank"
+                  class="text-xs font-semibold text-info hover:text-info transition-colors"
+                >Breathe now &rarr;</a>
+                <button
+                  @click="dashBreathworkSuggestion = null"
+                  class="text-[10px] text-txt-muted hover:text-txt-secondary transition-colors"
+                >Dismiss</button>
               </div>
             </div>
           </div>
 
-          <!-- Recent moods sparkline -->
+          <!-- Recent moods sparkline — pushed to bottom -->
+          <div class="flex-1" />
           <div v-if="dashboardData?.mood.has_data && dashboardData.mood.recent.length > 0" class="flex items-center gap-1.5 mt-3 pt-3 border-t border-bdr/50">
             <template v-for="(entry, i) in dashboardData.mood.recent.slice(0, 5)" :key="i">
               <div
                 class="w-7 h-7 rounded-lg bg-surface-3 flex items-center justify-center transition-transform hover:scale-110"
                 :title="entry.label + ' — ' + timeAgo(entry.date)"
               >
-                <component :is="moodIcons[entry.emoji]" :size="14" class="text-amber-400" v-if="moodIcons[entry.emoji]" />
-                <Meh v-else :size="14" class="text-amber-400" />
+                <component :is="moodIcons[entry.emoji]" :size="14" class="text-accent" v-if="moodIcons[entry.emoji]" />
+                <Meh v-else :size="14" class="text-accent" />
               </div>
             </template>
             <span class="text-[10px] text-txt-muted ml-1">recent</span>
           </div>
+          <div v-if="dashboardData?.mood.has_data" class="text-[10px] text-txt-muted mt-2">{{ dashboardData.mood.total }} total logs</div>
         </div>
 
-        <!-- Daily Challenges + Weekly Quests (right column on desktop) -->
+        <!-- Today's Challenges + Weekly Quests (col 2) -->
         <div class="flex flex-col gap-4">
 
         <!-- Daily Challenges -->
-        <div v-if="gamificationData && gamificationData.daily_challenges.length > 0" class="glass-card p-4 animate-fade-in">
-          <div class="flex items-center gap-2 mb-3">
+        <div v-if="gamificationData && gamificationData.daily_challenges.length > 0" class="glass-card p-5 animate-fade-in flex-1 flex flex-col">
+          <div class="flex items-center gap-2 mb-4">
             <Target :size="14" class="text-accent" />
             <span class="text-sm font-semibold text-txt-primary">Today's Challenges</span>
             <span class="ml-auto text-xs text-txt-muted">
-              {{ gamificationData.daily_challenges.filter(c => c.is_completed).length }}/{{ gamificationData.daily_challenges.length }} done
+              {{ gamificationData.daily_challenges.filter(c => c.is_completed).length }}/{{ gamificationData.daily_challenges.length }}
             </span>
           </div>
-          <div class="space-y-2">
+          <div class="space-y-2 flex-1">
             <div
               v-for="challenge in gamificationData.daily_challenges"
               :key="challenge.challenge_key"
-              class="flex items-center gap-3 py-2 px-3 rounded-xl transition-colors"
-              :class="challenge.is_completed ? 'bg-emerald-500/8' : 'bg-surface-3/60'"
+              class="flex items-center gap-3 py-2.5 px-3 rounded-xl transition-colors border"
+              :class="challenge.is_completed ? 'bg-success/8 border-success/10' : 'bg-surface-2/50 border-bdr/50'"
             >
               <CheckCircle2
                 v-if="challenge.is_completed"
                 :size="16"
-                class="flex-shrink-0 text-emerald-400"
+                class="flex-shrink-0 text-success"
               />
               <div
                 v-else
@@ -3528,40 +3527,40 @@ onUnmounted(() => {
                   :class="challenge.is_completed ? 'text-txt-muted line-through' : 'text-txt-primary'"
                 >{{ challenge.title }}</p>
                 <p class="text-[10px] text-txt-muted leading-tight mt-0.5">{{ challenge.description }}</p>
-                <p v-if="challenge.goal_connection" class="text-[9px] text-purple-400 leading-tight mt-0.5">Supports: {{ challenge.goal_connection }}</p>
+                <p v-if="challenge.goal_connection" class="text-[9px] text-accent-alt leading-tight mt-0.5">Supports: {{ challenge.goal_connection }}</p>
               </div>
               <span
                 class="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded leading-none"
-                :class="challenge.is_completed ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'"
+                :class="challenge.is_completed ? 'bg-success/15 text-success' : 'bg-accent/15 text-accent'"
               >+{{ challenge.xp_reward }} XP</span>
             </div>
           </div>
         </div>
 
         <!-- Weekly Quests -->
-        <div v-if="gamificationData && gamificationData.weekly_quests && gamificationData.weekly_quests.length > 0" class="glass-card p-4 animate-fade-in">
+        <div v-if="gamificationData && gamificationData.weekly_quests && gamificationData.weekly_quests.length > 0" class="glass-card p-5 animate-fade-in">
           <div class="flex items-center gap-2 mb-3">
-            <Star :size="14" class="text-purple-400" />
+            <Star :size="14" class="text-accent-alt" />
             <span class="text-sm font-semibold text-txt-primary">Weekly Quests</span>
             <span class="ml-auto text-xs text-txt-muted">
-              {{ gamificationData.weekly_quests.filter(q => q.is_completed).length }}/{{ gamificationData.weekly_quests.length }} done
+              {{ gamificationData.weekly_quests.filter(q => q.is_completed).length }}/{{ gamificationData.weekly_quests.length }}
             </span>
           </div>
           <div class="space-y-2">
             <div
               v-for="quest in gamificationData.weekly_quests"
               :key="quest.quest_key"
-              class="flex items-center gap-3 py-2.5 px-3 rounded-xl transition-colors"
-              :class="quest.is_completed ? 'bg-purple-500/8' : 'bg-surface-3/60 border border-purple-500/10'"
+              class="flex items-center gap-3 py-2.5 px-3 rounded-xl transition-colors border"
+              :class="quest.is_completed ? 'bg-accent-alt/8 border-accent-alt/10' : 'bg-surface-2/50 border-bdr/50'"
             >
               <CheckCircle2
                 v-if="quest.is_completed"
                 :size="16"
-                class="flex-shrink-0 text-purple-400"
+                class="flex-shrink-0 text-accent-alt"
               />
               <div
                 v-else
-                class="flex-shrink-0 w-4 h-4 rounded-full border-2 border-purple-400/40"
+                class="flex-shrink-0 w-4 h-4 rounded-full border-2 border-accent-alt/40"
               ></div>
               <div class="flex-1 min-w-0">
                 <p
@@ -3572,22 +3571,23 @@ onUnmounted(() => {
               </div>
               <span
                 class="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded leading-none"
-                :class="quest.is_completed ? 'bg-purple-500/15 text-purple-400' : 'bg-purple-500/15 text-purple-300'"
+                :class="quest.is_completed ? 'bg-accent-alt/15 text-accent-alt' : 'bg-accent-alt/15 text-accent-alt-bright'"
               >+{{ quest.xp_reward }} XP</span>
             </div>
           </div>
         </div>
 
-        </div><!-- /right column (challenges + quests) -->
-        </div><!-- /mood+challenges grid -->
+        </div><!-- /challenges+quests column -->
 
-        <!-- Weekly Narrative (AI-generated summary) — above insights for reading flow -->
-        <div class="mb-4">
-          <WeeklyNarrative :api="api" />
+        <!-- Week in Review (col 3) -->
+        <div class="flex flex-col">
+          <WeeklyNarrative :api="api" class="flex-1" />
         </div>
 
+        </div><!-- /main 3-col grid -->
+
         <!-- Contextual Insight Cards (Deepstash-style micro-learning) -->
-        <div v-if="insightCards.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+        <div v-if="insightCards.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <InsightCard
             v-for="card in insightCards"
             :key="card.key"
@@ -3599,73 +3599,74 @@ onUnmounted(() => {
           />
         </div>
 
-        <!-- Badges + XP Activity row -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <!-- Badges + XP Activity — single full-width card -->
+        <div v-if="gamificationData" class="glass-card p-5 animate-fade-in mb-6">
+          <div class="flex flex-col lg:flex-row lg:gap-6">
+            <!-- Badge Showcase -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-4">
+                <Trophy :size="14" class="text-accent" />
+                <span class="text-sm font-semibold text-txt-primary">Badges</span>
+                <span class="ml-auto text-xs text-txt-muted">
+                  {{ gamificationData.badges.filter(b => b.earned_at !== null).length }}/{{ ALL_BADGES.length }} earned
+                </span>
+              </div>
+              <div class="grid grid-cols-5 sm:grid-cols-7 md:grid-cols-8 lg:grid-cols-10 gap-2.5">
+                <div
+                  v-for="badge in ALL_BADGES"
+                  :key="badge.key"
+                  class="flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-all"
+                  :class="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at)
+                    ? 'bg-accent/8 border-accent/20 hover:border-accent/40'
+                    : 'bg-surface-2/40 border-bdr/30 opacity-40'"
+                  :title="badge.description"
+                >
+                  <component
+                    v-if="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at) && (badgeIcons[badge.key] || (badge.key.startsWith('prestige_') && prestigeIcons[(parseInt(badge.key.split('_')[1]) - 1) % prestigeIcons.length]))"
+                    :is="badgeIcons[badge.key] || prestigeIcons[(parseInt(badge.key.split('_')[1]) - 1) % prestigeIcons.length]"
+                    :size="24"
+                    :class="badge.key.startsWith('prestige_') ? 'text-accent-alt' : 'text-accent'"
+                  />
+                  <Lock v-else :size="18" class="text-txt-muted" />
+                  <span class="text-[9px] text-txt-muted text-center leading-tight line-clamp-2">{{ badge.title }}</span>
+                </div>
+              </div>
+            </div>
 
-        <!-- Badge Showcase (takes 2 cols on desktop) -->
-        <div v-if="gamificationData" class="glass-card p-4 animate-fade-in lg:col-span-2">
-          <div class="flex items-center gap-2 mb-3">
-            <Trophy :size="14" class="text-accent" />
-            <span class="text-sm font-semibold text-txt-primary">Badges</span>
-            <span class="ml-auto text-xs text-txt-muted">
-              {{ gamificationData.badges.filter(b => b.earned_at !== null).length }}/{{ ALL_BADGES.length }}
-            </span>
-          </div>
-          <div class="flex gap-2 overflow-x-auto pb-2 badge-scroll">
-            <div
-              v-for="badge in ALL_BADGES"
-              :key="badge.key"
-              class="flex-shrink-0 flex flex-col items-center gap-1 w-16 p-2 rounded-xl border transition-colors"
-              :class="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at)
-                ? 'bg-amber-500/8 border-amber-500/20'
-                : 'bg-surface-3/40 border-bdr/40 opacity-50'"
-              :title="badge.description"
-            >
-              <component
-                v-if="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at) && (badgeIcons[badge.key] || (badge.key.startsWith('prestige_') && prestigeIcons[(parseInt(badge.key.split('_')[1]) - 1) % prestigeIcons.length]))"
-                :is="badgeIcons[badge.key] || prestigeIcons[(parseInt(badge.key.split('_')[1]) - 1) % prestigeIcons.length]"
-                :size="22"
-                :class="badge.key.startsWith('prestige_') ? 'text-purple-400' : 'text-amber-400'"
-              />
-              <Lock v-else :size="18" class="text-txt-muted" />
-              <span class="text-[9px] text-txt-muted text-center leading-tight line-clamp-2">{{ badge.title }}</span>
+            <!-- XP Activity Feed (sidebar on desktop, stacked on mobile) -->
+            <div v-if="gamificationData.recent_xp.length > 0"
+              class="lg:w-56 flex-shrink-0 mt-4 pt-4 border-t border-bdr/50 lg:mt-0 lg:pt-0 lg:border-t-0 lg:border-l lg:border-bdr/50 lg:pl-6">
+              <div class="flex items-center gap-2 mb-3">
+                <Star :size="14" class="text-accent" />
+                <span class="text-sm font-semibold text-txt-primary">Recent XP</span>
+              </div>
+              <div class="space-y-2">
+                <div
+                  v-for="(entry, i) in gamificationData.recent_xp.slice(0, 5)"
+                  :key="i"
+                  class="flex items-center gap-2 py-1 px-2 rounded-lg bg-surface-2/40"
+                >
+                  <component
+                    v-if="xpSourceIcons[entry.source]"
+                    :is="xpSourceIcons[entry.source]"
+                    :size="11"
+                    class="flex-shrink-0 text-txt-muted"
+                  />
+                  <span class="text-[11px] font-semibold text-accent flex-shrink-0">+{{ entry.amount }}</span>
+                  <span class="text-[11px] text-txt-muted truncate">{{ stripEmoji(entry.description) }}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-
-        <!-- XP Activity Feed -->
-        <div v-if="gamificationData && gamificationData.recent_xp.length > 0" class="glass-card p-4 animate-fade-in">
-          <div class="flex items-center gap-2 mb-3">
-            <Star :size="14" class="text-accent" />
-            <span class="text-sm font-semibold text-txt-primary">Recent XP</span>
-          </div>
-          <div class="space-y-1.5">
-            <div
-              v-for="(entry, i) in gamificationData.recent_xp.slice(0, 5)"
-              :key="i"
-              class="flex items-center gap-2"
-            >
-              <component
-                v-if="xpSourceIcons[entry.source]"
-                :is="xpSourceIcons[entry.source]"
-                :size="12"
-                class="flex-shrink-0 text-txt-muted"
-              />
-              <span class="text-xs font-semibold text-amber-400 w-14 flex-shrink-0">+{{ entry.amount }} XP</span>
-              <span class="text-xs text-txt-muted truncate">{{ stripEmoji(entry.description) }}</span>
-            </div>
-          </div>
-        </div>
-
-        </div><!-- /badges+xp grid -->
 
         <!-- Analytics Dashboard (main visualization) -->
-        <div class="mb-4">
+        <div class="mb-6">
           <AnalyticsDashboard />
         </div>
 
         <!-- Module Cards Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
 
           <!-- HABITS CARD -->
           <button
@@ -3675,8 +3676,8 @@ onUnmounted(() => {
           >
             <div class="flex items-center justify-between mb-4">
               <div class="flex items-center gap-2.5">
-                <div class="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                  <TrendingUp :size="18" class="text-emerald-400" />
+                <div class="w-9 h-9 rounded-xl bg-success/10 flex items-center justify-center">
+                  <TrendingUp :size="18" class="text-success" />
                 </div>
                 <span class="text-sm font-semibold text-txt-primary">Habits</span>
               </div>
@@ -3692,7 +3693,7 @@ onUnmounted(() => {
                 <div class="w-full bg-surface-3 rounded-full h-2">
                   <div
                     class="h-2 rounded-full transition-all duration-700 ease-out"
-                    :class="dashboardData.habits.completion_rate >= 0.8 ? 'bg-emerald-500' : dashboardData.habits.completion_rate >= 0.5 ? 'bg-amber-500' : 'bg-surface-4'"
+                    :class="dashboardData.habits.completion_rate >= 0.8 ? 'bg-success' : dashboardData.habits.completion_rate >= 0.5 ? 'bg-accent' : 'bg-surface-4'"
                     :style="{ width: Math.round(dashboardData.habits.completion_rate * 100) + '%' }"
                   ></div>
                 </div>
@@ -3739,7 +3740,7 @@ onUnmounted(() => {
                     <span class="text-xs text-txt-muted ml-1">active</span>
                   </div>
                   <div v-if="dashboardData.goals.completed > 0">
-                    <span class="text-lg font-semibold text-emerald-400">{{ dashboardData.goals.completed }}</span>
+                    <span class="text-lg font-semibold text-success">{{ dashboardData.goals.completed }}</span>
                     <span class="text-xs text-txt-muted ml-1">done</span>
                   </div>
                 </div>
@@ -3850,8 +3851,8 @@ onUnmounted(() => {
                   class="w-7 h-7 rounded-lg bg-surface-3 flex items-center justify-center transition-transform hover:scale-110"
                   :title="entry.label + ' — ' + timeAgo(entry.date)"
                 >
-                  <component :is="moodIcons[entry.emoji]" :size="14" class="text-amber-400" v-if="moodIcons[entry.emoji]" />
-                  <Meh v-else :size="14" class="text-amber-400" />
+                  <component :is="moodIcons[entry.emoji]" :size="14" class="text-accent" v-if="moodIcons[entry.emoji]" />
+                  <Meh v-else :size="14" class="text-accent" />
                 </div>
               </template>
               <span class="text-xs text-txt-muted ml-1">recent moods</span>
@@ -3973,7 +3974,7 @@ onUnmounted(() => {
             <div class="w-full bg-surface-3 rounded-full h-2.5">
               <div
                 class="h-2.5 rounded-full transition-all duration-500"
-                :class="completionPercent === 100 ? 'bg-emerald-500' : 'bg-accent'"
+                :class="completionPercent === 100 ? 'bg-success' : 'bg-accent'"
                 :style="{ width: completionPercent + '%' }"
               />
             </div>
@@ -3985,13 +3986,13 @@ onUnmounted(() => {
               v-for="item in habitCheckin.habits"
               :key="item.habit.id"
               class="glass-card px-4 py-3 flex items-center gap-3 transition-all duration-200"
-              :class="item.logged ? 'ring-1 ring-emerald-500/30' : ''"
+              :class="item.logged ? 'ring-1 ring-success/30' : ''"
             >
               <button
                 @click="toggleHabit(item)"
                 class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0"
                 :class="item.logged
-                  ? 'bg-emerald-500 border-emerald-500 text-white'
+                  ? 'bg-success border-success text-white'
                   : 'border-bdr hover:border-accent'"
               >
                 <span v-if="item.logged" class="text-xs">&#10003;</span>
@@ -4018,7 +4019,7 @@ onUnmounted(() => {
               <button
                 v-if="item.habit.can_escalate && item.logged"
                 @click="escalateHabit(item.habit.id)"
-                class="text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors whitespace-nowrap"
+                class="text-[10px] text-success hover:text-success transition-colors whitespace-nowrap"
                 :title="`Level up to ${item.habit.full_target} ${item.habit.unit || ''}`"
               >
                 Ready for more
@@ -4033,12 +4034,12 @@ onUnmounted(() => {
               <button
                 @click="fetchHabitInsight"
                 :disabled="habitInsightLoading"
-                class="text-xs text-purple-400 hover:text-purple-300 transition-colors disabled:opacity-50"
+                class="text-xs text-accent-alt hover:text-accent-alt-bright transition-colors disabled:opacity-50"
               >
                 {{ habitInsightLoading ? 'Analyzing...' : 'Generate Insight' }}
               </button>
             </div>
-            <div v-if="habitInsightText" class="mt-3 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20 animate-fade-in">
+            <div v-if="habitInsightText" class="mt-3 p-3 rounded-lg bg-accent-alt/10 border border-accent-alt/20 animate-fade-in">
               <p class="text-xs text-txt-secondary leading-relaxed whitespace-pre-line">{{ habitInsightText }}</p>
             </div>
           </div>
@@ -4112,7 +4113,7 @@ onUnmounted(() => {
             <div class="w-full bg-surface-3 rounded-full h-1.5 mb-1.5">
               <div
                 class="h-1.5 rounded-full transition-all"
-                :class="day.completion_rate >= 1 ? 'bg-emerald-500' : day.completion_rate > 0 ? 'bg-accent' : 'bg-surface-3'"
+                :class="day.completion_rate >= 1 ? 'bg-success' : day.completion_rate > 0 ? 'bg-accent' : 'bg-surface-3'"
                 :style="{ width: Math.round(day.completion_rate * 100) + '%' }"
               />
             </div>
@@ -4265,7 +4266,7 @@ onUnmounted(() => {
             <button
               @click="toggleHabitActive(habit)"
               class="text-xs px-3 py-2 rounded transition-colors"
-              :class="habit.is_active ? 'text-amber-400 hover:bg-amber-400/10' : 'text-emerald-400 hover:bg-emerald-400/10'"
+              :class="habit.is_active ? 'text-accent hover:bg-accent-bright/10' : 'text-success hover:bg-success/10'"
             >
               {{ habit.is_active ? 'Deactivate' : 'Activate' }}
             </button>
@@ -4487,7 +4488,7 @@ onUnmounted(() => {
                     :class="isOverdue(goal.deadline)
                       ? 'bg-red-500/15 text-red-400'
                       : daysUntilDeadline(goal.deadline)! <= 7
-                        ? 'bg-amber-500/15 text-amber-400'
+                        ? 'bg-accent/15 text-accent'
                         : 'bg-surface-3 text-txt-muted'"
                   >
                     {{ deadlineLabel(goal.deadline) }}
@@ -4497,7 +4498,7 @@ onUnmounted(() => {
                     v-if="paceStatus(goal)"
                     class="text-[10px] px-1.5 py-0.5 rounded font-semibold"
                     :class="{
-                      'bg-emerald-500/15 text-emerald-400': paceStatus(goal) === 'ahead',
+                      'bg-success/15 text-success': paceStatus(goal) === 'ahead',
                       'bg-accent/15 text-accent': paceStatus(goal) === 'on-track',
                       'bg-red-500/15 text-red-400': paceStatus(goal) === 'behind',
                     }"
@@ -4532,7 +4533,7 @@ onUnmounted(() => {
                   <div class="w-full bg-surface-3 rounded-full h-1.5">
                     <div
                       class="h-1.5 rounded-full transition-all duration-500"
-                      :class="goalMilestonePct(goal) === 100 ? 'bg-emerald-500' : 'bg-accent'"
+                      :class="goalMilestonePct(goal) === 100 ? 'bg-success' : 'bg-accent'"
                       :style="{ width: goalMilestonePct(goal) + '%' }"
                     />
                   </div>
@@ -4552,7 +4553,7 @@ onUnmounted(() => {
               <!-- WOOP Psychology Fields -->
               <div v-if="goal.identity_statement || goal.obstacle || goal.implementation_plan" class="space-y-2 pb-2 border-b border-bdr/50">
                 <div v-if="goal.identity_statement" class="flex gap-2">
-                  <span class="text-[10px] font-bold uppercase text-purple-400 w-16 flex-shrink-0 pt-0.5">Identity</span>
+                  <span class="text-[10px] font-bold uppercase text-accent-alt w-16 flex-shrink-0 pt-0.5">Identity</span>
                   <p class="text-xs text-txt-secondary">{{ goal.identity_statement }}</p>
                 </div>
                 <div v-if="goal.obstacle" class="flex gap-2">
@@ -4560,7 +4561,7 @@ onUnmounted(() => {
                   <p class="text-xs text-txt-secondary">{{ goal.obstacle }}</p>
                 </div>
                 <div v-if="goal.implementation_plan" class="flex gap-2">
-                  <span class="text-[10px] font-bold uppercase text-emerald-400 w-16 flex-shrink-0 pt-0.5">Plan</span>
+                  <span class="text-[10px] font-bold uppercase text-success w-16 flex-shrink-0 pt-0.5">Plan</span>
                   <p class="text-xs text-txt-secondary">{{ goal.implementation_plan }}</p>
                 </div>
               </div>
@@ -4577,7 +4578,7 @@ onUnmounted(() => {
                       v-for="d in lh.days_total"
                       :key="d"
                       class="w-3 h-3 rounded-sm"
-                      :class="d <= lh.days_completed ? 'bg-emerald-500' : 'bg-surface-3'"
+                      :class="d <= lh.days_completed ? 'bg-success' : 'bg-surface-3'"
                     />
                   </div>
                   <span class="text-xs text-txt-muted w-8 text-right">{{ lh.days_completed }}/{{ lh.days_total }}</span>
@@ -4612,7 +4613,7 @@ onUnmounted(() => {
                     @click="toggleMilestone(goal.id, ms)"
                     class="w-4 h-4 rounded border flex items-center justify-center transition-all flex-shrink-0"
                     :class="ms.is_completed
-                      ? 'bg-emerald-500 border-emerald-500 text-white'
+                      ? 'bg-success border-success text-white'
                       : 'border-bdr hover:border-accent'"
                   >
                     <span v-if="ms.is_completed" class="text-[10px]">&#10003;</span>
@@ -4679,7 +4680,7 @@ onUnmounted(() => {
                 <button
                   @click="fetchGoalInsight(goal.id)"
                   :disabled="goalInsightLoading === goal.id"
-                  class="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                  class="text-xs text-accent-alt hover:text-accent-alt-bright transition-colors"
                 >
                   {{ goalInsightLoading === goal.id ? 'Analyzing...' : 'AI Insight' }}
                 </button>
@@ -4692,7 +4693,7 @@ onUnmounted(() => {
               </div>
 
               <!-- AI Insight display -->
-              <div v-if="goalInsights[goal.id]" class="mt-2 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+              <div v-if="goalInsights[goal.id]" class="mt-2 p-3 rounded-lg bg-accent-alt/10 border border-accent-alt/20">
                 <p class="text-xs text-txt-secondary leading-relaxed">{{ goalInsights[goal.id] }}</p>
               </div>
             </div>
@@ -4741,7 +4742,7 @@ onUnmounted(() => {
               >
                 <button
                   @click="toggleGoalComplete(goal)"
-                  class="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0"
+                  class="w-5 h-5 rounded-full bg-success flex items-center justify-center flex-shrink-0"
                 >
                   <span class="text-white text-xs">&#10003;</span>
                 </button>
@@ -4819,14 +4820,14 @@ onUnmounted(() => {
               <div class="flex-1 min-w-0">
                 <span class="text-sm font-medium text-txt-primary">{{ item.habit_name }}</span>
               </div>
-              <span class="text-sm font-medium" :class="item.this_week_count >= item.weekly_target ? 'text-emerald-400' : 'text-txt-muted'">
+              <span class="text-sm font-medium" :class="item.this_week_count >= item.weekly_target ? 'text-success' : 'text-txt-muted'">
                 {{ item.this_week_count }}/{{ item.weekly_target }}
               </span>
             </div>
             <div class="w-full bg-surface-3 rounded-full h-2">
               <div
                 class="h-2 rounded-full transition-all duration-500"
-                :class="item.progress_pct >= 100 ? 'bg-emerald-500' : 'bg-accent'"
+                :class="item.progress_pct >= 100 ? 'bg-success' : 'bg-accent'"
                 :style="{ width: Math.min(item.progress_pct, 100) + '%' }"
               />
             </div>
@@ -4898,10 +4899,10 @@ onUnmounted(() => {
 
       <!-- Extension status banner -->
       <div v-if="medView === 'new' && !medGenerating" class="mb-4 px-3 py-2 rounded-lg text-xs flex items-center gap-2"
-        :class="hasZugaExtension() ? 'bg-purple-500/10 text-purple-300' : 'bg-surface-2 text-txt-muted'"
+        :class="hasZugaExtension() ? 'bg-accent-alt/10 text-accent-alt-bright' : 'bg-surface-2 text-txt-muted'"
       >
         <template v-if="hasZugaExtension()">
-          <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+          <span class="w-2 h-2 rounded-full bg-accent-alt animate-pulse" />
           Extension active — meditation generates in the background, even if you leave this page.
         </template>
         <template v-else>
@@ -5060,7 +5061,7 @@ onUnmounted(() => {
               <button
                 @click="toggleMedFavorite"
                 class="text-xl transition-colors"
-                :class="medSession.is_favorite ? 'text-amber-400' : 'text-txt-muted hover:text-amber-400'"
+                :class="medSession.is_favorite ? 'text-accent' : 'text-txt-muted hover:text-accent'"
               >
                 {{ medSession.is_favorite ? '&#9733;' : '&#9734;' }}
               </button>
@@ -5168,7 +5169,7 @@ onUnmounted(() => {
           <button
             @click="medShowFavoritesOnly = !medShowFavoritesOnly"
             class="text-sm transition-colors"
-            :class="medShowFavoritesOnly ? 'text-amber-400' : 'text-txt-muted hover:text-txt-primary'"
+            :class="medShowFavoritesOnly ? 'text-accent' : 'text-txt-muted hover:text-txt-primary'"
           >
             {{ medShowFavoritesOnly ? '&#9733; Favorites' : '&#9734; All' }}
           </button>
@@ -5196,7 +5197,7 @@ onUnmounted(() => {
                 <span class="text-xs text-txt-muted">{{ getMedTypeLabel(s.type) }}</span>
                 <span class="text-xs text-txt-muted">{{ Math.floor(s.duration_seconds / 60) }}:{{ String(s.duration_seconds % 60).padStart(2, '0') }}</span>
                 <span v-if="s.mood_after" class="text-sm">{{ s.mood_after }}</span>
-                <span v-if="s.is_favorite" class="text-amber-400 text-xs">&#9733;</span>
+                <span v-if="s.is_favorite" class="text-accent text-xs">&#9733;</span>
               </div>
             </div>
             <button
@@ -5221,7 +5222,7 @@ onUnmounted(() => {
     <template v-if="activeTab === 'therapist'">
       <!-- Unavailable state -->
       <div v-if="!therapistAvailable" class="glass-card p-8 text-center">
-        <AlertTriangle :size="32" class="mx-auto mb-3 text-amber-400" />
+        <AlertTriangle :size="32" class="mx-auto mb-3 text-accent" />
         <h3 class="text-lg font-semibold text-txt-primary mb-2">Wellness Bot Unavailable</h3>
         <p class="text-sm text-txt-muted">The Wellness Bot is currently unreachable. Please try again later.</p>
         <button @click="fetchTherapistStatus()" class="mt-4 px-4 py-2 text-sm rounded-lg bg-accent/15 text-accent hover:bg-accent/25 transition-colors">
@@ -5258,9 +5259,9 @@ onUnmounted(() => {
           <!-- Pre-session: start button -->
           <div v-if="!therapistSessionActive" class="space-y-4">
             <!-- Disclaimer -->
-            <div v-if="therapistDisclaimer" class="glass-card p-4 border border-amber-500/20">
+            <div v-if="therapistDisclaimer" class="glass-card p-4 border border-accent/20">
               <div class="flex items-start gap-2">
-                <AlertTriangle :size="16" class="text-amber-400 mt-0.5 shrink-0" />
+                <AlertTriangle :size="16" class="text-accent mt-0.5 shrink-0" />
                 <p class="text-xs text-txt-muted leading-relaxed">{{ therapistDisclaimer }}</p>
               </div>
             </div>
@@ -5629,25 +5630,25 @@ onUnmounted(() => {
         <div v-if="!composeContent.trim() && dailyJournalPrompt" class="mb-5 animate-fade-in">
           <div class="relative p-5 rounded-xl border overflow-hidden transition-colors backdrop-blur-sm"
             :class="{
-              'bg-purple-500/6 border-purple-500/15': dailyJournalPrompt.category === 'expressive',
-              'bg-amber-500/6 border-amber-500/15': dailyJournalPrompt.category === 'gratitude',
-              'bg-cyan-500/6 border-cyan-500/15': dailyJournalPrompt.category === 'reflection',
+              'bg-accent-alt/6 border-accent-alt/15': dailyJournalPrompt.category === 'expressive',
+              'bg-accent/6 border-accent/15': dailyJournalPrompt.category === 'gratitude',
+              'bg-info/6 border-info/15': dailyJournalPrompt.category === 'reflection',
             }"
           >
             <!-- Side accent -->
             <div class="absolute top-0 left-0 bottom-0 w-[3px]"
               :class="{
-                'bg-gradient-to-b from-purple-400 to-purple-600': dailyJournalPrompt.category === 'expressive',
-                'bg-gradient-to-b from-amber-400 to-amber-600': dailyJournalPrompt.category === 'gratitude',
-                'bg-gradient-to-b from-cyan-400 to-cyan-600': dailyJournalPrompt.category === 'reflection',
+                'bg-gradient-to-b from-accent-alt to-accent-alt-dim': dailyJournalPrompt.category === 'expressive',
+                'bg-gradient-to-b from-accent-bright to-accent-dim': dailyJournalPrompt.category === 'gratitude',
+                'bg-gradient-to-b from-info to-info': dailyJournalPrompt.category === 'reflection',
               }"
             />
             <div class="pl-3">
               <p class="text-[9px] font-bold uppercase tracking-[0.15em] mb-2 opacity-70"
                 :class="{
-                  'text-purple-400': dailyJournalPrompt.category === 'expressive',
-                  'text-amber-400': dailyJournalPrompt.category === 'gratitude',
-                  'text-cyan-400': dailyJournalPrompt.category === 'reflection',
+                  'text-accent-alt': dailyJournalPrompt.category === 'expressive',
+                  'text-accent': dailyJournalPrompt.category === 'gratitude',
+                  'text-info': dailyJournalPrompt.category === 'reflection',
                 }"
               >Today's prompt &mdash; {{ dailyJournalPrompt.category }}</p>
               <p class="text-[15px] text-txt-primary font-medium mb-4 leading-relaxed">{{ dailyJournalPrompt.prompt }}</p>
@@ -5656,9 +5657,9 @@ onUnmounted(() => {
                   @click="usePrompt(dailyJournalPrompt!.prompt)"
                   class="px-4 py-2 text-xs font-semibold rounded-lg transition-all"
                   :class="{
-                    'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30': dailyJournalPrompt.category === 'expressive',
-                    'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30': dailyJournalPrompt.category === 'gratitude',
-                    'bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30': dailyJournalPrompt.category === 'reflection',
+                    'bg-accent-alt/20 text-accent-alt-bright hover:bg-accent-alt/30': dailyJournalPrompt.category === 'expressive',
+                    'bg-accent/20 text-accent-bright hover:bg-accent/30': dailyJournalPrompt.category === 'gratitude',
+                    'bg-info/20 text-info hover:bg-info/30': dailyJournalPrompt.category === 'reflection',
                   }"
                 >Use this prompt</button>
                 <button
@@ -5703,7 +5704,7 @@ onUnmounted(() => {
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
             </button>
             <span class="flex-1" />
-            <span v-if="contentLength > 0" class="text-xs" :class="contentLength > 45000 ? 'text-amber-400' : 'text-txt-muted'">{{ contentLength.toLocaleString() }}</span>
+            <span v-if="contentLength > 0" class="text-xs" :class="contentLength > 45000 ? 'text-accent' : 'text-txt-muted'">{{ contentLength.toLocaleString() }}</span>
           </div>
 
           <textarea
@@ -5855,7 +5856,7 @@ onUnmounted(() => {
       <div v-if="showTherapistLeaveWarning" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
         <div class="bg-surface-1 border border-white/[0.08] rounded-2xl p-6 max-w-sm mx-4 shadow-xl">
           <div class="flex items-center gap-3 mb-3">
-            <AlertTriangle class="w-5 h-5 text-amber-400 shrink-0" />
+            <AlertTriangle class="w-5 h-5 text-accent shrink-0" />
             <h3 class="text-lg font-semibold text-txt-primary">Active session</h3>
           </div>
           <p class="text-sm text-txt-secondary mb-5">
@@ -5896,9 +5897,9 @@ onUnmounted(() => {
     <!-- Billing Prompt Modal -->
     <Teleport to="body">
       <div v-if="showBillingPrompt" class="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="closeBillingPrompt">
-        <div class="glass-card p-6 max-w-md mx-4 border border-amber-500/30 text-center">
-          <div class="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
-            <Zap :size="24" class="text-amber-400" />
+        <div class="glass-card p-6 max-w-md mx-4 border border-accent/30 text-center">
+          <div class="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
+            <Zap :size="24" class="text-accent" />
           </div>
 
           <!-- Step 1: Prompt -->
@@ -5911,7 +5912,7 @@ onUnmounted(() => {
               <button @click="closeBillingPrompt" class="px-4 py-2 text-sm text-txt-muted hover:text-txt-primary transition-colors">
                 Later
               </button>
-              <button @click="goToBilling" class="px-4 py-2 text-sm font-medium bg-amber-500 text-black rounded-lg hover:bg-amber-400 transition-colors">
+              <button @click="goToBilling" class="px-4 py-2 text-sm font-medium bg-accent text-black rounded-lg hover:bg-accent-bright transition-colors">
                 Get Tokens
               </button>
             </div>
@@ -5928,15 +5929,15 @@ onUnmounted(() => {
                 :key="pack.id"
                 @click="tokenStore.buyPack(pack.id)"
                 :disabled="tokenStore.purchaseLoading !== null"
-                class="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-bdr hover:border-amber-500/50 hover:bg-amber-500/5 transition-all"
-                :class="{ 'ring-2 ring-amber-500': pack.id === 'best_value' }"
+                class="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-bdr hover:border-accent/50 hover:bg-accent/5 transition-all"
+                :class="{ 'ring-2 ring-accent': pack.id === 'best_value' }"
               >
                 <div class="flex items-center gap-3">
-                  <span class="text-lg font-bold text-amber-400">{{ pack.tokens.toLocaleString() }}</span>
+                  <span class="text-lg font-bold text-accent">{{ pack.tokens.toLocaleString() }}</span>
                   <span class="text-xs text-txt-muted">tokens</span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <span v-if="pack.id === 'best_value'" class="text-[10px] font-semibold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">Best Value</span>
+                  <span v-if="pack.id === 'best_value'" class="text-[10px] font-semibold uppercase tracking-wider text-accent bg-accent/10 px-2 py-0.5 rounded-full">Best Value</span>
                   <span class="text-sm font-semibold text-txt-primary">
                     ${{ (pack.price_cents / 100).toFixed(2) }}
                   </span>
@@ -5954,10 +5955,10 @@ onUnmounted(() => {
                   :key="tier.id"
                   @click="tokenStore.subscribeTier(tier.id)"
                   :disabled="tokenStore.purchaseLoading !== null"
-                  class="flex flex-col items-center px-3 py-3 rounded-xl border border-bdr hover:border-amber-500/50 hover:bg-amber-500/5 transition-all"
+                  class="flex flex-col items-center px-3 py-3 rounded-xl border border-bdr hover:border-accent/50 hover:bg-accent/5 transition-all"
                 >
                   <span class="text-xs font-semibold text-txt-primary capitalize">{{ tier.id }}</span>
-                  <span class="text-lg font-bold text-amber-400 mt-1">{{ tier.tokens_per_month.toLocaleString() }}</span>
+                  <span class="text-lg font-bold text-accent mt-1">{{ tier.tokens_per_month.toLocaleString() }}</span>
                   <span class="text-[10px] text-txt-muted">tokens/mo</span>
                   <span class="text-xs font-semibold text-txt-secondary mt-1">${{ (tier.price_cents / 100).toFixed(0) }}/mo</span>
                 </button>
@@ -6061,8 +6062,8 @@ onUnmounted(() => {
 }
 
 @keyframes banner-glow {
-  0%, 100% { box-shadow: 0 0 8px rgba(168, 85, 247, 0.1); }
-  50% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.25), 0 0 8px rgba(245, 158, 11, 0.15); }
+  0%, 100% { box-shadow: 0 0 8px rgb(var(--accent-alt) / 0.1); }
+  50% { box-shadow: 0 0 20px rgb(var(--accent-alt) / 0.25), 0 0 8px rgb(var(--accent) / 0.15); }
 }
 
 /* Skeleton loading placeholders */

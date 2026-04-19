@@ -12,6 +12,8 @@ VALID_THEMES = {
     "misty-forest", "soft-bokeh", "custom",
 }
 
+VALID_THEME_PRESETS = {"default", "tarot", "biblical"}
+
 VALID_VOICES = {"serene", "gentle", "whisper", "alloy", "echo", "fable", "onyx", "nova", "shimmer"}
 
 VALID_AMBIENCES = {"rain", "ocean", "forest", "bowls", "silence"}
@@ -22,6 +24,7 @@ class LifeSettingsResponse(BaseModel):
     timezone: str
     theme: str
     theme_opacity: float
+    theme_preset: str = "default"
     med_length: str = "medium"
     med_voice: str = "serene"
     med_ambience: str = "rain"
@@ -57,6 +60,7 @@ class LifeSettingsUpdate(BaseModel):
         return v
     theme: str | None = Field(None, max_length=30)
     theme_opacity: float | None = Field(None, ge=0.0, le=1.0)
+    theme_preset: str | None = Field(None, max_length=30)
     med_length: str | None = Field(None, max_length=10)
     med_voice: str | None = Field(None, max_length=20)
     med_ambience: str | None = Field(None, max_length=20)

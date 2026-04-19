@@ -4,11 +4,13 @@ GET  /api/life/settings  → return current settings (auto-create if missing)
 PUT  /api/life/settings  → upsert settings (partial update)
 GET  /api/life/settings/personalization → Zugabot/user personalization config
 PATCH /api/life/settings/personalization → update personalization (Zugabot or user)
+POST /api/life/internal/apply-theme → service-to-service theme application (Zugabot → ZugaLife)
 """
 
+import os
 import sys
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -23,6 +25,7 @@ LifeUserSettings = _models.LifeUserSettings
 LifeSettingsResponse = _schemas.LifeSettingsResponse
 LifeSettingsUpdate = _schemas.LifeSettingsUpdate
 VALID_THEMES = _schemas.VALID_THEMES
+VALID_THEME_PRESETS = _schemas.VALID_THEME_PRESETS
 VALID_VOICES = _schemas.VALID_VOICES
 VALID_AMBIENCES = _schemas.VALID_AMBIENCES
 
@@ -71,6 +74,8 @@ async def update_settings(
             raise HTTPException(400, f"Invalid voice. Allowed: {sorted(VALID_VOICES)}")
         if "med_ambience" in updates and updates["med_ambience"] not in VALID_AMBIENCES:
             raise HTTPException(400, f"Invalid ambience. Allowed: {sorted(VALID_AMBIENCES)}")
+        if "theme_preset" in updates and updates["theme_preset"] not in VALID_THEME_PRESETS:
+            raise HTTPException(400, f"Invalid theme preset. Allowed: {sorted(VALID_THEME_PRESETS)}")
 
         # Validate timezone
         if "timezone" in updates:
@@ -211,3 +216,43 @@ async def update_personalization(
         gamification_emphasis=settings.gamification_emphasis,
         personalization_source=settings.personalization_source,
     )
+
+
+# ── Internal Service Endpoint (Zugabot → ZugaLife) ─────────────────
+
+
+_SERVICE_KEY = os.environ.get("ZUGABOT_SERVICE_KEY", "")
+
+
+class InternalThemeRequest(BaseModel):
+    user_id: str = Field(..., description="Target user ID")
+    custom_colors: str = Field(..., description="JSON string with css + name + font")
+    theme_preset: str | None = Field(None, description="Optional preset ID to set")
+
+
+@router.post("/internal/apply-theme")
+async def internal_apply_theme(
+    body: InternalThemeRequest,
+    x_service_key: str = Header(alias="X-Service-Key", default=""),
+):
+    """Service-to-service endpoint for Zugabot to apply themes to a user's settings.
+
+    Authenticated via shared ZUGABOT_SERVICE_KEY env var (not user JWT).
+    This allows Manus to generate and apply themes from chat without needing
+    the user's auth token.
+    """
+    # Validate service key
+    if not _SERVICE_KEY or x_service_key != _SERVICE_KEY:
+        raise HTTPException(403, "Invalid service key")
+
+    async with get_session() as session:
+        settings = await _get_or_create_settings(session, body.user_id)
+        settings.custom_colors = body.custom_colors
+
+        if body.theme_preset and body.theme_preset in VALID_THEME_PRESETS:
+            settings.theme_preset = body.theme_preset
+
+        await session.flush()
+        await session.refresh(settings)
+
+    return {"status": "ok", "user_id": body.user_id, "applied": True}

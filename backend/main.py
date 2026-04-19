@@ -80,6 +80,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # SEO: block search indexing on all ZugaLife API responses.
+    # api.zugabot.ai is served by this backend and Googlebot was complaining
+    # about its root returning 404. noindex tells Google to drop the URL entirely.
+    @app.middleware("http")
+    async def _add_noindex_header(request, call_next):
+        response = await call_next(request)
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
+        return response
+
     # Auth routes from shared core
     from core.auth.routes import router as auth_router
 

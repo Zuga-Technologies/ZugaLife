@@ -21,6 +21,7 @@ class LifeUserSettings(Base, TimestampMixin):
     timezone: Mapped[str] = mapped_column(String(50), default="America/New_York")
     theme: Mapped[str] = mapped_column(String(30), default="default-dark")
     theme_opacity: Mapped[float] = mapped_column(Float, default=0.3)
+    theme_preset: Mapped[str] = mapped_column(String(30), default="default")
 
     # Meditation defaults
     med_length: Mapped[str] = mapped_column(String(10), default="medium")

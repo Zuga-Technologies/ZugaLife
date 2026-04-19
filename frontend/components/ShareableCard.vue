@@ -230,7 +230,7 @@ async function shareCard() {
             <!-- Name + Level -->
             <h2 class="text-xl font-bold text-txt-primary">{{ data.displayName || 'My Wellness Journey' }}</h2>
             <p class="text-sm font-semibold text-accent">Level {{ data.level }} — {{ data.levelName }}</p>
-            <p v-if="data.prestigeLevel > 0" class="text-xs font-semibold text-amber-400 mt-0.5">Prestige {{ data.prestigeLevel }}</p>
+            <p v-if="data.prestigeLevel > 0" class="text-xs font-semibold text-accent mt-0.5">Prestige {{ data.prestigeLevel }}</p>
 
             <!-- XP bar -->
             <div class="mt-3 mb-1">

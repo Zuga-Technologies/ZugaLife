@@ -278,7 +278,7 @@ function finish(tab?: string) {
 
               <!-- Success feedback -->
               <transition name="fade">
-                <div v-if="moodLogged" class="flex items-center gap-2 text-emerald-400 text-sm font-medium">
+                <div v-if="moodLogged" class="flex items-center gap-2 text-success text-sm font-medium">
                   <Check :size="16" />
                   First mood logged!
                 </div>
@@ -289,8 +289,8 @@ function finish(tab?: string) {
           <!-- ─── Step 2: AI Insight ──────────────────────── -->
           <template v-else-if="currentStep === 2">
             <div class="flex-1 flex flex-col items-center justify-center text-center">
-              <div class="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center mb-5">
-                <Sparkles :size="24" class="text-purple-400" />
+              <div class="w-12 h-12 rounded-2xl bg-accent-alt/10 flex items-center justify-center mb-5">
+                <Sparkles :size="24" class="text-accent-alt" />
               </div>
               <h2 class="text-xl font-bold text-txt-primary mb-2">
                 A thought for you
@@ -351,8 +351,8 @@ function finish(tab?: string) {
           <!-- ─── Step 4: Done ────────────────────────────── -->
           <template v-else-if="currentStep === 4">
             <div class="flex-1 flex flex-col items-center justify-center text-center">
-              <div class="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-5">
-                <Check :size="28" class="text-emerald-400" />
+              <div class="w-14 h-14 rounded-2xl bg-success/10 flex items-center justify-center mb-5">
+                <Check :size="28" class="text-success" />
               </div>
               <h2 class="text-xl font-bold text-txt-primary mb-3">
                 You're all set

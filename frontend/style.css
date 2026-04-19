@@ -1,3 +1,4 @@
+@import '../core/frontend/theme/theme-vars.css';
 @import '../core/frontend/theme/base.css';
 
 @tailwind base;

@@ -53,16 +53,16 @@ function toggleSection(key: string) {
 // Helpers
 function valenceColor(val: number | null): string {
   if (val === null) return 'text-txt-muted'
-  if (val >= 2) return 'text-emerald-400'
+  if (val >= 2) return 'text-success'
   if (val >= 0.5) return 'text-sky-400'
   if (val >= -0.5) return 'text-txt-secondary'
-  if (val >= -2) return 'text-amber-400'
+  if (val >= -2) return 'text-accent'
   return 'text-red-400'
 }
 
 function deltaColor(val: number): string {
-  if (val > 0.3) return 'text-emerald-400'
-  if (val > 0) return 'text-emerald-400/70'
+  if (val > 0.3) return 'text-success'
+  if (val > 0) return 'text-success/70'
   if (val > -0.3) return 'text-txt-muted'
   return 'text-red-400'
 }
@@ -83,16 +83,16 @@ const trendIcon = computed(() => {
 const trendColor = computed(() => {
   if (!data.value?.trend) return 'text-txt-muted'
   const d = data.value.trend.direction
-  if (d === 'improving') return 'text-emerald-400'
-  if (d === 'slightly_improving') return 'text-emerald-400/70'
+  if (d === 'improving') return 'text-success'
+  if (d === 'slightly_improving') return 'text-success/70'
   if (d === 'declining') return 'text-red-400'
-  if (d === 'slightly_declining') return 'text-amber-400'
+  if (d === 'slightly_declining') return 'text-accent'
   return 'text-txt-secondary'
 })
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="space-y-6">
     <!-- Loading -->
     <div v-if="loading" class="flex items-center justify-center py-12">
       <Loader2 :size="24" class="text-accent animate-spin" />
@@ -107,10 +107,19 @@ const trendColor = computed(() => {
     </div>
 
     <!-- No data -->
-    <div v-else-if="!data || data.total_entries < 3" class="glass-card p-6 text-center">
-      <Activity :size="32" class="mx-auto text-txt-muted mb-3" />
-      <p class="text-sm text-txt-muted">Log a few moods and habits to unlock analytics.</p>
-      <p class="text-xs text-txt-muted mt-1">Need at least 3 mood entries to start.</p>
+    <div v-else-if="!data || data.total_entries < 3" class="glass-card p-8 text-center">
+      <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4">
+        <Activity :size="24" class="text-accent" />
+      </div>
+      <p class="text-sm font-medium text-txt-primary mb-1">Unlock your analytics</p>
+      <p class="text-xs text-txt-muted max-w-xs mx-auto">Log a few moods and habits to see trends, forecasts, and personalized insights.</p>
+      <p class="text-[10px] text-txt-muted mt-3">{{ data?.total_entries || 0 }}/3 mood entries logged</p>
+      <div class="w-24 bg-surface-3 rounded-full h-1.5 mx-auto mt-2 overflow-hidden">
+        <div
+          class="h-1.5 rounded-full bg-accent transition-all"
+          :style="{ width: Math.min(100, Math.round(((data?.total_entries || 0) / 3) * 100)) + '%' }"
+        ></div>
+      </div>
     </div>
 
     <!-- Analytics -->
@@ -136,8 +145,8 @@ const trendColor = computed(() => {
             <span class="text-xs text-txt-muted">Stability</span>
           </div>
           <p class="text-lg font-bold" :class="{
-            'text-emerald-400': data.volatility.level === 'low',
-            'text-amber-400': data.volatility.level === 'moderate',
+            'text-success': data.volatility.level === 'low',
+            'text-accent': data.volatility.level === 'moderate',
             'text-red-400': data.volatility.level === 'high',
             'text-txt-muted': !data.volatility.current_volatility,
           }">
@@ -176,7 +185,7 @@ const trendColor = computed(() => {
           >
             <div
               class="w-full rounded-t transition-all"
-              :class="day.avg_valence != null ? (day.avg_valence >= 1 ? 'bg-emerald-500/60' : day.avg_valence >= 0 ? 'bg-sky-500/40' : 'bg-amber-500/40') : 'bg-surface-3'"
+              :class="day.avg_valence != null ? (day.avg_valence >= 1 ? 'bg-success/60' : day.avg_valence >= 0 ? 'bg-sky-500/40' : 'bg-accent/40') : 'bg-surface-3'"
               :style="{ height: day.avg_valence != null ? Math.max(4, ((day.avg_valence + 3) / 6) * 48) + 'px' : '4px' }"
             ></div>
             <span class="text-[9px] text-txt-muted">{{ day.day.slice(0, 2) }}</span>
@@ -187,7 +196,7 @@ const trendColor = computed(() => {
       <!-- Habit Correlations -->
       <div class="glass-card overflow-hidden">
         <button @click="toggleSection('habits')" class="w-full flex items-center gap-2 p-4 text-left hover:bg-surface-2/30 transition-colors">
-          <Flame :size="14" class="text-emerald-400" />
+          <Flame :size="14" class="text-success" />
           <span class="text-xs font-medium text-txt-primary flex-1">Habit Impact</span>
           <component :is="expandedSections.has('habits') ? ChevronDown : ChevronRight" :size="14" class="text-txt-muted" />
         </button>
@@ -200,7 +209,7 @@ const trendColor = computed(() => {
               <div class="flex-1 h-3 bg-surface-3 rounded-full overflow-hidden relative">
                 <div
                   class="h-full rounded-full transition-all"
-                  :class="h.delta > 0 ? 'bg-emerald-500/70' : 'bg-red-500/50'"
+                  :class="h.delta > 0 ? 'bg-success/70' : 'bg-red-500/50'"
                   :style="{ width: barWidth(h.delta, 3) }"
                 ></div>
               </div>
@@ -216,7 +225,7 @@ const trendColor = computed(() => {
               <div class="flex-1 h-3 bg-surface-3 rounded-full overflow-hidden">
                 <div
                   class="h-full rounded-full transition-all"
-                  :class="h.r > 0 ? 'bg-sky-500/70' : 'bg-amber-500/50'"
+                  :class="h.r > 0 ? 'bg-sky-500/70' : 'bg-accent/50'"
                   :style="{ width: barWidth(h.r, 1) }"
                 ></div>
               </div>
@@ -233,11 +242,11 @@ const trendColor = computed(() => {
               <span class="text-xs text-txt-secondary w-24 truncate">{{ h.habit_name }}</span>
               <div class="flex-1 h-3 bg-surface-3 rounded-full overflow-hidden">
                 <div
-                  class="h-full rounded-full bg-orange-500/60 transition-all"
+                  class="h-full rounded-full bg-streak/60 transition-all"
                   :style="{ width: barWidth(h.r, 1) }"
                 ></div>
               </div>
-              <span class="text-xs font-mono w-16 text-right" :class="h.significant ? 'text-orange-400' : 'text-txt-muted'">
+              <span class="text-xs font-mono w-16 text-right" :class="h.significant ? 'text-streak' : 'text-txt-muted'">
                 r={{ h.r }}{{ h.significant ? '*' : '' }}
               </span>
             </div>
@@ -329,7 +338,7 @@ const trendColor = computed(() => {
       <!-- Lagged Effects -->
       <div v-if="data.lagged_correlations?.factors?.length" class="glass-card overflow-hidden">
         <button @click="toggleSection('lagged')" class="w-full flex items-center gap-2 p-4 text-left hover:bg-surface-2/30 transition-colors">
-          <ArrowRight :size="14" class="text-amber-400" />
+          <ArrowRight :size="14" class="text-accent" />
           <span class="text-xs font-medium text-txt-primary flex-1">Delayed Effects (Today → Tomorrow)</span>
           <component :is="expandedSections.has('lagged') ? ChevronDown : ChevronRight" :size="14" class="text-txt-muted" />
         </button>
@@ -340,8 +349,8 @@ const trendColor = computed(() => {
               <span
                 class="text-[10px] px-1.5 py-0.5 rounded"
                 :class="{
-                  'bg-amber-500/15 text-amber-400': f.effect_timing === 'delayed',
-                  'bg-emerald-500/15 text-emerald-400': f.effect_timing === 'immediate',
+                  'bg-accent/15 text-accent': f.effect_timing === 'delayed',
+                  'bg-success/15 text-success': f.effect_timing === 'immediate',
                   'bg-sky-500/15 text-sky-400': f.effect_timing === 'both',
                 }"
               >{{ f.effect_timing }}</span>

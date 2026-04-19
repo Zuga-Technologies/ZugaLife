@@ -88,7 +88,7 @@ const levelNames: Record<number, string> = {
           </button>
           <div class="cel-modal__shine" />
           <div class="cel-badge-icon">
-            <component v-if="badgeIcons[activeBadge.badge_key]" :is="badgeIcons[activeBadge.badge_key]" :size="48" class="text-purple-400" />
+            <component v-if="badgeIcons[activeBadge.badge_key]" :is="badgeIcons[activeBadge.badge_key]" :size="48" class="text-accent-alt" />
           </div>
           <div class="cel-modal__label">You've proven something</div>
           <div class="cel-modal__title">{{ activeBadge.title }}</div>
@@ -131,7 +131,7 @@ const levelNames: Record<number, string> = {
           </button>
           <div class="cel-modal__shine cel-modal__shine--prestige" />
           <div class="cel-prestige-badge">
-            <component :is="prestigeIcons[(activePrestige.newPrestigeLevel - 1) % prestigeIcons.length]" :size="56" class="text-purple-400" />
+            <component :is="prestigeIcons[(activePrestige.newPrestigeLevel - 1) % prestigeIcons.length]" :size="56" class="text-accent-alt" />
           </div>
           <div class="cel-prestige-tier">Prestige {{ activePrestige.newPrestigeLevel }}</div>
           <div class="cel-modal__label cel-modal__label--prestige">Ascension Complete</div>

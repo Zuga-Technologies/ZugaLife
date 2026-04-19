@@ -108,14 +108,15 @@ async def _goal_to_response(
     session, goal: GoalDefinition, user_id: str,
 ) -> GoalResponse:
     """Convert a GoalDefinition ORM instance to a response with milestone counts and linked habits."""
-    # Deduplicate milestones by ID — selectin loading with async sessions
-    # can occasionally return duplicates when multiple eager relationships exist.
-    seen_ids: set[int] = set()
-    milestones = []
-    for m in (goal.milestones or []):
-        if m.id not in seen_ids:
-            seen_ids.add(m.id)
-            milestones.append(m)
+    # Explicitly query milestones by goal_id instead of relying on selectin
+    # relationship loading, which can misassign milestones across goals in
+    # async sessions (observed as swapped milestone lists).
+    ms_result = await session.execute(
+        select(GoalMilestone)
+        .where(GoalMilestone.goal_id == goal.id)
+        .order_by(GoalMilestone.sort_order)
+    )
+    milestones = list(ms_result.scalars().all())
     linked_habits = await _build_linked_habits(session, goal, user_id)
 
     return GoalResponse(
@@ -229,6 +230,7 @@ async def create_from_template(
             goal.habit_links.append(GoalHabitLink(habit_id=habit.id))
 
         await session.flush()
+        await session.refresh(goal)
 
         return await _goal_to_response(session, goal, user.id)
 

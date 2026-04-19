@@ -13,10 +13,10 @@ const emit = defineEmits<{
 }>()
 
 const categoryConfig: Record<string, { icon: any; color: string; glow: string; accentRgb: string }> = {
-  neuroscience: { icon: Brain, color: 'text-purple-400', glow: 'rgba(139, 92, 246, 0.15)', accentRgb: '139, 92, 246' },
-  psychology: { icon: Lightbulb, color: 'text-amber-400', glow: 'rgba(245, 158, 11, 0.15)', accentRgb: '245, 158, 11' },
-  research: { icon: BookOpen, color: 'text-cyan-400', glow: 'rgba(6, 182, 212, 0.15)', accentRgb: '6, 182, 212' },
-  pattern: { icon: BarChart3, color: 'text-emerald-400', glow: 'rgba(16, 185, 129, 0.15)', accentRgb: '16, 185, 129' },
+  neuroscience: { icon: Brain, color: 'text-accent-alt', glow: 'rgb(var(--accent-alt) / 0.15)', accentRgb: 'var(--accent-alt)' },
+  psychology: { icon: Lightbulb, color: 'text-accent', glow: 'rgb(var(--accent) / 0.15)', accentRgb: 'var(--accent)' },
+  research: { icon: BookOpen, color: 'text-info', glow: 'rgb(var(--color-info) / 0.15)', accentRgb: 'var(--color-info)' },
+  pattern: { icon: BarChart3, color: 'text-success', glow: 'rgb(var(--color-success) / 0.15)', accentRgb: 'var(--color-success)' },
 }
 
 const config = categoryConfig[props.category] || categoryConfig.psychology
@@ -61,17 +61,16 @@ const config = categoryConfig[props.category] || categoryConfig.psychology
 <style scoped>
 .insight-card {
   position: relative;
-  border-radius: 0.875rem;
-  background: rgba(15, 15, 28, 0.6);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(var(--accent-rgb), 0.12);
+  border-radius: 0.75rem;
+  background: rgba(17, 17, 17, 0.75);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(38, 38, 38, 1);
   overflow: hidden;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s;
 }
 
 .insight-card:hover {
   border-color: rgba(var(--accent-rgb), 0.25);
-  box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.08);
 }
 
 .insight-accent {
