@@ -1,6 +1,9 @@
 """ZugaLife standalone backend — food truck mode.
 
-Run: cd ZugaLife/backend && python -m uvicorn main:app --port 8001
+Run: cd ZugaLife/backend && python -m uvicorn main:app --port $PORT
+
+PORT env var is canonical (MM launchctl + Railway both set it). The default
+in config.py is a local-dev fallback only.
 """
 
 import logging

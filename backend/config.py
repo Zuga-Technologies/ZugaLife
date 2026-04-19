@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     app_name: str = "ZugaLife"
     debug: bool = False
     host: str = "0.0.0.0"
+    # local-dev fallback; PORT env var overrides in MM (launchctl) + Railway
     port: int = 8001
     database_url: str = "sqlite+aiosqlite:///data/zugalife.db"
     allowed_origins: list[str] = [
