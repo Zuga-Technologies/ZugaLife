@@ -263,6 +263,19 @@ class ZugaLifePlugin(StudioPlugin):
                 # preset-seeding still worked, but `create_habit` explicitly
                 # sets trigger=None and would 500 on stale DBs.)
                 "ALTER TABLE habit_definitions ADD COLUMN trigger VARCHAR(200)",
+                # Session 4 cross-module migration sweep (2026-04-19). Five
+                # additive ALTERs surfaced by a disciplined model-vs-live
+                # PRAGMA diff across all 24 ZugaLife domain tables. Same
+                # class of drift as the journal.tags + habits.trigger misses
+                # from Session 3 — feature model edits landed without the
+                # matching migration, so stale DBs would 500 on the next
+                # INSERT that touches the column. Railway fresh-create
+                # already has them; MM stale DBs pick them up on next boot.
+                "ALTER TABLE life_user_settings ADD COLUMN custom_colors TEXT",
+                "ALTER TABLE therapist_session_notes ADD COLUMN mood_before VARCHAR(32)",
+                "ALTER TABLE therapist_session_notes ADD COLUMN mood_after VARCHAR(32)",
+                "ALTER TABLE therapist_session_notes ADD COLUMN rating INTEGER",
+                "ALTER TABLE life_weekly_quests ADD COLUMN completion_source VARCHAR(50)",
             ]
             for sql in additive_migrations:
                 try:
