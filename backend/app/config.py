@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     )
 
     # AI Gateway API keys
-    anthropic_api_key: str = ""
     openai_api_key: str = ""
     venice_api_key: str = ""
 
@@ -31,9 +30,6 @@ class Settings(BaseSettings):
     # env var is set. Previous ZugaLife meditations (pre-2026-04-19) all
     # rendered via OpenAI because this field was missing.
     cartesia_api_key: str = ""
-
-    # Budget
-    daily_budget_limit: float = 10.0
 
 
 settings = Settings()
