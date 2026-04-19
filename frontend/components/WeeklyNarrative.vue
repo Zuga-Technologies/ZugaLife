@@ -18,7 +18,10 @@ interface NarrativeResponse {
 }
 
 const data = ref<NarrativeResponse | null>(null)
-const loading = ref(false)
+// Initialize to true so the "Synthesizing..." state shows from first render
+// until onMounted-triggered fetchNarrative resolves. Without this the empty-
+// state "Keep tracking throughout the week" flashes for one microtask tick.
+const loading = ref(true)
 const error = ref<string | null>(null)
 
 async function fetchNarrative() {

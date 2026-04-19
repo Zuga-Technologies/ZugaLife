@@ -542,8 +542,30 @@ onMounted(async () => {
         </div>
       </div>
 
+      <!-- XP + Level + Streak Bar — skeleton while /api/life/gamification is in flight
+           (including post-HMR refetch on dev server). Matches final shape so no layout shift. -->
+      <div v-if="!gamificationData" class="glass-card p-5 mb-6 animate-pulse" aria-hidden="true">
+        <div class="flex items-center gap-3">
+          <div class="flex-shrink-0 flex flex-col items-center gap-1">
+            <div class="w-12 h-12 rounded-2xl bg-surface-3"></div>
+            <div class="h-2 w-12 rounded bg-surface-3"></div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between mb-2">
+              <div class="h-3 w-24 rounded bg-surface-3"></div>
+              <div class="h-3 w-16 rounded bg-surface-3"></div>
+            </div>
+            <div class="w-full bg-surface-3 rounded-full h-2"></div>
+          </div>
+          <div class="flex-shrink-0 flex flex-col items-center gap-1">
+            <div class="h-4 w-12 rounded bg-surface-3"></div>
+            <div class="h-2 w-16 rounded bg-surface-3"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- XP + Level + Streak Bar -->
-      <div v-if="gamificationData" class="glass-card p-5 mb-6 animate-fade-in">
+      <div v-else class="glass-card p-5 mb-6 animate-fade-in">
         <div class="flex items-center gap-3">
           <!-- Level badge + prestige stars -->
           <div class="flex-shrink-0 flex flex-col items-center gap-0.5">
@@ -736,8 +758,29 @@ onMounted(async () => {
       <!-- Today's Challenges + Weekly Quests (col 2) -->
       <div class="flex flex-col gap-4">
 
+      <!-- Daily Challenges — skeleton while gamification fetch is in flight.
+           First-of-day requests can trigger on-demand Venice challenge generation (2–5s)
+           if the prewarm scheduler hasn't landed today's set yet. -->
+      <div v-if="!gamificationData" class="glass-card p-5 animate-pulse flex-1 flex flex-col" aria-hidden="true">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-3.5 h-3.5 rounded bg-surface-3"></div>
+          <div class="h-3 w-32 rounded bg-surface-3"></div>
+          <div class="ml-auto h-3 w-8 rounded bg-surface-3"></div>
+        </div>
+        <div class="space-y-2 flex-1">
+          <div v-for="i in 3" :key="i" class="flex items-center gap-3 py-2.5 px-3 rounded-xl bg-surface-2/50 border border-bdr/50">
+            <div class="w-4 h-4 rounded-full bg-surface-3 flex-shrink-0"></div>
+            <div class="flex-1 flex flex-col gap-1.5">
+              <div class="h-3 w-24 rounded bg-surface-3"></div>
+              <div class="h-2 w-36 rounded bg-surface-3"></div>
+            </div>
+            <div class="h-4 w-12 rounded bg-surface-3 flex-shrink-0"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Daily Challenges -->
-      <div v-if="gamificationData && gamificationData.daily_challenges.length > 0" class="glass-card p-5 animate-fade-in flex-1 flex flex-col">
+      <div v-else-if="gamificationData.daily_challenges.length > 0" class="glass-card p-5 animate-fade-in flex-1 flex flex-col">
         <div class="flex items-center gap-2 mb-4">
           <Target :size="14" class="text-accent" />
           <span class="text-sm font-semibold text-txt-primary">Today's Challenges</span>
