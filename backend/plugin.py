@@ -223,17 +223,15 @@ class ZugaLifePlugin(StudioPlugin):
         async with get_engine().begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
-            # Migrate existing tables: add new columns that create_all can't add
-            # to already-existing tables.  Each ALTER is wrapped in try/except
-            # so it's safe to run repeatedly (idempotent).
-            migrations = [
+            # Additive ALTERs — idempotent. SQLite raises "duplicate column"
+            # when the column already exists; that's the only expected
+            # exception. Alembic migration queued post-baseline.
+            additive_migrations = [
                 "ALTER TABLE life_user_settings ADD COLUMN med_length VARCHAR(10) DEFAULT 'medium'",
                 "ALTER TABLE meditation_sessions ADD COLUMN length VARCHAR(10) DEFAULT 'medium'",
                 "ALTER TABLE meditation_sessions ADD COLUMN duration_seconds INTEGER DEFAULT 0",
                 "ALTER TABLE meditation_sessions ADD COLUMN status VARCHAR(20) DEFAULT 'ready'",
                 "ALTER TABLE meditation_sessions ADD COLUMN error_message VARCHAR(500)",
-                # Drop legacy column that blocks inserts (NOT NULL, no default, not in model)
-                "ALTER TABLE meditation_sessions DROP COLUMN duration_minutes",
                 # Gamification: AI challenges + auto-completion
                 "ALTER TABLE life_daily_challenges ADD COLUMN is_ai_generated BOOLEAN DEFAULT FALSE",
                 "ALTER TABLE life_daily_challenges ADD COLUMN completion_source VARCHAR(50)",
@@ -256,11 +254,28 @@ class ZugaLifePlugin(StudioPlugin):
                 # Theme preset system (color scheme + typography + mood icons)
                 "ALTER TABLE life_user_settings ADD COLUMN theme_preset VARCHAR(30) DEFAULT 'default'",
             ]
-            for sql in migrations:
+            for sql in additive_migrations:
                 try:
                     await conn.execute(__import__("sqlalchemy").text(sql))
                 except Exception:
                     pass  # column already exists
+
+            # LEGACY ONE-SHOT DROP (2026-03) — destructive, isolated on purpose.
+            # Originally removed because `duration_minutes` was NOT NULL, had no
+            # default, and was not in the SQLAlchemy model, so inserts failed.
+            # Now replaced by `duration_seconds` everywhere.
+            #
+            # ⚠ FOOTGUN: because this runs every startup inside try/except, if a
+            # future migration ever reintroduces a column named `duration_minutes`
+            # for a different purpose, this DROP will execute and silently destroy
+            # that column on every prod boot. Rename the new column or remove
+            # this block first.
+            try:
+                await conn.execute(__import__("sqlalchemy").text(
+                    "ALTER TABLE meditation_sessions DROP COLUMN duration_minutes"
+                ))
+            except Exception:
+                pass  # already dropped (expected on all prod DBs since 2026-03)
 
         logger.info("ZugaLife tables initialized (mood + settings + journal + habits + goals + meditation + therapist + gamification)")
 
