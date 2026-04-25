@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@core': resolve(__dirname, '../core/frontend'),
+      '@core': resolve(__dirname, '../../ZugaCore/frontend'),
     },
     dedupe: ['vue', 'pinia', 'vue-router'],
   },
