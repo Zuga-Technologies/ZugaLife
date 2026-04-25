@@ -306,6 +306,51 @@ class ZugaLifePlugin(StudioPlugin):
         if _ecosystem and hasattr(_ecosystem, "register_event_handler"):
             _ecosystem.register_event_handler()
 
+        # Register webhook event catalog. ImportError is swallowed for
+        # standalone (food-truck) topology where ZugaApp's event_bus is absent.
+        try:
+            from core.events.bus import event_bus
+            event_bus.register_catalog("life", [
+                {
+                    "type": "life:habit_completed",
+                    "description": "User completed a tracked habit",
+                    "data_schema": {
+                        "habit_id": "int",
+                        "habit_name": "str",
+                        "log_date": "str",
+                    },
+                },
+                {
+                    "type": "life:goal_completed",
+                    "description": "User marked a goal complete",
+                    "data_schema": {
+                        "goal_id": "int",
+                        "title": "str",
+                    },
+                },
+                {
+                    "type": "life:mood_logged",
+                    "description": "User logged a mood entry",
+                    "data_schema": {
+                        "emoji": "str",
+                        "label": "str",
+                        "note": "str",
+                        "streak": "int",
+                    },
+                },
+                {
+                    "type": "life:journal_created",
+                    "description": "User created a journal entry",
+                    "data_schema": {
+                        "entry_id": "int",
+                        "title": "str",
+                        "mood_emoji": "str",
+                    },
+                },
+            ])
+        except ImportError:
+            pass
+
         # Arm the daily challenge / weekly quest pre-warm scheduler so the
         # dashboard read path no longer triggers LLM generation on the first
         # request of the day. Task handle is stashed for on_shutdown cancel.
