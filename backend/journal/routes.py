@@ -133,8 +133,8 @@ async def create_journal_entry(
 
         # Emit webhook event (fire-and-forget)
         try:
-            from core.events.bus import event_bus
-            asyncio.create_task(event_bus.emit("life:journal_created", {
+            from core.events.proxy import emit
+            asyncio.create_task(emit("life:journal_created", {
                 "entry_id": entry.id,
                 "title": body.title or "Untitled",
                 "mood_emoji": body.mood_emoji,

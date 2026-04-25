@@ -441,8 +441,8 @@ async def log_habit(
         # Emit webhook event for completed habits (fire-and-forget)
         if body.completed:
             try:
-                from core.events.bus import event_bus
-                asyncio.create_task(event_bus.emit("life:habit_completed", {
+                from core.events.proxy import emit
+                asyncio.create_task(emit("life:habit_completed", {
                     "habit_id": habit.id,
                     "habit_name": habit.name,
                     "log_date": str(log_date),

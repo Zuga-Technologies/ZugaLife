@@ -361,8 +361,8 @@ async def toggle_goal_complete(
         # Emit webhook event for goal completion (fire-and-forget)
         if goal.is_completed:
             try:
-                from core.events.bus import event_bus
-                asyncio.create_task(event_bus.emit("life:goal_completed", {
+                from core.events.proxy import emit
+                asyncio.create_task(emit("life:goal_completed", {
                     "goal_id": goal.id,
                     "title": goal.title,
                 }, user_id=user.id))

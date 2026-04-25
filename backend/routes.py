@@ -114,8 +114,8 @@ async def log_mood(
 
         # Emit webhook event (fire-and-forget)
         try:
-            from core.events.bus import event_bus
-            asyncio.create_task(event_bus.emit("life:mood_logged", {
+            from core.events.proxy import emit
+            asyncio.create_task(emit("life:mood_logged", {
                 "emoji": body.emoji.value,
                 "label": label,
                 "note": body.note or "",
