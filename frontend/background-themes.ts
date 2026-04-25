@@ -60,6 +60,11 @@ export const THEMES: ThemeDefinition[] = [
 ]
 
 // --- AI Ambient helpers ---
+// Note: the 'theme' values stored under AI_AMBIENT_KEY are NOT ThemeId values.
+// They are short theme-prompt names accepted by ZugaImage's AMBIENT_THEMES dict
+// (see ZugaImage/backend/routes.py:659). Default 'cyberpunk' is a valid AMBIENT_THEMES
+// key — NOT to be confused with the 'cyberpunk-city' ThemeId enum entry above.
+// Valid keys at time of writing: cyberpunk, fantasy, nature, space, abstract.
 
 const AI_AMBIENT_KEY = 'zugalife-bg-ai-theme'
 const AI_AMBIENT_INTERVAL_KEY = 'zugalife-bg-ai-interval'
