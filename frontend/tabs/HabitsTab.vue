@@ -744,3 +744,18 @@ onMounted(async () => {
     </div>
   </template>
 </template>
+
+<style scoped>
+/* Hide native number-input spinner buttons.
+   Arrow keys still increment/decrement when the input is focused (native behaviour),
+   which is what desktop users want. Mobile never showed spinners anyway. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+</style>
