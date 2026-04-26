@@ -291,10 +291,31 @@ async function escalateHabit(habitId: number) {
 
 async function toggleHabitActive(habit: HabitDefinition) {
   habitError.value = null
+  // Optimistic flip — both in the manage list AND in the checkin list (so
+  // the paused pill / fade appears immediately on the checkin tab too).
+  const wasActive = habit.is_active
+  habit.is_active = !wasActive
+  if (habitCheckin.value) {
+    const inCheckin = habitCheckin.value.habits.find(i => i.habit.id === habit.id)
+    if (inCheckin) inCheckin.habit.is_active = !wasActive
+    if (wasActive) {
+      habitCheckin.value.total_count -= 1
+    } else {
+      habitCheckin.value.total_count += 1
+    }
+  }
   try {
-    await api.patch(`/api/life/habits/${habit.id}`, { is_active: !habit.is_active })
-    await Promise.all([fetchAllHabits(), fetchHabitCheckin()])
+    await api.patch(`/api/life/habits/${habit.id}`, { is_active: !wasActive })
+    void fetchAllHabits()
+    void fetchHabitCheckin()
   } catch (e) {
+    // Revert
+    habit.is_active = wasActive
+    if (habitCheckin.value) {
+      const inCheckin = habitCheckin.value.habits.find(i => i.habit.id === habit.id)
+      if (inCheckin) inCheckin.habit.is_active = wasActive
+      habitCheckin.value.total_count += wasActive ? 1 : -1
+    }
     if (e instanceof ApiError) {
       habitError.value = (e.body as Record<string, string>).detail ?? `Error (${(e as ApiError).status})`
     } else {
@@ -305,13 +326,30 @@ async function toggleHabitActive(habit: HabitDefinition) {
 
 async function deleteCustomHabit(habit: HabitDefinition) {
   habitError.value = null
+  // Optimistic remove — drop from both lists immediately.
+  const idx = allHabits.value.indexOf(habit)
+  if (idx >= 0) allHabits.value.splice(idx, 1)
+  let checkinIdx = -1
+  if (habitCheckin.value) {
+    checkinIdx = habitCheckin.value.habits.findIndex(i => i.habit.id === habit.id)
+    if (checkinIdx >= 0) {
+      const removed = habitCheckin.value.habits.splice(checkinIdx, 1)[0]
+      if (removed.habit.is_active) habitCheckin.value.total_count -= 1
+      if (removed.logged) habitCheckin.value.completed_count -= 1
+    }
+  }
+  habitSuccess.value = 'Habit deleted.'
+  setTimeout(() => { habitSuccess.value = null }, 2000)
   try {
     await api.delete(`/api/life/habits/${habit.id}`)
-    habitSuccess.value = 'Habit deleted.'
-    setTimeout(() => { habitSuccess.value = null }, 2000)
-    await Promise.all([fetchAllHabits(), fetchHabitCheckin()])
+    void fetchAllHabits()
+    void fetchHabitCheckin()
     emit('success')
   } catch (e) {
+    // Revert (best-effort — rare path)
+    if (idx >= 0) allHabits.value.splice(idx, 0, habit)
+    void fetchAllHabits()
+    void fetchHabitCheckin()
     if (e instanceof ApiError) {
       habitError.value = (e.body as Record<string, string>).detail ?? `Error (${(e as ApiError).status})`
     } else {
@@ -327,35 +365,69 @@ const resettingHabit = ref<number | null>(null)
 
 async function resetToday() {
   habitError.value = null
+  // Optimistic — close the confirm flow immediately, fire DELETE in background.
+  resetConfirm.value = null
+  if (habitCheckin.value) {
+    for (const item of habitCheckin.value.habits) item.logged = false
+    habitCheckin.value.completed_count = 0
+  }
+  habitSuccess.value = 'Clearing today...'
+  setTimeout(() => { habitSuccess.value = null }, 2500)
   try {
     const res = await api.delete<{ deleted: number }>('/api/life/habits/reset/today')
     habitSuccess.value = `Cleared ${res.deleted} check-ins for today.`
     setTimeout(() => { habitSuccess.value = null }, 2500)
-    resetConfirm.value = null
-    await Promise.all([fetchHabitCheckin(), fetchHabitStreaks()])
-  } catch { habitError.value = 'Reset failed.' }
+    void fetchHabitCheckin()
+    void fetchHabitStreaks()
+  } catch {
+    habitError.value = 'Reset failed.'
+    void fetchHabitCheckin()
+  }
 }
 
 async function resetAllHistory() {
   habitError.value = null
+  resetConfirm.value = null
+  if (habitCheckin.value) {
+    for (const item of habitCheckin.value.habits) item.logged = false
+    habitCheckin.value.completed_count = 0
+  }
+  habitSuccess.value = 'Clearing history...'
   try {
     const res = await api.delete<{ deleted: number }>('/api/life/habits/reset/history')
     habitSuccess.value = `Cleared ${res.deleted} total logs. Fresh start!`
     setTimeout(() => { habitSuccess.value = null }, 2500)
-    resetConfirm.value = null
-    await Promise.all([fetchHabitCheckin(), fetchHabitStreaks()])
-  } catch { habitError.value = 'Reset failed.' }
+    void fetchHabitCheckin()
+    void fetchHabitStreaks()
+    void fetchHabitHistory()
+  } catch {
+    habitError.value = 'Reset failed.'
+    void fetchHabitCheckin()
+  }
 }
 
 async function resetSingleHabit(habitId: number) {
   habitError.value = null
+  resettingHabit.value = null
+  // Optimistic: clear "logged" state for this habit in checkin if present.
+  if (habitCheckin.value) {
+    const item = habitCheckin.value.habits.find(i => i.habit.id === habitId)
+    if (item && item.logged) {
+      item.logged = false
+      habitCheckin.value.completed_count = Math.max(0, habitCheckin.value.completed_count - 1)
+    }
+  }
+  habitSuccess.value = 'Clearing logs...'
   try {
     const res = await api.delete<{ deleted: number; habit: string }>(`/api/life/habits/reset/${habitId}`)
     habitSuccess.value = `Reset "${res.habit}" — ${res.deleted} logs cleared.`
     setTimeout(() => { habitSuccess.value = null }, 2500)
-    resettingHabit.value = null
-    await Promise.all([fetchHabitCheckin(), fetchHabitStreaks()])
-  } catch { habitError.value = 'Reset failed.' }
+    void fetchHabitCheckin()
+    void fetchHabitStreaks()
+  } catch {
+    habitError.value = 'Reset failed.'
+    void fetchHabitCheckin()
+  }
 }
 
 async function resetInsightsCooldown() {
@@ -620,7 +692,16 @@ onMounted(async () => {
         </button>
       </div>
     </div>
-    <div v-if="!habitHistory" class="text-sm text-txt-muted">Loading...</div>
+    <!-- Skeleton — shape-matched rows so the layout doesn't shift on first load. -->
+    <div v-if="!habitHistory" class="space-y-2 animate-fade-in">
+      <div v-for="i in 4" :key="i" class="glass-card px-4 py-3">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="bg-surface-3 animate-pulse h-3 w-28 rounded"></div>
+          <div class="bg-surface-3 animate-pulse h-3 w-10 rounded"></div>
+        </div>
+        <div class="bg-surface-3 animate-pulse w-full h-1.5 rounded-full"></div>
+      </div>
+    </div>
     <div v-else-if="habitHistory.days.filter(d => d.completed_count > 0).length === 0" class="glass-card p-6 text-center">
       <p class="text-txt-muted">No habit data yet. Start checking in!</p>
     </div>
@@ -636,7 +717,7 @@ onMounted(async () => {
         </div>
         <div class="w-full bg-surface-3 rounded-full h-1.5 mb-1.5">
           <div
-            class="h-1.5 rounded-full transition-all"
+            class="h-1.5 rounded-full transition-[width,background-color] duration-300 ease-out"
             :class="day.completion_rate >= 1 ? 'bg-success' : day.completion_rate > 0 ? 'bg-accent' : 'bg-surface-3'"
             :style="{ width: Math.round(day.completion_rate * 100) + '%' }"
           />
@@ -695,16 +776,19 @@ onMounted(async () => {
           <component :is="showMoreIcons ? ChevronUp : ChevronDown" :size="14" />
           {{ showMoreIcons ? 'Fewer icons' : 'More icons' }}
         </button>
-        <!-- Expanded categories -->
-        <div v-if="showMoreIcons" class="mt-2 space-y-2.5 max-h-60 overflow-y-auto pr-1">
-          <div v-for="cat in habitIconCategories" :key="cat.label">
-            <p class="text-[11px] text-txt-muted uppercase tracking-wider mb-1">{{ cat.label }}</p>
+        <!-- Expanded categories — bordered panel so the floating grid feels grounded -->
+        <div
+          v-if="showMoreIcons"
+          class="mt-2 p-3 rounded-lg border border-bdr/60 bg-surface-2/40 max-h-60 overflow-y-auto space-y-3 animate-fade-in"
+        >
+          <div v-for="(cat, ci) in habitIconCategories" :key="cat.label" :class="ci > 0 ? 'pt-3 border-t border-bdr/30' : ''">
+            <p class="text-[11px] text-txt-muted uppercase tracking-wider mb-1.5">{{ cat.label }}</p>
             <div class="flex flex-wrap gap-1.5">
               <button
                 v-for="opt in cat.icons"
                 :key="opt.name"
                 @click="newHabitIcon = opt.name"
-                class="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150"
+                class="w-9 h-9 rounded-lg flex items-center justify-center transition-colors duration-100"
                 :class="newHabitIcon === opt.name ? 'bg-accent/15 ring-1 ring-accent/50 text-accent' : 'bg-surface-3 text-txt-muted hover:text-txt-primary'"
                 :title="opt.label"
               >
