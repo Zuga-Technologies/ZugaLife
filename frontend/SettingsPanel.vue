@@ -25,7 +25,7 @@ import { api } from '@core/api/client'
 
 const emit = defineEmits<{ close: [] }>()
 
-const selectedTheme = ref<ThemeId>(getSavedTheme())
+const selectedTheme = ref<ThemeId | string>(getSavedTheme())
 const customImage = ref<string | null>(null)
 const customVideoUrl = ref<string | null>(null)
 const customOpacity = ref(getCustomOpacity())
@@ -34,6 +34,22 @@ const customMediaType = ref<'image' | 'video' | null>(getCustomMediaType())
 
 const activePreset = ref(getActivePresetId())
 const presetThemes = computed(() => THEMES.filter(t => t.id !== 'custom'))
+
+interface UserTheme {
+  id: string
+  name: string
+  description: string | null
+  preview_color: string | null
+  active_wallpaper_id: string | null
+  rotation_interval_minutes: number
+}
+const userThemes = ref<UserTheme[]>([])
+
+async function loadUserThemes() {
+  try {
+    userThemes.value = await api.get<UserTheme[]>('/api/themes/mine')
+  } catch {}
+}
 
 async function selectPreset(id: string) {
   activePreset.value = id
@@ -99,9 +115,10 @@ onMounted(async () => {
   customVideoUrl.value = await getCustomVideo()
   customMediaType.value = getCustomMediaType()
   await initNotifPrefs()
+  loadUserThemes()
 })
 
-function selectTheme(id: ThemeId) {
+function selectTheme(id: ThemeId | string) {
   selectedTheme.value = id
   saveTheme(id)
   document.dispatchEvent(new CustomEvent('zugalife-theme-change', { detail: id }))
@@ -229,6 +246,31 @@ function onSpeedChange(e: Event) {
               <!-- Selected indicator -->
               <div
                 v-if="selectedTheme === theme.id"
+                class="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-accent flex items-center justify-center"
+              >
+                <svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </button>
+            <!-- User themes (if any) -->
+            <button
+              v-for="userTheme in userThemes"
+              :key="userTheme.id"
+              @click="selectTheme(userTheme.id)"
+              class="group relative rounded-xl overflow-hidden border-2 transition-all duration-200"
+              :class="selectedTheme === userTheme.id ? 'border-accent shadow-lg shadow-accent/20' : 'border-bdr hover:border-txt-muted'"
+            >
+              <div
+                class="aspect-video w-full"
+                :style="{ background: userTheme.preview_color || 'linear-gradient(135deg, #2a2a3e, #1a1a2e)' }"
+              />
+              <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2.5 py-2">
+                <p class="text-xs font-medium text-white">{{ userTheme.name }}</p>
+                <p class="text-[10px] text-white/60 leading-tight">{{ userTheme.description || `${userTheme.rotation_interval_minutes}min rotation` }}</p>
+              </div>
+              <div
+                v-if="selectedTheme === userTheme.id"
                 class="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-accent flex items-center justify-center"
               >
                 <svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
