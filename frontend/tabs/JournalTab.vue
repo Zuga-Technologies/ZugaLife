@@ -118,6 +118,10 @@ const journalError = ref<string | null>(null)
 const journalSuccess = ref<string | null>(null)
 
 const contentLength = computed(() => composeContent.value.length)
+// Single trim per keystroke. Was 3 separate `composeContent.trim()` calls
+// in the template — each O(n) on the full string — which made typing
+// laggy in long entries.
+const composeIsBlank = computed(() => composeContent.value.trim().length === 0)
 
 const composeMoodLabel = computed(() => {
   if (!composeMood.value) return null
@@ -338,7 +342,7 @@ async function deleteEntry() {
   }
 }
 
-async function exportEntry(format: 'markdown' | 'json' | 'obsidian') {
+async function exportEntry(format: 'markdown' | 'json') {
   if (!currentEntry.value) return
   showExportMenu.value = false
   try {
@@ -363,7 +367,7 @@ async function exportEntry(format: 'markdown' | 'json' | 'obsidian') {
   }
 }
 
-async function exportAllJournal(format: 'markdown' | 'json' | 'obsidian') {
+async function exportAllJournal(format: 'markdown' | 'json') {
   showBulkExportMenu.value = false
   try {
     const resp = await fetch(`/api/life/journal/export?format=${format}`, {
@@ -418,9 +422,6 @@ onMounted(async () => {
             <button @click="exportAllJournal('json')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
               JSON (.json)
             </button>
-            <button @click="exportAllJournal('obsidian')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors flex items-center gap-1.5">
-              Obsidian Vault (.zip)
-            </button>
           </div>
         </div>
         <button @click="goToCompose" class="btn-primary px-5 py-2 text-sm">New Entry</button>
@@ -468,7 +469,7 @@ onMounted(async () => {
     </div>
 
     <!-- Daily guided prompt (psychology-informed, from backend) -->
-    <div v-if="!composeContent.trim() && dailyJournalPrompt" class="mb-5 animate-fade-in">
+    <div v-if="composeIsBlank && dailyJournalPrompt" class="mb-5 animate-fade-in">
       <div class="relative p-5 rounded-xl border overflow-hidden transition-colors backdrop-blur-sm"
         :class="{
           'bg-accent-alt/6 border-accent-alt/15': dailyJournalPrompt.category === 'expressive',
@@ -513,7 +514,7 @@ onMounted(async () => {
     </div>
 
     <!-- More prompts (shown when daily prompt dismissed or content empty) -->
-    <div v-if="!composeContent.trim() && !dailyJournalPrompt" class="mb-4">
+    <div v-if="composeIsBlank && !dailyJournalPrompt" class="mb-4">
       <button
         @click="showJournalPrompts = !showJournalPrompts"
         class="flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-secondary uppercase tracking-wider transition-colors mb-2"
@@ -593,7 +594,7 @@ onMounted(async () => {
       </div>
 
       <p v-if="journalError" class="text-sm text-red-400">{{ journalError }}</p>
-      <button @click="saveEntry" :disabled="!composeContent.trim() || journalSubmitting" class="btn-primary w-full">
+      <button @click="saveEntry" :disabled="composeIsBlank || journalSubmitting" class="btn-primary w-full">
         <span v-if="journalSubmitting" class="inline-flex items-center gap-2">
           <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
           Saving...
@@ -635,9 +636,6 @@ onMounted(async () => {
                 </button>
                 <button @click="exportEntry('json')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
                   JSON (.json)
-                </button>
-                <button @click="exportEntry('obsidian')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
-                  Obsidian (.md)
                 </button>
               </div>
             </div>
