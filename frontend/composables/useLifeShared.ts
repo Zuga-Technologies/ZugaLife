@@ -13,10 +13,6 @@ import { useCelebration } from './useCelebration'
 import { useTokenStore } from '@core/billing/useTokens'
 import { getMoods, type MoodDefinition } from '../mood-presets'
 import { getActivePresetId, applyPreset } from '../theme-presets'
-import {
-  playXpSound, playBadgeSound, playLevelUpSound,
-  playStreakSound, playPrestigeSound, playJackpotSound,
-} from './useCelebrationSounds'
 
 // ── Types ─────────────────────────────────────────────────────
 export interface XPStatus {
@@ -253,50 +249,13 @@ function stripEmoji(s: string): string {
 // ── Celebration wrapper ──
 const celebration = useCelebration()
 
-async function withCelebration<T>(action: () => Promise<T>, source?: string): Promise<T> {
-  if (gamificationData.value) {
-    if (source) celebration.setActionSource(source)
-    celebration.takeSnapshot(gamificationData.value)
-  }
-  const prevFreezes = gamificationData.value?.xp.streak_freezes ?? 0
-  const prevTotalXp = gamificationData.value?.xp.total_xp ?? 0
-  const result = await action()
-
-  // Gamification refetch + celebration runs in BACKGROUND so the action
-  // returns to the UI immediately. The toast/badge popup arrives when ready.
-  // /api/life/gamification can take 2-5s on first-of-day if Venice has to
-  // generate today's challenges inline — keeping that off the critical path
-  // is the difference between "snappy" and "feels broken".
-  void (async () => {
-    try {
-      const newData = await api.get<GamificationData>('/api/life/gamification')
-      celebration.celebrateChanges(newData, ALL_BADGES.value)
-      if (newData.xp.bonus_label && newData.xp.bonus_tier) {
-        const xpGained = newData.xp.total_xp - prevTotalXp
-        celebration.celebrateBonus(
-          newData.xp.bonus_label,
-          newData.xp.bonus_tier as 'rare' | 'epic' | 'legendary',
-          xpGained,
-        )
-      }
-      if (newData.xp.streak_freeze_used) {
-        celebration.celebrateFreezeSaved(newData.xp.current_streak_days)
-      }
-      if (newData.xp.streak_freezes > prevFreezes) {
-        celebration.celebrateFreezeEarned(newData.xp.streak_freezes)
-      }
-      if (celebration.soundEnabled.value) {
-        if (newData.xp.bonus_tier === 'legendary') playJackpotSound()
-        else if (newData.xp.bonus_tier === 'epic') playJackpotSound()
-        else if (celebration.activeLevelUp.value) playLevelUpSound()
-        else if (celebration.activeBadge.value) playBadgeSound()
-        else if (newData.xp.total_xp !== prevTotalXp) playXpSound()
-      }
-      gamificationData.value = newData
-    } catch { /* gamification fetch is non-critical */ }
-  })()
-
-  return result
+// `withCelebration` is now a pass-through after gamification UI was retired
+// 2026-04-26. The wrapper stays so call-sites (HabitsTab, JournalTab, etc.)
+// don't need touching in this pass; it'll be removed when gamification is
+// re-homed at the ZugaTokens platform layer.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function withCelebration<T>(action: () => Promise<T>, _source?: string): Promise<T> {
+  return action()
 }
 
 // ── Export composable ──

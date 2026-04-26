@@ -4,7 +4,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { useLifeShared } from './composables/useLifeShared'
 import { useOnboardingStore } from '@zugaapp/stores/onboarding'
 import { useNotifications } from './composables/useNotifications'
-import { Star, Flame as FlameIcon, ArrowLeft, Zap, AlertTriangle, Settings } from 'lucide-vue-next'
+import { ArrowLeft, AlertTriangle } from 'lucide-vue-next'
 import BackgroundTheme from './BackgroundTheme.vue'
 import CelebrationOverlay from './components/CelebrationOverlay.vue'
 import LifeOnboarding from './components/LifeOnboarding.vue'
@@ -24,8 +24,6 @@ const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: fa
 
 // ── Shared state ───────────────────────────────────────────────
 const {
-  gamificationData,
-  fetchGamification,
   showBillingPrompt,
   billingPromptFeature,
   showBillingPacks,
@@ -175,9 +173,8 @@ function handleThemeNavigate(e: Event) {
 onMounted(() => window.addEventListener('zugatheme:navigate', handleThemeNavigate as EventListener))
 onUnmounted(() => window.removeEventListener('zugatheme:navigate', handleThemeNavigate as EventListener))
 
-// ── Init (gamification loaded here for the XP bar; tabs load their own data) ──
+// ── Init ───────────────────────────────────────────────────────
 onMounted(async () => {
-  fetchGamification()
   notif.init()
   await onboarding.checkLifeOnboarding()
   maybeShowBreath()
@@ -213,32 +210,6 @@ onMounted(async () => {
       </button>
       <span class="text-sm font-semibold text-txt-primary">{{ moduleLabels[activeTab as Exclude<Tab, 'dashboard'>] }}</span>
       <div class="flex-1" />
-      <!-- Persistent XP + Streak bar -->
-      <div v-if="gamificationData" class="flex items-center gap-3">
-        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-accent/10 border border-accent/20">
-          <Star :size="12" class="text-accent" />
-          <span class="text-xs font-bold text-accent">Lv.{{ gamificationData.xp.level }}</span>
-          <span v-if="gamificationData.xp.prestige_level > 0"
-            class="text-[9px] font-bold text-accent-alt-bright bg-accent-alt/20 px-1 rounded">P{{ gamificationData.xp.prestige_level }}</span>
-        </div>
-        <div
-          v-if="gamificationData.xp.consistency_30d > 0 || gamificationData.xp.current_streak_days > 0"
-          class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-streak/10 border border-streak/20"
-          :title="`${gamificationData.xp.consistency_30d} of last 30 days (${gamificationData.xp.consistency_pct}%)`"
-        >
-          <FlameIcon :size="12" class="text-streak" />
-          <span class="text-xs font-bold text-streak">{{ gamificationData.xp.consistency_30d }}/30</span>
-          <span
-            v-if="gamificationData.xp.streak_multiplier > 1"
-            class="text-[9px] font-bold text-accent-bright bg-accent/20 px-1 rounded"
-          >{{ gamificationData.xp.streak_multiplier }}x</span>
-          <span
-            v-if="gamificationData.xp.streak_freezes > 0"
-            class="text-[9px] font-bold text-info bg-info/20 px-1 rounded"
-            :title="`${gamificationData.xp.streak_freezes} streak freeze${gamificationData.xp.streak_freezes > 1 ? 's' : ''} available`"
-          >&#x1f9ca;{{ gamificationData.xp.streak_freezes }}</span>
-        </div>
-      </div>
     </div>
 
     <!-- ===== TAB CONTENT (lazy-loaded, only one mounted at a time) ===== -->

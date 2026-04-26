@@ -1,20 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useCelebration } from '../composables/useCelebration'
-import { X, Trophy, Star, Zap, Flame, Sparkles, Snowflake } from 'lucide-vue-next'
+import { X, Star } from 'lucide-vue-next'
 import { badgeIcons, prestigeIcons } from '../icons'
 
-// Map toast type to Lucide icon
-const toastIcons: Record<string, any> = { xp: Zap, streak: Flame, challenge: Trophy, info: Star, bonus: Sparkles, freeze: Snowflake }
-
+// Toast stack was removed 2026-04-26 — gamification migration. Modal
+// primitives (badge / level-up / prestige) stay so domain milestones
+// (e.g. first 7-day mood streak) can reuse them when re-wired.
 const {
-  toasts,
   activeBadge,
   activeLevelUp,
   activePrestige,
   confettiActive,
-  soundEnabled,
-  dismissToast,
   dismissBadge,
   dismissLevelUp,
   dismissPrestige,
@@ -41,25 +37,7 @@ const levelNames: Record<number, string> = {
 </script>
 
 <template>
-  <!-- Toast Stack — bottom-right desktop, top-center mobile -->
   <Teleport to="body">
-    <div class="cel-toast-stack" aria-live="polite">
-      <TransitionGroup name="toast">
-        <div
-          v-for="toast in toasts"
-          :key="toast.id"
-          class="cel-toast"
-          :class="`cel-toast--${toast.type}`"
-          @click="dismissToast(toast.id)"
-          role="status"
-        >
-          <component v-if="toastIcons[toast.type]" :is="toastIcons[toast.type]" :size="18" class="cel-toast__icon" />
-          <span class="cel-toast__msg">{{ toast.message }}</span>
-          <span v-if="toast.tier" class="cel-toast__tier" :class="`cel-toast__tier--${toast.tier}`">{{ toast.tier }}</span>
-        </div>
-      </TransitionGroup>
-    </div>
-
     <!-- Confetti Layer -->
     <Transition name="confetti-fade">
       <div v-if="confettiActive" class="cel-confetti" aria-hidden="true">
@@ -152,7 +130,6 @@ const levelNames: Record<number, string> = {
    Use --ease-smooth (quart-out) for entrances, --ease-exit for leaves.
    Durations are slightly tiered: fast (toast), base (modal), slow (hero).
    ================================================================ */
-.cel-toast-stack,
 .cel-modal-overlay,
 .cel-confetti {
   --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
@@ -162,171 +139,7 @@ const levelNames: Record<number, string> = {
   --dur-slow:   520ms;
 }
 
-/* ================================================================
-   TOAST STACK
-   Desktop: bottom-right. Mobile: top-center.
-   ================================================================ */
-.cel-toast-stack {
-  position: fixed;
-  bottom: 1.5rem;
-  right: 1.5rem;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 0.5rem;
-  pointer-events: none;
-  max-width: 340px;
-}
-
-@media (max-width: 640px) {
-  .cel-toast-stack {
-    bottom: auto;
-    top: 1rem;
-    right: 1rem;
-    left: 1rem;
-    max-width: none;
-    align-items: center;
-  }
-}
-
-.cel-toast {
-  pointer-events: auto;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1rem;
-  border-radius: 0.75rem;
-  background: rgba(15, 15, 25, 0.92);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  color: #e2e8f0;
-  font-size: 0.875rem;
-  font-weight: 600;
-  min-height: 44px; /* touch target */
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.cel-toast--xp {
-  border-color: rgba(245, 158, 11, 0.3);
-  background: linear-gradient(135deg, rgba(15, 15, 25, 0.92) 0%, rgba(245, 158, 11, 0.08) 100%);
-}
-
-.cel-toast--streak {
-  border-color: rgba(239, 68, 68, 0.3);
-  background: linear-gradient(135deg, rgba(15, 15, 25, 0.92) 0%, rgba(239, 68, 68, 0.08) 100%);
-}
-
-.cel-toast--challenge {
-  border-color: rgba(34, 197, 94, 0.3);
-  background: linear-gradient(135deg, rgba(15, 15, 25, 0.92) 0%, rgba(34, 197, 94, 0.08) 100%);
-}
-
-.cel-toast__icon {
-  flex-shrink: 0;
-  color: currentColor;
-}
-
-.cel-toast--xp .cel-toast__icon { color: #f59e0b; }
-.cel-toast--streak .cel-toast__icon { color: #ef4444; }
-.cel-toast--challenge .cel-toast__icon { color: #22c55e; }
-.cel-toast--info .cel-toast__icon { color: #8b5cf6; }
-
-/* Variable reward bonus toasts */
-.cel-toast--bonus {
-  border-color: rgba(234, 179, 8, 0.5);
-  background: linear-gradient(135deg, rgba(15, 15, 25, 0.92) 0%, rgba(234, 179, 8, 0.15) 100%);
-  animation: bonus-shimmer 1.5s ease-in-out infinite;
-}
-.cel-toast--bonus .cel-toast__icon { color: #eab308; }
-
-/* Streak freeze toast */
-.cel-toast--freeze {
-  border-color: rgba(6, 182, 212, 0.4);
-  background: linear-gradient(135deg, rgba(15, 15, 25, 0.92) 0%, rgba(6, 182, 212, 0.12) 100%);
-}
-.cel-toast--freeze .cel-toast__icon { color: #06b6d4; }
-
-@keyframes bonus-shimmer {
-  0%, 100% { box-shadow: 0 0 8px rgba(234, 179, 8, 0.2); }
-  50% { box-shadow: 0 0 20px rgba(234, 179, 8, 0.4); }
-}
-
-.cel-toast__tier {
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 1px 6px;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-.cel-toast__tier--rare { background: rgba(234, 179, 8, 0.2); color: #eab308; }
-.cel-toast__tier--epic { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
-.cel-toast__tier--legendary { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
-
-.cel-toast__msg {
-  flex: 1;
-}
-
-/* Toast enter/leave — smooth quart-out, no overshoot.
-   Subtle slide + fade only; scale stays at 1 so the toast doesn't pulse. */
-.toast-enter-active {
-  animation: toast-in var(--dur-fast) var(--ease-smooth);
-}
-.toast-leave-active {
-  animation: toast-out var(--dur-fast) var(--ease-exit);
-}
-.toast-move {
-  transition: transform var(--dur-fast) var(--ease-smooth);
-}
-
-@keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translateX(24px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes toast-out {
-  from {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateX(24px);
-  }
-}
-
-@media (max-width: 640px) {
-  @keyframes toast-in {
-    from {
-      opacity: 0;
-      transform: translateY(-16px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  @keyframes toast-out {
-    from {
-      opacity: 1;
-      transform: translateY(0);
-    }
-    to {
-      opacity: 0;
-      transform: translateY(-16px);
-    }
-  }
-}
+/* Toast stack styles + animations removed 2026-04-26 — gamification migration. */
 
 /* ================================================================
    CONFETTI

@@ -10,3 +10,4 @@ data/
 /backend/core/database
 /backend/core/plugins
 /backend/core/credits
+frontend/tsconfig.*.tsbuildinfo

@@ -1,23 +1,18 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { api, ApiError } from '@core/api/client'
 import {
-  Send, Settings, Zap, Flame as FlameIcon, Brain as BrainIcon, Target, CheckCircle2, Star,
-  Trophy, Lock, ChevronRight, CalendarDays, TrendingUp, BookOpen,
-  MessageCircleHeart, Wind, Meh,
+  Settings, Brain as BrainIcon, ChevronRight, CalendarDays, TrendingUp, BookOpen,
+  MessageCircleHeart, Wind, Meh, Target,
 } from 'lucide-vue-next'
-import { moodIcons, badgeIcons, xpSourceIcons, prestigeIcons, getIcon } from '../icons'
-import ShareableCard from '../components/ShareableCard.vue'
+import { moodIcons, getIcon } from '../icons'
 import AnalyticsDashboard from '../AnalyticsDashboard.vue'
 import InsightCard from '../components/InsightCard.vue'
 import WeeklyNarrative from '../components/WeeklyNarrative.vue'
 import ThemeRenderer from '../components/themes/ThemeRenderer.vue'
 import { applyPreset } from '../theme-presets'
-import { useLifeShared, type GamificationData } from '../composables/useLifeShared'
+import { useLifeShared } from '../composables/useLifeShared'
 import { useNotifications } from '../composables/useNotifications'
-import {
-  playPrestigeSound,
-} from '../composables/useCelebrationSounds'
 
 // ── Props & Emits ───────────────────────────────────────────────
 const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
@@ -29,16 +24,9 @@ const emit = defineEmits<{
 
 // ── Shared composable ───────────────────────────────────────────
 const {
-  gamificationData,
   moods,
-  ALL_BADGES,
-  withCelebration,
-  fetchGamification,
-  celebration,
   activePresetId,
-  parseUTC,
   timeAgo,
-  stripEmoji,
   formatDashboardDate,
   formatDeadline,
 } = useLifeShared()
@@ -246,80 +234,7 @@ themeBroadcast.onmessage = (e) => {
   if (e.data?.type === 'restyled') applyCustomColors()
 }
 
-// ============================
-// GAMIFICATION — PRESTIGE
-// ============================
-
-const prestigeLoading = ref(false)
-
-async function doPrestige() {
-  if (!gamificationData.value?.xp.can_prestige || prestigeLoading.value) return
-  prestigeLoading.value = true
-  try {
-    if (gamificationData.value) {
-      celebration.takeSnapshot(gamificationData.value)
-    }
-    await api.post('/api/life/gamification/prestige')
-    const newData = await api.get<GamificationData>('/api/life/gamification')
-    if (gamificationData.value) {
-      celebration.celebratePrestige(
-        gamificationData.value.xp.prestige_level + 1,
-        newData,
-        ALL_BADGES.value,
-      )
-      if (celebration.soundEnabled.value) playPrestigeSound()
-    }
-    gamificationData.value = newData
-  } catch (e: any) {
-    console.error('Prestige failed:', e)
-  } finally {
-    prestigeLoading.value = false
-  }
-}
-
-// ============================
-// SHARE CARD
-// ============================
-
-const showShareCard = ref(false)
-
-const shareCardData = computed(() => {
-  const gam = gamificationData.value
-  const dash = dashboardData.value
-  if (!gam) return null
-
-  let topMood: { emoji: string; label: string } | null = null
-  if (dash?.mood?.recent?.length) {
-    const counts: Record<string, { emoji: string; label: string; count: number }> = {}
-    for (const m of dash.mood.recent) {
-      const key = m.emoji
-      if (!counts[key]) counts[key] = { emoji: m.emoji, label: m.label, count: 0 }
-      counts[key].count++
-    }
-    const sorted = Object.values(counts).sort((a, b) => b.count - a.count)
-    if (sorted.length > 0) topMood = { emoji: sorted[0].emoji, label: sorted[0].label }
-  }
-
-  return {
-    displayName: dash?.greeting?.replace(/^Good (morning|afternoon|evening)(, )?/, '') || '',
-    level: gam.xp.level,
-    levelName: gam.xp.level_name,
-    totalXp: gam.xp.total_xp,
-    currentStreak: gam.xp.current_streak_days,
-    longestStreak: gam.xp.longest_streak_days,
-    badgeCount: gam.badges.length,
-    topBadges: gam.badges.slice(-6).map(b => ({ emoji: b.emoji, title: b.title })),
-    moodCount: dash?.mood?.total || 0,
-    topMood,
-    journalCount: dash?.journal?.total || 0,
-    meditationCount: dash?.meditation?.total_sessions || 0,
-    meditationMinutes: dash?.meditation?.total_minutes || 0,
-    habitCompletionRate: dash?.habits?.completion_rate || 0,
-    goalsCompleted: dash?.goals?.completed || 0,
-    prestigeLevel: gam.xp.prestige_level,
-    date: dash?.date || new Date().toISOString().slice(0, 10),
-  }
-})
+// Gamification (prestige, share card) removed 2026-04-26 — moves to ZugaTokens layer.
 
 // ============================
 // INSIGHT CARDS
@@ -377,12 +292,10 @@ async function logDashMood(emoji: string) {
   dashMoodError.value = null
   dashMoodSuccess.value = null
   try {
-    const res = await withCelebration(() =>
-      api.post<{ entry: { emoji: string; label: string }; streak: number; today_count: number; suggestion: { type: string; message: string } | null }>('/api/life/mood', {
-        emoji,
-        note: dashMoodNote.value.trim() || null,
-      }), 'mood_log'
-    )
+    const res = await api.post<{ entry: { emoji: string; label: string }; streak: number; today_count: number; suggestion: { type: string; message: string } | null }>('/api/life/mood', {
+      emoji,
+      note: dashMoodNote.value.trim() || null,
+    })
     dashMoodSuccess.value = `${res.entry.label} logged! (${res.today_count}/4 today)`
     dashMoodNote.value = ''
     setTimeout(() => { dashMoodSuccess.value = null }, 3000)
@@ -416,37 +329,21 @@ async function logDashMood(emoji: string) {
 onMounted(async () => {
   await Promise.all([
     fetchDashboard(),
-    fetchGamification(),
     fetchInstalledThemes(),
     fetchInsightCards(),
     applyCustomColors(),
   ])
 
-  // Listen for theme events from ThemeBridge
-  window.addEventListener('zugatheme:celebrate', ((e: CustomEvent) => {
-    const type = e.detail?.type || 'confetti'
-    if (type === 'confetti') celebration.triggerConfetti()
-  }) as EventListener)
-
+  // Theme installed event still re-fetches installed themes.
   window.addEventListener('zugatheme:installed', () => {
     fetchInstalledThemes()
   })
-
-  window.addEventListener('zugatheme:notify', ((e: CustomEvent) => {
-    const { message } = e.detail || {}
-    if (message) celebration.pushToast({ type: 'info', message, duration: 3000 })
-  }) as EventListener)
 })
 </script>
 
 <template>
   <div>
-    <!-- Share Card Modal -->
-    <ShareableCard
-      v-if="showShareCard && shareCardData"
-      :data="shareCardData"
-      @close="showShareCard = false"
-    />
+    <!-- Share card removed 2026-04-26 (depended on gamification data). -->
 
     <!-- ===== DASHBOARD TAB ===== -->
     <div v-if="loadingDashboard" class="animate-fade-in">
@@ -525,14 +422,6 @@ onMounted(async () => {
         <div v-else></div>
         <div class="flex items-center gap-2">
           <button
-            v-if="!props.embedded && gamificationData"
-            @click="showShareCard = true"
-            class="p-2.5 rounded-xl bg-surface-0/80 border border-bdr text-txt-secondary transition-colors hover:text-accent hover:border-accent/40"
-            title="Share your progress"
-          >
-            <Send :size="18" />
-          </button>
-          <button
             v-if="!props.embedded"
             @click="emit('open-settings')"
             class="p-2.5 rounded-xl bg-surface-0/80 border border-bdr text-txt-secondary transition-colors hover:text-txt-primary hover:bg-surface-3/70"
@@ -543,148 +432,13 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- XP + Level + Streak Bar — skeleton while /api/life/gamification is in flight
-           (including post-HMR refetch on dev server). Matches final shape so no layout shift. -->
-      <div v-if="!gamificationData" class="glass-card p-5 mb-6 animate-pulse" aria-hidden="true">
-        <div class="flex items-center gap-3">
-          <div class="flex-shrink-0 flex flex-col items-center gap-1">
-            <div class="w-12 h-12 rounded-2xl bg-surface-3"></div>
-            <div class="h-2 w-12 rounded bg-surface-3"></div>
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center justify-between mb-2">
-              <div class="h-3 w-24 rounded bg-surface-3"></div>
-              <div class="h-3 w-16 rounded bg-surface-3"></div>
-            </div>
-            <div class="w-full bg-surface-3 rounded-full h-2"></div>
-          </div>
-          <div class="flex-shrink-0 flex flex-col items-center gap-1">
-            <div class="h-4 w-12 rounded bg-surface-3"></div>
-            <div class="h-2 w-16 rounded bg-surface-3"></div>
-          </div>
-        </div>
-      </div>
+      <!-- Gamification UI (XP/level/prestige/badges/challenges/quests/recent-XP)
+           was removed 2026-04-26. Re-homing to the ZugaTokens platform layer
+           per project_zugatokens_gamification_migration memory. Domain stats
+           remain in their own cards below. -->
 
-      <!-- XP + Level + Streak Bar -->
-      <div v-else class="glass-card p-5 mb-6 animate-fade-in">
-        <div class="flex items-center gap-3">
-          <!-- Level badge + prestige stars -->
-          <div class="flex-shrink-0 flex flex-col items-center gap-0.5">
-            <div class="relative">
-              <div class="w-12 h-12 rounded-2xl bg-accent/15 border border-accent/30 flex items-center justify-center"
-                :class="{ 'prestige-glow': gamificationData.xp.prestige_level > 0 }">
-                <span class="text-lg font-bold text-accent">{{ gamificationData.xp.level }}</span>
-              </div>
-              <!-- Prestige stars -->
-              <div v-if="gamificationData.xp.prestige_level > 0"
-                class="absolute -top-1.5 -right-1.5 flex items-center gap-px">
-                <span v-for="i in Math.min(gamificationData.xp.prestige_level, 5)" :key="i"
-                  class="text-[8px] prestige-star">&#11088;</span>
-                <span v-if="gamificationData.xp.prestige_level > 5"
-                  class="text-[7px] font-bold text-accent-bright">+{{ gamificationData.xp.prestige_level - 5 }}</span>
-              </div>
-            </div>
-            <span class="text-[10px] text-txt-muted leading-none">{{ gamificationData.xp.level_name }}</span>
-          </div>
-
-          <!-- XP progress -->
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center justify-between mb-1">
-              <div class="flex items-center gap-1.5">
-                <Zap :size="12" class="text-accent" />
-                <span class="text-xs font-semibold text-txt-primary">{{ gamificationData.xp.xp_progress_in_level.toLocaleString() }} / {{ gamificationData.xp.xp_for_next_level.toLocaleString() }} XP</span>
-              </div>
-              <div class="flex items-center gap-1.5">
-                <span v-if="gamificationData.xp.prestige_multiplier > 1"
-                  class="text-[9px] font-bold text-accent-alt-bright bg-accent-alt/20 px-1 rounded multiplier-pulse">
-                  P{{ gamificationData.xp.prestige_level }} +{{ Math.round((gamificationData.xp.prestige_multiplier - 1) * 100) }}%
-                </span>
-                <span class="text-[10px] text-txt-muted">{{ gamificationData.xp.total_xp.toLocaleString() }} total</span>
-              </div>
-            </div>
-            <div class="w-full bg-surface-3 rounded-full h-2 overflow-hidden">
-              <div
-                class="h-2 rounded-full transition-all duration-700 ease-out"
-                :class="gamificationData.xp.can_prestige
-                  ? 'bg-gradient-to-r from-accent-alt via-accent to-accent-alt prestige-bar-shimmer'
-                  : 'bg-gradient-to-r from-accent to-accent-bright'"
-                :style="{ width: Math.min(100, Math.round((gamificationData.xp.xp_progress_in_level / gamificationData.xp.xp_for_next_level) * 100)) + '%' }"
-              ></div>
-            </div>
-          </div>
-
-          <!-- Consistency (reframed from streak) -->
-          <div class="flex-shrink-0 flex flex-col items-center gap-0.5">
-            <div class="flex items-center gap-1">
-              <FlameIcon :size="16" class="text-accent" />
-              <span class="text-sm font-bold text-txt-primary">{{ gamificationData.xp.consistency_30d }}/30</span>
-            </div>
-            <div
-              v-if="gamificationData.xp.streak_multiplier > 1"
-              class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent/20 text-accent leading-none multiplier-pulse"
-            >
-              {{ gamificationData.xp.streak_multiplier }}x
-            </div>
-            <span v-else class="text-[10px] text-txt-muted leading-none">consistency</span>
-            <div
-              v-if="gamificationData.xp.streak_freezes > 0"
-              class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-info/15 text-info leading-none"
-              :title="`${gamificationData.xp.streak_freezes} streak freeze${gamificationData.xp.streak_freezes > 1 ? 's' : ''}`"
-            >
-              🧊 {{ gamificationData.xp.streak_freezes }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Prestige Available Banner -->
-        <div v-if="gamificationData.xp.can_prestige"
-          class="mt-3 pt-3 border-t border-bdr/50">
-          <div class="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-accent-alt/10 via-accent/10 to-accent-alt/10 border border-accent-alt/20 prestige-banner-glow">
-            <div class="flex-1">
-              <p class="text-sm font-bold text-accent-alt-bright">Prestige Available!</p>
-              <p class="text-[10px] text-txt-muted mt-0.5">Reset to Lv.1 for a permanent +5% XP bonus and a unique badge</p>
-            </div>
-            <button
-              @click="doPrestige"
-              :disabled="prestigeLoading"
-              class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-accent-alt-dim to-accent hover:from-accent-alt hover:to-accent-bright transition-all active:scale-95 disabled:opacity-50 min-h-[36px]"
-            >
-              {{ prestigeLoading ? 'Ascending...' : 'Prestige' }}
-            </button>
-          </div>
-        </div>
-
-        <!-- Notification prompt (show after streak >= 3 or has badges, not on first visit) -->
-        <div
-          v-if="notif.shouldShowPrompt() && (gamificationData.xp.current_streak_days >= 3 || gamificationData.badges.length >= 1)"
-          class="mt-3 pt-3 border-t border-bdr/50"
-        >
-          <div class="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-info/10 to-info/10 border border-info/20">
-            <div class="flex-1">
-              <p class="text-sm font-semibold text-info">Stay on track</p>
-              <p class="text-[10px] text-txt-muted mt-0.5">Get gentle reminders to keep your streak alive and hit your goals</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <button
-                @click="notif.subscribe()"
-                :disabled="notif.isLoading.value"
-                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-info hover:bg-info transition-all active:scale-95 disabled:opacity-50"
-              >
-                {{ notif.isLoading.value ? '...' : 'Enable' }}
-              </button>
-              <button
-                @click="notif.dismissPrompt()"
-                class="px-2 py-1.5 rounded-lg text-xs text-txt-muted hover:text-txt-secondary transition-colors"
-              >
-                Later
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Main dashboard grid — 3 columns on desktop, stacked on mobile -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <!-- Main dashboard grid — 2 columns on desktop, stacked on mobile -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
 
       <!-- Mood Check-in (col 1) -->
       <div class="glass-card p-5 animate-fade-in flex flex-col">
@@ -756,119 +510,12 @@ onMounted(async () => {
         <div v-if="dashboardData?.mood.has_data" class="text-[10px] text-txt-muted mt-2">{{ dashboardData.mood.total }} total logs</div>
       </div>
 
-      <!-- Today's Challenges + Weekly Quests (col 2) -->
-      <div class="flex flex-col gap-4">
-
-      <!-- Daily Challenges — skeleton while gamification fetch is in flight.
-           First-of-day requests can trigger on-demand Venice challenge generation (2–5s)
-           if the prewarm scheduler hasn't landed today's set yet. -->
-      <div v-if="!gamificationData" class="glass-card p-5 animate-pulse flex-1 flex flex-col" aria-hidden="true">
-        <div class="flex items-center gap-2 mb-4">
-          <div class="w-3.5 h-3.5 rounded bg-surface-3"></div>
-          <div class="h-3 w-32 rounded bg-surface-3"></div>
-          <div class="ml-auto h-3 w-8 rounded bg-surface-3"></div>
-        </div>
-        <div class="space-y-2 flex-1">
-          <div v-for="i in 3" :key="i" class="flex items-center gap-3 py-2.5 px-3 rounded-xl bg-surface-2/50 border border-bdr/50">
-            <div class="w-4 h-4 rounded-full bg-surface-3 flex-shrink-0"></div>
-            <div class="flex-1 flex flex-col gap-1.5">
-              <div class="h-3 w-24 rounded bg-surface-3"></div>
-              <div class="h-2 w-36 rounded bg-surface-3"></div>
-            </div>
-            <div class="h-4 w-12 rounded bg-surface-3 flex-shrink-0"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Daily Challenges -->
-      <div v-else-if="gamificationData.daily_challenges.length > 0" class="glass-card p-5 animate-fade-in flex-1 flex flex-col">
-        <div class="flex items-center gap-2 mb-4">
-          <Target :size="14" class="text-accent" />
-          <span class="text-sm font-semibold text-txt-primary">Today's Challenges</span>
-          <span class="ml-auto text-xs text-txt-muted">
-            {{ gamificationData.daily_challenges.filter(c => c.is_completed).length }}/{{ gamificationData.daily_challenges.length }}
-          </span>
-        </div>
-        <div class="space-y-2 flex-1">
-          <div
-            v-for="challenge in gamificationData.daily_challenges"
-            :key="challenge.challenge_key"
-            class="flex items-center gap-3 py-2.5 px-3 rounded-xl transition-colors border"
-            :class="challenge.is_completed ? 'bg-success/8 border-success/10' : 'bg-surface-2/50 border-bdr/50'"
-          >
-            <CheckCircle2
-              v-if="challenge.is_completed"
-              :size="16"
-              class="flex-shrink-0 text-success"
-            />
-            <div
-              v-else
-              class="flex-shrink-0 w-4 h-4 rounded-full border border-bdr"
-            ></div>
-            <div class="flex-1 min-w-0">
-              <p
-                class="text-xs font-medium leading-tight"
-                :class="challenge.is_completed ? 'text-txt-muted line-through' : 'text-txt-primary'"
-              >{{ challenge.title }}</p>
-              <p class="text-[10px] text-txt-muted leading-tight mt-0.5">{{ challenge.description }}</p>
-              <p v-if="challenge.goal_connection" class="text-[9px] text-accent-alt leading-tight mt-0.5">Supports: {{ challenge.goal_connection }}</p>
-            </div>
-            <span
-              class="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded leading-none"
-              :class="challenge.is_completed ? 'bg-success/15 text-success' : 'bg-accent/15 text-accent'"
-            >+{{ challenge.xp_reward }} XP</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Weekly Quests -->
-      <div v-if="gamificationData && gamificationData.weekly_quests && gamificationData.weekly_quests.length > 0" class="glass-card p-5 animate-fade-in">
-        <div class="flex items-center gap-2 mb-3">
-          <Star :size="14" class="text-accent-alt" />
-          <span class="text-sm font-semibold text-txt-primary">Weekly Quests</span>
-          <span class="ml-auto text-xs text-txt-muted">
-            {{ gamificationData.weekly_quests.filter(q => q.is_completed).length }}/{{ gamificationData.weekly_quests.length }}
-          </span>
-        </div>
-        <div class="space-y-2">
-          <div
-            v-for="quest in gamificationData.weekly_quests"
-            :key="quest.quest_key"
-            class="flex items-center gap-3 py-2.5 px-3 rounded-xl transition-colors border"
-            :class="quest.is_completed ? 'bg-accent-alt/8 border-accent-alt/10' : 'bg-surface-2/50 border-bdr/50'"
-          >
-            <CheckCircle2
-              v-if="quest.is_completed"
-              :size="16"
-              class="flex-shrink-0 text-accent-alt"
-            />
-            <div
-              v-else
-              class="flex-shrink-0 w-4 h-4 rounded-full border-2 border-accent-alt/40"
-            ></div>
-            <div class="flex-1 min-w-0">
-              <p
-                class="text-xs font-semibold leading-tight"
-                :class="quest.is_completed ? 'text-txt-muted line-through' : 'text-txt-primary'"
-              >{{ quest.title }}</p>
-              <p class="text-[10px] text-txt-muted leading-tight mt-0.5">{{ quest.description }}</p>
-            </div>
-            <span
-              class="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded leading-none"
-              :class="quest.is_completed ? 'bg-accent-alt/15 text-accent-alt' : 'bg-accent-alt/15 text-accent-alt-bright'"
-            >+{{ quest.xp_reward }} XP</span>
-          </div>
-        </div>
-      </div>
-
-      </div><!-- /challenges+quests column -->
-
-      <!-- Week in Review (col 3) -->
+      <!-- Week in Review (col 2) -->
       <div class="flex flex-col">
         <WeeklyNarrative :api="api" class="flex-1" />
       </div>
 
-      </div><!-- /main 3-col grid -->
+      </div><!-- /main grid -->
 
       <!-- Contextual Insight Cards (Deepstash-style micro-learning) -->
       <div v-if="insightCards.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -883,66 +530,7 @@ onMounted(async () => {
         />
       </div>
 
-      <!-- Badges + XP Activity — single full-width card -->
-      <div v-if="gamificationData" class="glass-card p-5 animate-fade-in mb-6">
-        <div class="flex flex-col lg:flex-row lg:gap-6">
-          <!-- Badge Showcase -->
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-4">
-              <Trophy :size="14" class="text-accent" />
-              <span class="text-sm font-semibold text-txt-primary">Badges</span>
-              <span class="ml-auto text-xs text-txt-muted">
-                {{ gamificationData.badges.filter(b => b.earned_at !== null).length }}/{{ ALL_BADGES.length }} earned
-              </span>
-            </div>
-            <div class="flex flex-wrap gap-1.5">
-              <div
-                v-for="badge in ALL_BADGES"
-                :key="badge.key"
-                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all"
-                :class="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at)
-                  ? 'bg-accent/8 border-accent/20 hover:border-accent/40'
-                  : 'bg-surface-2/40 border-bdr/30 opacity-40'"
-                :title="badge.description"
-              >
-                <component
-                  v-if="gamificationData.badges.find(b => b.badge_key === badge.key && b.earned_at) && (badgeIcons[badge.key] || (badge.key.startsWith('prestige_') && prestigeIcons[(parseInt(badge.key.split('_')[1]) - 1) % prestigeIcons.length]))"
-                  :is="badgeIcons[badge.key] || prestigeIcons[(parseInt(badge.key.split('_')[1]) - 1) % prestigeIcons.length]"
-                  :size="16"
-                  :class="badge.key.startsWith('prestige_') ? 'text-accent-alt' : 'text-accent'"
-                />
-                <Lock v-else :size="14" class="text-txt-muted" />
-                <span class="text-[10px] text-txt-muted whitespace-nowrap">{{ badge.title }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- XP Activity Feed (sidebar on desktop, stacked on mobile) -->
-          <div v-if="gamificationData.recent_xp.length > 0"
-            class="lg:w-56 flex-shrink-0 mt-4 pt-4 border-t border-bdr/50 lg:mt-0 lg:pt-0 lg:border-t-0 lg:border-l lg:border-bdr/50 lg:pl-6">
-            <div class="flex items-center gap-2 mb-3">
-              <Star :size="14" class="text-accent" />
-              <span class="text-sm font-semibold text-txt-primary">Recent XP</span>
-            </div>
-            <div class="space-y-2">
-              <div
-                v-for="(entry, i) in gamificationData.recent_xp.slice(0, 5)"
-                :key="i"
-                class="flex items-center gap-2 py-1 px-2 rounded-lg bg-surface-2/40"
-              >
-                <component
-                  v-if="xpSourceIcons[entry.source]"
-                  :is="xpSourceIcons[entry.source]"
-                  :size="11"
-                  class="flex-shrink-0 text-txt-muted"
-                />
-                <span class="text-[11px] font-semibold text-accent flex-shrink-0">+{{ entry.amount }}</span>
-                <span class="text-[11px] text-txt-muted truncate">{{ stripEmoji(entry.description) }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- Badges + Recent XP card removed 2026-04-26 (gamification migration). -->
 
       <!-- Analytics Dashboard (main visualization) -->
       <div class="mb-6">
