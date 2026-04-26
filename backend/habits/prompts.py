@@ -62,6 +62,7 @@ Analyze the correlation between these habits and moods. What patterns do you see
 
 def format_habit_data(
     days: list[dict],
+    active_habits: list[dict] | None = None,
 ) -> str:
     """Format habit log data into a readable string for the prompt.
 
@@ -71,15 +72,25 @@ def format_habit_data(
                 {"name": "Sleep", "emoji": "...", "completed": True, "amount": 7.5, "unit": "hours"},
                 ...
             ]}
+        active_habits: Full roster of currently-active habits the user tracks.
+            Without this header, the AI assumes the per-day list IS the full
+            set and writes things like "you completed all 4 tracked habits"
+            when only 4 of 8 were actually logged.
     """
     if not days:
         return "No habit data available for this period."
 
-    lines = []
+    lines: list[str] = []
+    if active_habits:
+        roster = ", ".join(
+            f"{h['emoji']} {h['name']}" for h in active_habits
+        )
+        lines.append(f"Tracked habits ({len(active_habits)} active): {roster}")
+        lines.append("")
     for day in days:
         day_line = f"{day['date']}:"
         if not day["habits"]:
-            day_line += " (no habits logged)"
+            day_line += " (nothing logged)"
         else:
             parts = []
             for h in day["habits"]:
@@ -87,7 +98,10 @@ def format_habit_data(
                     parts.append(f"{h['emoji']} {h['name']}: {h['amount']} {h['unit']}")
                 elif h.get("completed"):
                     parts.append(f"{h['emoji']} {h['name']}: done")
-            day_line += " " + ", ".join(parts) if parts else " (no habits logged)"
+            day_count = len(parts)
+            total = len(active_habits) if active_habits else day_count
+            prefix = f" {day_count}/{total} done — " if active_habits else " "
+            day_line += prefix + ", ".join(parts) if parts else " (nothing logged)"
         lines.append(day_line)
     return "\n".join(lines)
 

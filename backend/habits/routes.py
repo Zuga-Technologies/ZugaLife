@@ -858,10 +858,11 @@ async def generate_insight(
                 detail=f"Insight cooldown active. You can generate one insight per {INSIGHT_COOLDOWN_DAYS} days.",
             )
 
-        # Gather 7 days of habit data
+        # Gather 7 days of habit data + the active-habit roster so the prompt
+        # tells the AI the full set being tracked, not just what was logged.
         week_start = date.today() - timedelta(days=6)
-        habit_days = await _gather_habit_data(session, user.id, week_start)
-        habit_text = _prompts.format_habit_data(habit_days)
+        active_habits, habit_days = await _gather_habit_data(session, user.id, week_start)
+        habit_text = _prompts.format_habit_data(habit_days, active_habits=active_habits)
 
         # Gather 7 days of mood data
         mood_entries = await _gather_mood_data(session, user.id, week_start)
@@ -975,14 +976,26 @@ async def list_insights(
 
 async def _gather_habit_data(
     session, user_id: str, since: date,
-) -> list[dict]:
-    """Gather habit data for the prompt, organized by day."""
+) -> tuple[list[dict], list[dict]]:
+    """Gather habit data for the prompt, organized by day.
+
+    Returns (active_habits, days). The active_habits roster is needed by
+    the prompt so the AI knows the FULL set of habits this user is tracking
+    — without it, the model assumes the set is whatever appeared on a given
+    day's log line and writes things like 'you completed all 4 tracked
+    habits' when there are actually 8 active habits, only 4 logged that day.
+    """
     # Get habit definitions for emoji/name lookup
     habits_result = await session.execute(
         select(HabitDefinition)
         .where(HabitDefinition.user_id == user_id)
     )
-    habit_map = {h.id: h for h in habits_result.scalars().all()}
+    all_habits = habits_result.scalars().all()
+    habit_map = {h.id: h for h in all_habits}
+    active_habits = [
+        {"name": h.name, "emoji": h.emoji, "unit": h.unit}
+        for h in all_habits if h.is_active
+    ]
 
     # Get logs in the period
     logs_result = await session.execute(
@@ -1019,7 +1032,7 @@ async def _gather_habit_data(
         days.append({"date": d.isoformat(), "habits": day_habits})
         d += timedelta(days=1)
 
-    return days
+    return active_habits, days
 
 
 async def _gather_mood_data(
