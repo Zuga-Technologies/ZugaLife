@@ -29,6 +29,7 @@ const {
   timeAgo,
   formatDashboardDate,
   formatDeadline,
+  celebration,
 } = useLifeShared()
 
 // ── Notifications ───────────────────────────────────────────────
@@ -296,16 +297,27 @@ async function logDashMood(emoji: string) {
       emoji,
       note: dashMoodNote.value.trim() || null,
     })
-    dashMoodSuccess.value = `${res.entry.label} logged! (${res.today_count}/4 today)`
     dashMoodNote.value = ''
-    setTimeout(() => { dashMoodSuccess.value = null }, 3000)
     if (res.suggestion?.type === 'breathwork') {
       dashBreathworkSuggestion.value = res.suggestion.message
     } else {
       dashBreathworkSuggestion.value = null
     }
-    // Set cooldown for 6 hours from now
+    // Cooldown — UI shows the timer instead of duplicate success text
     dashMoodCooldownUntil.value = new Date(Date.now() + 6 * 3600000).toISOString()
+    // Confirmation modal — domain milestone, replaces the old XP toast.
+    // Streak-aware copy: longer streaks get stronger identity language.
+    const streakDays = res.streak ?? 0
+    const description = streakDays >= 7
+      ? `${streakDays} days of showing up for yourself`
+      : streakDays >= 3
+      ? `${streakDays} days in a row — this is becoming who you are`
+      : 'You paused to notice how you feel'
+    celebration.activeBadge.value = {
+      badge_key: 'first_mood',
+      title: res.entry.label,
+      description,
+    }
     // Refresh dashboard in background — UI is already responsive
     void fetchDashboard()
   } catch (e) {
