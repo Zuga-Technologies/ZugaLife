@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { api, ApiError, getToken } from '@core/api/client'
-import { ArrowLeft, BookOpen, Download, Meh } from 'lucide-vue-next'
+import { ArrowRight, BookOpen, Download, Meh } from 'lucide-vue-next'
 import { moodIcons } from '../icons'
 import { useLifeShared } from '../composables/useLifeShared'
 
@@ -122,6 +122,16 @@ const contentLength = computed(() => composeContent.value.length)
 // in the template — each O(n) on the full string — which made typing
 // laggy in long entries.
 const composeIsBlank = computed(() => composeContent.value.trim().length === 0)
+
+// "Next entry" — index of the entry chronologically AFTER the current one
+// in the displayed list (newest-first, so 'next' = older). null if there's
+// no next entry.
+const nextEntryId = computed<number | null>(() => {
+  if (!currentEntry.value) return null
+  const idx = journalEntries.value.findIndex(e => e.id === currentEntry.value!.id)
+  if (idx < 0 || idx >= journalEntries.value.length - 1) return null
+  return journalEntries.value[idx + 1].id
+})
 
 const composeMoodLabel = computed(() => {
   if (!composeMood.value) return null
@@ -406,7 +416,9 @@ onMounted(async () => {
 
 <template>
   <!-- ===== JOURNAL TAB ===== -->
-  <template v-if="journalView === 'list'">
+  <!-- list + detail share the same chrome (header + Export All + New Entry).
+       Only compose mode swaps to a dedicated authoring view. -->
+  <template v-if="journalView !== 'compose'">
     <div class="flex items-center justify-between mb-6">
       <p class="text-sm text-txt-secondary">Write, reflect, understand.</p>
       <div class="flex items-center gap-2">
@@ -427,6 +439,10 @@ onMounted(async () => {
         <button @click="goToCompose" class="btn-primary px-5 py-2 text-sm">New Entry</button>
       </div>
     </div>
+  </template>
+
+  <!-- ===== LIST ===== -->
+  <template v-if="journalView === 'list'">
     <div v-if="loadingJournal" class="text-sm text-txt-muted">Loading...</div>
     <div v-else-if="journalEntries.length === 0" class="glass-card p-8 text-center">
       <p class="text-lg mb-2">No entries yet</p>
@@ -610,13 +626,6 @@ onMounted(async () => {
       <div class="glass-card p-6 mb-6">
         <div class="flex items-start justify-between mb-4 gap-4">
           <div class="min-w-0">
-            <button
-              @click="goToJournalList"
-              class="inline-flex items-center gap-1 text-[11px] text-txt-muted hover:text-txt-primary transition-colors mb-2"
-            >
-              <ArrowLeft :size="11" />
-              <span>All entries</span>
-            </button>
             <h2 v-if="currentEntry.title" class="text-lg font-semibold text-txt-primary mb-1">{{ currentEntry.title }}</h2>
             <div class="flex items-center gap-2 text-xs text-txt-muted">
               <span>{{ formatDate(currentEntry.created_at) }}</span>
@@ -685,6 +694,23 @@ onMounted(async () => {
       </button>
       <p v-else class="text-xs text-txt-muted text-center">Maximum reflections reached for this entry.</p>
       <p v-if="journalError" class="text-sm text-red-400 mt-3">{{ journalError }}</p>
+
+      <!-- Next entry — keeps the user reading without going back to the list. -->
+      <div class="mt-6 flex justify-end">
+        <button
+          v-if="nextEntryId !== null"
+          @click="goToDetail(nextEntryId)"
+          class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-accent transition-colors px-3 py-2"
+        >
+          <span>Next entry</span>
+          <ArrowRight :size="13" />
+        </button>
+        <button
+          v-else
+          @click="goToJournalList"
+          class="text-xs text-txt-muted hover:text-txt-primary transition-colors px-3 py-2"
+        >Back to entries</button>
+      </div>
     </template>
     <div v-else class="glass-card p-6 text-center">
       <p v-if="journalError" class="text-sm text-red-400">{{ journalError }}</p>
