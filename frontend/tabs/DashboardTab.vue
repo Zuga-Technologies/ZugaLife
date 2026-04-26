@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api, ApiError } from '@core/api/client'
 import {
   Settings, Brain as BrainIcon, ChevronRight, CalendarDays, TrendingUp, BookOpen,
