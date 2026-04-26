@@ -119,6 +119,11 @@ const completionPercent = computed(() => {
   return Math.round((habitCheckin.value.completed_count / habitCheckin.value.total_count) * 100)
 })
 
+const pausedCount = computed(() => {
+  if (!habitCheckin.value) return 0
+  return habitCheckin.value.habits.filter(h => !h.habit.is_active).length
+})
+
 async function fetchHabitCheckin() {
   try {
     habitCheckin.value = await api.get<DailyCheckInResponse>('/api/life/habits/checkin')
@@ -461,7 +466,8 @@ onMounted(async () => {
       <div class="glass-card p-4 mb-6">
         <div class="flex items-center justify-between mb-2">
           <span class="text-sm font-medium text-txt-primary">
-            {{ habitCheckin.completed_count }}/{{ habitCheckin.total_count }} habits completed
+            {{ habitCheckin.completed_count }}/{{ habitCheckin.total_count }} active habits done
+            <span v-if="pausedCount > 0" class="text-xs text-txt-muted ml-1">· {{ pausedCount }} paused</span>
           </span>
           <span class="text-xs text-txt-muted">{{ completionPercent }}%</span>
         </div>
@@ -480,11 +486,15 @@ onMounted(async () => {
           v-for="item in habitCheckin.habits"
           :key="item.habit.id"
           class="glass-card px-4 py-3 flex items-center gap-3 transition-shadow duration-150 ease-out"
-          :class="item.logged ? 'ring-1 ring-success/30' : ''"
+          :class="[
+            item.logged ? 'ring-1 ring-success/30' : '',
+            !item.habit.is_active ? 'opacity-50' : '',
+          ]"
         >
           <button
             @click="toggleHabit(item)"
-            class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors duration-100 ease-out flex-shrink-0"
+            :disabled="!item.habit.is_active"
+            class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors duration-100 ease-out flex-shrink-0 disabled:cursor-not-allowed"
             :class="item.logged
               ? 'bg-success border-success text-white'
               : 'border-bdr hover:border-accent'"
@@ -494,7 +504,13 @@ onMounted(async () => {
           <component :is="getIcon(item.habit.emoji)" :size="22" class="flex-shrink-0 text-accent" v-if="getIcon(item.habit.emoji)" />
           <CircleDot v-else :size="22" class="flex-shrink-0 text-accent" />
           <div class="flex-1 min-w-0">
-            <span class="text-sm font-medium text-txt-primary">{{ item.habit.name }}</span>
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-medium text-txt-primary">{{ item.habit.name }}</span>
+              <span
+                v-if="!item.habit.is_active"
+                class="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-3 text-txt-muted"
+              >Paused</span>
+            </div>
             <p v-if="item.habit.trigger" class="text-[11px] text-txt-muted leading-tight mt-0.5">After {{ item.habit.trigger }}</p>
           </div>
           <div v-if="item.habit.unit" class="flex items-center gap-1.5">

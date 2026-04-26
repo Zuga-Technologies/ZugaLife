@@ -608,13 +608,12 @@ async def get_checkin(
     async with get_session() as session:
         await _ensure_presets(session, user.id)
 
-        # Get all active habits
+        # Return ALL habits (active + paused) so the UI can render paused ones
+        # in a disabled state. Counts below only consider active habits — the
+        # user's "completed all habits today" concept is scoped to active.
         habits_result = await session.execute(
             select(HabitDefinition)
-            .where(
-                HabitDefinition.user_id == user.id,
-                HabitDefinition.is_active == True,  # noqa: E712
-            )
+            .where(HabitDefinition.user_id == user.id)
             .order_by(HabitDefinition.sort_order, HabitDefinition.id)
         )
         habits = habits_result.scalars().all()
@@ -630,10 +629,13 @@ async def get_checkin(
 
         items = []
         completed = 0
+        active_count = 0
         for habit in habits:
             log = logs.get(habit.id)
-            if log and log.completed:
-                completed += 1
+            if habit.is_active:
+                active_count += 1
+                if log and log.completed:
+                    completed += 1
             items.append(HabitCheckInItem(
                 habit=HabitDefinitionResponse.model_validate(habit),
                 logged=log is not None and log.completed,
@@ -645,7 +647,7 @@ async def get_checkin(
         date=target_date,
         habits=items,
         completed_count=completed,
-        total_count=len(habits),
+        total_count=active_count,
     )
 
 
