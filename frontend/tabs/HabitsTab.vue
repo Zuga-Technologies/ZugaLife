@@ -798,28 +798,49 @@ onMounted(async () => {
           </div>
         </div>
       </div>
-      <div class="flex gap-2">
-        <div class="flex-1 relative">
+      <!-- Unit selection — pills for common units (matches the anchor row pattern
+           below) plus a custom-text fallback. Replaces the native <datalist>
+           dropdown that browsers rendered in inconsistent / ugly styles. -->
+      <div>
+        <label class="text-[11px] text-txt-muted mb-1 block">How will you measure it?</label>
+        <div class="flex flex-wrap gap-1.5 mb-2">
+          <button
+            type="button"
+            @click="newHabitUnit = ''"
+            class="px-2.5 py-1 text-[11px] rounded-full border transition-colors"
+            :class="!newHabitUnit
+              ? 'bg-accent/20 border-accent text-accent'
+              : 'border-bdr text-txt-muted hover:border-accent/50'"
+          >Just check off</button>
+          <button
+            type="button"
+            v-for="u in habitUnits"
+            :key="u.value"
+            @click="newHabitUnit = u.value"
+            class="px-2.5 py-1 text-[11px] rounded-full border transition-colors"
+            :class="newHabitUnit === u.value
+              ? 'bg-accent/20 border-accent text-accent'
+              : 'border-bdr text-txt-muted hover:border-accent/50'"
+            :title="u.label"
+          >{{ u.value }}</button>
+        </div>
+        <div class="flex gap-2">
           <input
             v-model="newHabitUnit"
             type="text"
-            list="habit-unit-suggestions"
-            placeholder="No unit (checkbox only)"
-            class="input-field w-full text-sm"
+            placeholder="Or type a custom unit"
+            class="input-field flex-1 text-sm"
             maxlength="20"
           />
-          <datalist id="habit-unit-suggestions">
-            <option v-for="u in habitUnits" :key="u.value" :value="u.value" :label="`${u.value} ${u.label}`" />
-          </datalist>
+          <input
+            v-if="newHabitUnit"
+            v-model.number="newHabitTarget"
+            type="number"
+            placeholder="Target"
+            min="1"
+            class="input-field w-24 text-sm"
+          />
         </div>
-        <input
-          v-if="newHabitUnit"
-          v-model.number="newHabitTarget"
-          type="number"
-          placeholder="Target"
-          min="1"
-          class="input-field w-24 text-sm"
-        />
       </div>
       <!-- Habit anchor — "After what routine?" (habit stacking) -->
       <div>
