@@ -861,18 +861,26 @@ async def generate_insight(
         mood_entries = await _gather_mood_data(session, user.id, week_start)
         mood_text = _prompts.format_mood_data(mood_entries)
 
-        # Sparse-data gate: prevent the AI from hallucinating "you have N days of
-        # tracking history" when the dataset is mostly empty rows. Refuse early —
-        # cheaper than a Venice round-trip and a confused user.
+        # Sparse-data gate: prevent the AI from hallucinating "you have N days
+        # of tracking history" when the dataset is mostly empty rows. Refuse
+        # early — cheaper than a Venice round-trip and a confused user. The
+        # threshold (≥5 total entries with at least 1 of each kind) is loose
+        # enough that a first-week user can still see an insight after a few
+        # days of light tracking.
         habit_log_count = sum(len(d.get("habits") or []) for d in habit_days)
         mood_log_count = len(mood_entries)
-        if habit_log_count < 3 or mood_log_count < 3:
+        total = habit_log_count + mood_log_count
+        if total < 5 or habit_log_count == 0 or mood_log_count == 0:
+            needed = max(0, 5 - total)
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "Not enough data yet for a meaningful insight. "
-                    "Log at least 3 habits and 3 moods over the past week, "
-                    "then try again."
+                    f"Log a few more entries this week so we can spot real "
+                    f"patterns — about {needed} more should do it. Both habit "
+                    f"check-ins and mood logs help."
+                    if habit_log_count and mood_log_count else
+                    "Log at least one habit AND one mood this week, plus a "
+                    "few more entries, so we can correlate them."
                 ),
             )
 

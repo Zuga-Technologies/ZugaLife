@@ -98,6 +98,8 @@ const habitSubmitting = ref(false)
 // AI habit insight
 const habitInsightLoading = ref(false)
 const habitInsightText = ref<string | null>(null)
+// Inline "not enough data yet" hint — gentle guidance, not an error.
+const habitInsightHint = ref<string | null>(null)
 const historyDays = ref(7)
 
 // New custom habit form
@@ -365,6 +367,7 @@ async function fetchHabitInsight() {
   if (habitInsightLoading.value) return
   habitInsightLoading.value = true
   habitInsightText.value = null
+  habitInsightHint.value = null
   try {
     const res = await api.post<{ content: string; cost: number }>('/api/life/habits/insight')
     habitInsightText.value = res.content
@@ -375,8 +378,8 @@ async function fetchHabitInsight() {
     } else if (e instanceof ApiError && e.status === 429) {
       habitError.value = handleServiceError('Insight Cooldown', (e.body as Record<string, string>).detail ?? 'Insights are available once per week. Check back later!')
     } else if (e instanceof ApiError && e.status === 400) {
-      // Sparse-data gate — show the backend's user-friendly message directly.
-      habitError.value = handleServiceError('Not Enough Data', (e.body as Record<string, string>).detail ?? 'Log a few more habits and moods, then try again.')
+      // Sparse-data gate — show as a soft inline hint, not a red error.
+      habitInsightHint.value = (e.body as Record<string, string>).detail ?? 'Log a few more habits and moods this week, then try again.'
     } else if (e instanceof ApiError && e.status >= 500) {
       habitError.value = handleServiceError('Service Unavailable', 'The AI service is temporarily down. Your tokens were not charged. Please try again in a few minutes.')
     } else {
@@ -542,6 +545,10 @@ onMounted(async () => {
         </div>
         <div v-if="habitInsightText" class="mt-3 p-3 rounded-lg bg-accent-alt/10 border border-accent-alt/20 animate-fade-in">
           <p class="text-xs text-txt-secondary leading-relaxed whitespace-pre-line">{{ habitInsightText }}</p>
+        </div>
+        <!-- Soft "not enough data" hint — guidance, not error. -->
+        <div v-else-if="habitInsightHint" class="mt-3 p-3 rounded-lg bg-info/8 border border-info/15 animate-fade-in">
+          <p class="text-xs text-info/90 leading-relaxed">{{ habitInsightHint }}</p>
         </div>
       </div>
 
