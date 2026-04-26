@@ -148,6 +148,21 @@ const levelNames: Record<number, string> = {
 
 <style scoped>
 /* ================================================================
+   MOTION TOKENS — single source of truth for all celebrations.
+   Use --ease-smooth (quart-out) for entrances, --ease-exit for leaves.
+   Durations are slightly tiered: fast (toast), base (modal), slow (hero).
+   ================================================================ */
+.cel-toast-stack,
+.cel-modal-overlay,
+.cel-confetti {
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit:   cubic-bezier(0.4, 0, 0.6, 1);
+  --dur-fast:   220ms;
+  --dur-base:   360ms;
+  --dur-slow:   520ms;
+}
+
+/* ================================================================
    TOAST STACK
    Desktop: bottom-right. Mobile: top-center.
    ================================================================ */
@@ -256,36 +271,37 @@ const levelNames: Record<number, string> = {
   flex: 1;
 }
 
-/* Toast enter/leave transitions */
+/* Toast enter/leave — smooth quart-out, no overshoot.
+   Subtle slide + fade only; scale stays at 1 so the toast doesn't pulse. */
 .toast-enter-active {
-  animation: toast-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  animation: toast-in var(--dur-fast) var(--ease-smooth);
 }
 .toast-leave-active {
-  animation: toast-out 0.3s cubic-bezier(0.6, -0.28, 0.735, 0.045);
+  animation: toast-out var(--dur-fast) var(--ease-exit);
 }
 .toast-move {
-  transition: transform 0.3s ease;
+  transition: transform var(--dur-fast) var(--ease-smooth);
 }
 
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateX(60px) scale(0.8);
+    transform: translateX(24px);
   }
   to {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateX(0);
   }
 }
 
 @keyframes toast-out {
   from {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateX(0);
   }
   to {
     opacity: 0;
-    transform: translateX(60px) scale(0.8);
+    transform: translateX(24px);
   }
 }
 
@@ -293,21 +309,21 @@ const levelNames: Record<number, string> = {
   @keyframes toast-in {
     from {
       opacity: 0;
-      transform: translateY(-40px) scale(0.8);
+      transform: translateY(-16px);
     }
     to {
       opacity: 1;
-      transform: translateY(0) scale(1);
+      transform: translateY(0);
     }
   }
   @keyframes toast-out {
     from {
       opacity: 1;
-      transform: translateY(0) scale(1);
+      transform: translateY(0);
     }
     to {
       opacity: 0;
-      transform: translateY(-40px) scale(0.8);
+      transform: translateY(-16px);
     }
   }
 }
@@ -486,13 +502,14 @@ const levelNames: Record<number, string> = {
   justify-content: center;
   font-size: 3.5rem;
   margin-bottom: 0.75rem;
-  animation: badge-bounce 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  /* Entrance is handled by .cel-modal > * content-up stagger.
+     Keep a subtle ambient breath so the icon feels alive after entry. */
+  animation: badge-breath 4s ease-in-out 600ms infinite;
 }
 
-@keyframes badge-bounce {
-  0% { transform: scale(0) rotate(-20deg); opacity: 0; }
-  60% { transform: scale(1.2) rotate(5deg); opacity: 1; }
-  100% { transform: scale(1) rotate(0deg); }
+@keyframes badge-breath {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
 }
 
 /* ================================================================
@@ -506,17 +523,17 @@ const levelNames: Record<number, string> = {
   color: #f59e0b;
 }
 
+/* Stars enter with the content stagger; keep only a gentle twinkle after. */
 .cel-star {
-  animation: star-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+  animation: star-twinkle 2.4s ease-in-out infinite;
 }
+.cel-star--1 { animation-delay: 0s; }
+.cel-star--2 { animation-delay: 0.4s; }
+.cel-star--3 { animation-delay: 0.8s; }
 
-.cel-star--1 { animation-delay: 0.1s; }
-.cel-star--2 { animation-delay: 0.25s; }
-.cel-star--3 { animation-delay: 0.4s; }
-
-@keyframes star-pop {
-  0% { transform: scale(0) rotate(-45deg); opacity: 0; }
-  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+@keyframes star-twinkle {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.08); }
 }
 
 .cel-levelup-number {
@@ -538,34 +555,76 @@ const levelNames: Record<number, string> = {
 }
 
 /* ================================================================
-   MODAL TRANSITIONS
+   MODAL TRANSITIONS — overlay fades, modal does ONE smooth scale-up
+   from 0.94 (not 0.7), and inner content staggers in slightly delayed
+   so the icon/title don't fight the container scale.
    ================================================================ */
 .modal-enter-active {
-  animation: modal-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  animation: overlay-fade var(--dur-fast) var(--ease-smooth);
 }
 .modal-leave-active {
-  animation: modal-out 0.25s ease-in;
+  animation: overlay-fade var(--dur-fast) var(--ease-exit) reverse;
+}
+
+.modal-enter-active .cel-modal {
+  animation: modal-in var(--dur-base) var(--ease-smooth);
+}
+.modal-leave-active .cel-modal {
+  animation: modal-out var(--dur-fast) var(--ease-exit);
+}
+
+@keyframes overlay-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 @keyframes modal-in {
   from {
     opacity: 0;
-    transform: scale(0.7);
+    transform: scale(0.94) translateY(8px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
 }
 
 @keyframes modal-out {
   from {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
   to {
     opacity: 0;
-    transform: scale(0.7);
+    transform: scale(0.96) translateY(4px);
+  }
+}
+
+/* Content stagger inside modal — runs AFTER modal scale settles.
+   Tiny offsets so it reads as one breath, not separate items popping. */
+.cel-modal > * {
+  animation: content-up var(--dur-base) var(--ease-smooth) both;
+}
+.cel-modal > *:nth-child(2) { animation-delay: 80ms; }
+.cel-modal > *:nth-child(3) { animation-delay: 110ms; }
+.cel-modal > *:nth-child(4) { animation-delay: 140ms; }
+.cel-modal > *:nth-child(5) { animation-delay: 170ms; }
+.cel-modal > *:nth-child(6) { animation-delay: 200ms; }
+.cel-modal > *:nth-child(7) { animation-delay: 230ms; }
+/* Close button + shine layer should not stagger — keep them as-is */
+.cel-modal > .cel-modal__close,
+.cel-modal > .cel-modal__shine {
+  animation: none;
+}
+
+@keyframes content-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -594,15 +653,9 @@ const levelNames: Record<number, string> = {
 .cel-prestige-badge {
   font-size: 4.5rem;
   margin-bottom: 0.5rem;
-  animation: prestige-badge-entrance 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  /* Entrance via content-up stagger; keep a slow ambient breath for hero feel. */
+  animation: badge-breath 4s ease-in-out 700ms infinite;
   filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.4));
-}
-
-@keyframes prestige-badge-entrance {
-  0% { transform: scale(0) rotate(-30deg); opacity: 0; filter: blur(8px); }
-  50% { transform: scale(1.3) rotate(5deg); opacity: 1; filter: blur(0); }
-  70% { transform: scale(0.95) rotate(-2deg); }
-  100% { transform: scale(1) rotate(0deg); }
 }
 
 .cel-prestige-tier {
@@ -633,13 +686,16 @@ const levelNames: Record<number, string> = {
   .cel-prestige-badge,
   .cel-prestige-tier,
   .cel-modal__shine,
-  .cel-toast--bonus {
+  .cel-toast--bonus,
+  .cel-modal > * {
     animation: none !important;
   }
   .modal-enter-active,
   .modal-leave-active,
   .toast-enter-active,
-  .toast-leave-active {
+  .toast-leave-active,
+  .modal-enter-active .cel-modal,
+  .modal-leave-active .cel-modal {
     animation: none !important;
     transition-duration: 0.01ms !important;
   }
