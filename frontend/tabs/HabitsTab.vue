@@ -152,27 +152,34 @@ async function fetchHabitHistory() {
 
 async function toggleHabit(item: HabitCheckInItem) {
   habitError.value = null
+  // Optimistic flip — UI feels instant. Revert if the API call fails.
+  const wasLogged = item.logged
+  item.logged = !wasLogged
+  if (habitCheckin.value) {
+    habitCheckin.value.completed_count += wasLogged ? -1 : 1
+  }
   try {
-    if (item.logged) {
-      // Uncheck — use server's date from checkin response (not local date)
+    if (wasLogged) {
       const serverDate = habitCheckin.value?.date
-      if (!serverDate) return
+      if (!serverDate) throw new Error('no_server_date')
       await api.delete(`/api/life/habits/log/${item.habit.id}/${serverDate}`)
-      await fetchHabitCheckin()
     } else {
-      // Check — celebrate XP gain
       const amt = amountInputs.value[item.habit.id]
-      await withCelebration(() =>
-        api.post('/api/life/habits/log', {
-          habit_id: item.habit.id,
-          completed: true,
-          amount: amt ? parseFloat(amt) : null,
-        }), 'habit_check'
-      )
-      await fetchHabitCheckin()
-      fetchGamification()
+      await api.post('/api/life/habits/log', {
+        habit_id: item.habit.id,
+        completed: true,
+        amount: amt ? parseFloat(amt) : null,
+      })
     }
+    // Background reconciliation — streaks/counts may have shifted server-side.
+    void fetchHabitCheckin()
+    void fetchHabitStreaks()
   } catch (e) {
+    // Revert optimistic update so the UI reflects truth.
+    item.logged = wasLogged
+    if (habitCheckin.value) {
+      habitCheckin.value.completed_count += wasLogged ? 1 : -1
+    }
     if (e instanceof ApiError) {
       habitError.value = (e.body as Record<string, string>).detail ?? `Error (${(e as ApiError).status})`
     } else {
@@ -387,7 +394,26 @@ onMounted(async () => {
 
   <!-- ===== CHECK-IN VIEW ===== -->
   <template v-if="habitView === 'checkin'">
-    <div v-if="loadingHabits" class="text-sm text-txt-muted">Loading habits...</div>
+    <!-- Skeleton — shape-matched so cards don't shift when data arrives. -->
+    <div v-if="loadingHabits && !habitCheckin" class="animate-fade-in">
+      <div class="glass-card p-4 mb-6">
+        <div class="flex items-center justify-between mb-2">
+          <div class="bg-surface-3 animate-pulse h-3 w-40 rounded"></div>
+          <div class="bg-surface-3 animate-pulse h-3 w-10 rounded"></div>
+        </div>
+        <div class="bg-surface-3 animate-pulse w-full h-2.5 rounded-full"></div>
+      </div>
+      <div class="space-y-2">
+        <div v-for="i in 3" :key="i" class="glass-card px-4 py-3 flex items-center gap-3">
+          <div class="bg-surface-3 animate-pulse w-6 h-6 rounded-md flex-shrink-0"></div>
+          <div class="bg-surface-3 animate-pulse w-7 h-7 rounded-lg flex-shrink-0"></div>
+          <div class="flex-1 flex flex-col gap-1.5">
+            <div class="bg-surface-3 animate-pulse h-3 w-32 rounded"></div>
+            <div class="bg-surface-3 animate-pulse h-2 w-20 rounded"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <template v-else-if="habitCheckin">
       <!-- Progress bar -->
       <div class="glass-card p-4 mb-6">
