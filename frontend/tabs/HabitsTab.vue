@@ -188,6 +188,22 @@ async function toggleHabit(item: HabitCheckInItem) {
   }
 }
 
+// When the user presses ↑/↓ on an EMPTY amount input, seed it with the
+// habit's default target so the next step lands somewhere meaningful
+// instead of 0/1. Native step continues normally once a value exists.
+function handleAmountKeydown(item: HabitCheckInItem, e: KeyboardEvent) {
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+  const current = amountInputs.value[item.habit.id]
+  if (current) return  // existing value — let native step take over
+  const target = item.habit.default_target
+  if (target == null) return
+  e.preventDefault()
+  const seeded = e.key === 'ArrowUp'
+    ? Number(target) + 1
+    : Math.max(0, Number(target) - 1)
+  amountInputs.value[item.habit.id] = String(seeded)
+}
+
 async function updateHabitAmount(item: HabitCheckInItem) {
   const amt = amountInputs.value[item.habit.id]
   if (!amt) return
@@ -463,6 +479,7 @@ onMounted(async () => {
               type="number"
               :value="amountInputs[item.habit.id] ?? ''"
               @input="amountInputs[item.habit.id] = ($event.target as HTMLInputElement).value"
+              @keydown="handleAmountKeydown(item, $event)"
               @blur="updateHabitAmount(item)"
               @keyup.enter="updateHabitAmount(item)"
               :placeholder="item.habit.default_target ? String(item.habit.default_target) : '0'"
