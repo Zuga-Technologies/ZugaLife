@@ -1,6 +1,6 @@
 # ZugaLife Competitive Landscape
 
-> Last updated: **2026-04-26** (researcher pull)
+> Last updated: **2026-04-26** (researcher pull, +Flourish entry)
 > Source: cited research at `.claude/metaprompts/` (this conversation)
 > Refresh cadence: quarterly, or after a major incumbent ships AI features
 > Maintainer: re-run the researcher agent prompt at the bottom of this file
@@ -21,20 +21,21 @@ Ranked by a blunt composite of: user/install scale, recency of meaningful AI shi
 | 4 | **Character.AI** | 50M (Feb 2026) | Companion modes ongoing | 🟡 Regulatory headwinds | MEDIUM — adjacent (companion) |
 | 5 | **Noom (Welli + GLP-1)** | Millions | Welli chatbot live | 🟢 GLP-1 vertical surge | MEDIUM — weight-loss vertical |
 | 6 | **Wysa** | Millions (B2B) | FDA Breakthrough Device | 🟢 B2B EAP scale | HIGH — CBT toolkit, but B2B-heavy |
-| 7 | **Replika** | Millions | Ultra tier 2025 | 🟡 Parasocial regulatory risk | MEDIUM — companion-leaning |
-| 8 | **Rosebud Journal** | Seed-stage, growing | $6M raise 2025, GPT-4o | 🟢 Niche leader (AI journaling) | HIGH — same psychological tier |
-| 9 | **MyFitnessPal + Cal AI** | Tens of millions | Cal AI acq Mar 2026 | 🟢 Acquisition assembly | LOW — nutrition vertical |
-| 10 | **Earkick** | Hundreds of thousands | Apple Watch HRV integration | 🟢 Voice anxiety niche | MEDIUM — anxiety vertical |
-| 11 | **WHOOP Coach** | ~$30/mo subs (hardware-gated) | Daily Outlook (proactive) | 🟢 Behavioral pattern leader | LOW — hardware moat |
-| 12 | **Flo Health** | 75M users | Databricks AI predictions | 🟢 Women's vertical | LOW — cycle vertical |
-| 13 | **Youper** | Smaller install, JAMA-ranked | CBT model | 🟡 Slower ship cadence | HIGH — emotional AI |
-| 14 | **Finch** | Millions (younger demo) | Pet-mechanic gamification | 🟡 Gen Z stronghold | MEDIUM — habit + journal |
-| 15 | **MacroFactor** | Tens of thousands | Adaptive TDEE | 🟢 Coach-grade nutrition | LOW — nutrition vertical |
-| 16 | **Talkspace TALK AI** | (launching Q2 2026) | Announced Feb 2026 | 🟢 Insurance-backed | MEDIUM — therapist-adjacent |
-| 17 | **Pi (Inflection AI)** | Unknown | Voice (2024) | 🔴 Maintenance mode | LOW — abandoned consumer push |
-| 18 | **Hume AI / EVI** | Infrastructure-only | EVI 3 late 2025 | 🟢 Dev platform | LOW — not a consumer app |
-| 19 | **BetterHelp** | Millions | No verified AI | 🟡 Human-therapist model | LOW — different model |
-| 20 | **Woebot** | EXITED consumer | Shut down DTC **Jun 30 2025** | 🔴 B2B-only now | (sealed — historical) |
+| 7 | **Flourish Science (Sunnie)** | ~665 App Store ratings, B2B2C unknowns | v2.51, Apr 2025 | 🟢 Stanford-backed, RCT, active | **HIGH** — feature-for-feature match |
+| 8 | **Replika** | Millions | Ultra tier 2025 | 🟡 Parasocial regulatory risk | MEDIUM — companion-leaning |
+| 9 | **Rosebud Journal** | Seed-stage, growing | $6M raise 2025, GPT-4o | 🟢 Niche leader (AI journaling) | HIGH — same psychological tier |
+| 10 | **MyFitnessPal + Cal AI** | Tens of millions | Cal AI acq Mar 2026 | 🟢 Acquisition assembly | LOW — nutrition vertical |
+| 11 | **Earkick** | Hundreds of thousands | Apple Watch HRV integration | 🟢 Voice anxiety niche | MEDIUM — anxiety vertical |
+| 12 | **WHOOP Coach** | ~$30/mo subs (hardware-gated) | Daily Outlook (proactive) | 🟢 Behavioral pattern leader | LOW — hardware moat |
+| 13 | **Flo Health** | 75M users | Databricks AI predictions | 🟢 Women's vertical | LOW — cycle vertical |
+| 14 | **Youper** | Smaller install, JAMA-ranked | CBT model | 🟡 Slower ship cadence | HIGH — emotional AI |
+| 15 | **Finch** | Millions (younger demo) | Pet-mechanic gamification | 🟡 Gen Z stronghold | MEDIUM — habit + journal |
+| 16 | **MacroFactor** | Tens of thousands | Adaptive TDEE | 🟢 Coach-grade nutrition | LOW — nutrition vertical |
+| 17 | **Talkspace TALK AI** | (launching Q2 2026) | Announced Feb 2026 | 🟢 Insurance-backed | MEDIUM — therapist-adjacent |
+| 18 | **Pi (Inflection AI)** | Unknown | Voice (2024) | 🔴 Maintenance mode | LOW — abandoned consumer push |
+| 19 | **Hume AI / EVI** | Infrastructure-only | EVI 3 late 2025 | 🟢 Dev platform | LOW — not a consumer app |
+| 20 | **BetterHelp** | Millions | No verified AI | 🟡 Human-therapist model | LOW — different model |
+| 21 | **Woebot** | EXITED consumer | Shut down DTC **Jun 30 2025** | 🔴 B2B-only now | (sealed — historical) |
 
 **Legend:** 🟢 = actively investing & shipping. 🟡 = headwinds or stagnant. 🔴 = retreating or sealed.
 
@@ -51,6 +52,18 @@ These are the apps users would pick INSTEAD of ZugaLife.
 - **Latest ship:** Voice mode + enhanced memory (Dec 2025) — [BusinessWire](https://www.businesswire.com/news/home/20251208896917/en/)
 - **Where they beat us:** Brand, content library, organizational scale, design polish ([Figma case study](https://www.figma.com/blog/headspace-ebb-ai-companion/))
 - **Where ZugaLife can beat them:** Cross-domain memory (Ebb is siloed to Headspace content), Venice privacy (Ebb trains on conversation), proactive check-ins (Ebb is reactive)
+
+### Flourish Science (Sunnie) — direct feature-for-feature match
+- **Site:** https://www.myflourish.ai
+- **AI features:** AI coaching companion ("Sunnie"), guided journaling, mood tracking + weekly/monthly "Flourish Score," Tiny Habits integration, gamified streaks/badges, breathing exercises, community "Flourish Buddies," voice mode, long-term memory
+- **Pricing:** Free + ~$5.99/mo or ~$69.99/yr
+- **Latest ship:** v2.51.0, **2025-04-08** (App Store)
+- **Scale:** 665 App Store ratings (5.0★) — small consumer install base; B2B2C university/corporate channel adds unlisted volume
+- **Backing:** Stanford StartX, Dorm Room Fund, Liquidmetal Ventures
+- **Evidence:** Multi-site **Stanford RCT published** — significantly higher positive emotions, lower loneliness ([science page](https://www.myflourish.ai/science))
+- **Where they beat us:** Stanford RCT credibility, community challenges (peer accountability), institutional backing as a marketing asset
+- **Where ZugaLife can beat them:** Venice privacy (Sunnie trains on user data), ZugaTokens per-action billing vs subscription lock-in, proactive agentic check-ins (no evidence Flourish does this), single-founder ship velocity
+- **Disambiguation:** A separate company **Flourish Technologies** (flourishtech.app, "Fleur") exists; thinner feature set, no scale signals — irrelevant.
 
 ### Wysa
 - **Site:** https://www.wysa.com
@@ -127,6 +140,19 @@ Users could substitute these for parts of ZugaLife's value prop.
 | **Earkick** | Anxiety/panic | $47.99/yr | Apple Watch HRV |
 | **Finch** | Habit gamification | (unverified) | Pet mechanic, Gen Z |
 | **Hume AI / EVI** | Voice infrastructure | API | Powers EverFriends.ai etc. |
+
+---
+
+## On the radar — flag if their lane changes
+
+- **Jimini Health (Sage)** — Raised $17M seed **2026-03-31** ($25M total). AI chatbot embedded inside clinical behavioral-health teams, **supervised by a licensed clinician**. Pure B2B / clinical channel — near-zero overlap with ZugaLife's consumer DTC today. Flag only if ZugaLife pursues a B2B/EAP route. ([STAT News](https://www.statnews.com/2026/03/31/jimini-health-raises-funding-ai-chatbot-sage-mental-health/))
+
+---
+
+## Verified non-competitors (do not re-research)
+
+- **Paaco / PAACO** — researched 2026-04-26, **does not exist** as a wellness or AI app. `paaco.tech` is a "Coming Soon" landing page. Other hits: PAACO Automotive Group (Texas used-car auction, est. 1992) and Paaco.nl (Dutch consultancy). If a name is misheard, may be confused with another product.
+- **Flourish Technologies (flourishtech.app, "Fleur")** — separate product from Flourish Science. Thinner feature set, no scale signals. Track Flourish Science (myflourish.ai) instead.
 
 ---
 
