@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { api, ApiError, getToken } from '@core/api/client'
-import { BookOpen, Download, Meh } from 'lucide-vue-next'
+import { ArrowLeft, BookOpen, Download, Meh } from 'lucide-vue-next'
 import { moodIcons } from '../icons'
 import { useLifeShared } from '../composables/useLifeShared'
 
@@ -605,15 +605,18 @@ onMounted(async () => {
   </template>
 
   <template v-if="journalView === 'detail'">
-    <div class="mb-6">
-      <button @click="goToJournalList" class="text-txt-muted hover:text-txt-primary transition-colors text-sm mb-2">&larr;</button>
-      <h2 class="text-xl font-bold text-txt-primary">Entry</h2>
-    </div>
     <div v-if="loadingDetail" class="text-sm text-txt-muted">Loading...</div>
     <template v-else-if="currentEntry">
       <div class="glass-card p-6 mb-6">
-        <div class="flex items-start justify-between mb-4">
-          <div>
+        <div class="flex items-start justify-between mb-4 gap-4">
+          <div class="min-w-0">
+            <button
+              @click="goToJournalList"
+              class="inline-flex items-center gap-1 text-[11px] text-txt-muted hover:text-txt-primary transition-colors mb-2"
+            >
+              <ArrowLeft :size="11" />
+              <span>All entries</span>
+            </button>
             <h2 v-if="currentEntry.title" class="text-lg font-semibold text-txt-primary mb-1">{{ currentEntry.title }}</h2>
             <div class="flex items-center gap-2 text-xs text-txt-muted">
               <span>{{ formatDate(currentEntry.created_at) }}</span>
@@ -624,7 +627,7 @@ onMounted(async () => {
               </span>
             </div>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-shrink-0">
             <div class="relative">
               <button @click="showExportMenu = !showExportMenu" class="text-xs text-txt-muted hover:text-accent transition-colors px-3 py-2 flex items-center gap-1">
                 <Download :size="12" />

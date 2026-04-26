@@ -615,21 +615,13 @@ onMounted(async () => {
       <div class="mt-6 glass-card p-4">
         <div class="flex items-center justify-between">
           <span class="text-xs font-medium text-txt-secondary">Weekly AI Insight</span>
-          <div class="flex items-center gap-3">
-            <button
-              v-if="!habitInsightLoading"
-              @click="resetInsightsCooldown"
-              class="text-[10px] text-txt-muted hover:text-txt-secondary transition-colors"
-              title="Clear past insights so the 7-day cooldown resets"
-            >Clear cooldown</button>
-            <button
-              @click="fetchHabitInsight"
-              :disabled="habitInsightLoading"
-              class="text-xs text-accent-alt hover:text-accent-alt-bright transition-colors disabled:opacity-50"
-            >
-              {{ habitInsightLoading ? 'Analyzing...' : 'Generate Insight' }}
-            </button>
-          </div>
+          <button
+            @click="fetchHabitInsight"
+            :disabled="habitInsightLoading"
+            class="text-xs text-accent-alt hover:text-accent-alt-bright transition-colors disabled:opacity-50"
+          >
+            {{ habitInsightLoading ? 'Analyzing...' : 'Generate Insight' }}
+          </button>
         </div>
         <div v-if="habitInsightText" class="mt-3 p-3 rounded-lg bg-accent-alt/10 border border-accent-alt/20 animate-fade-in">
           <p class="text-xs text-txt-secondary leading-relaxed whitespace-pre-line">{{ habitInsightText }}</p>
@@ -639,37 +631,8 @@ onMounted(async () => {
           <p class="text-xs text-info/90 leading-relaxed">{{ habitInsightHint }}</p>
         </div>
       </div>
-
-      <!-- Reset options -->
-      <div class="mt-4 flex flex-wrap gap-2">
-        <button
-          v-if="resetConfirm !== 'today'"
-          @click="resetConfirm = 'today'"
-          class="text-xs text-txt-muted hover:text-txt-secondary transition-colors"
-        >
-          Reset today
-        </button>
-        <div v-else class="flex items-center gap-2 text-xs animate-fade-in">
-          <span class="text-txt-muted">Uncheck all today?</span>
-          <button @click="resetToday" class="text-red-400 hover:text-red-300 font-medium">Yes, clear</button>
-          <button @click="resetConfirm = null" class="text-txt-muted hover:text-txt-primary">Cancel</button>
-        </div>
-
-        <span class="text-txt-muted/30">·</span>
-
-        <button
-          v-if="resetConfirm !== 'history'"
-          @click="resetConfirm = 'history'"
-          class="text-xs text-txt-muted hover:text-txt-secondary transition-colors"
-        >
-          Reset all history
-        </button>
-        <div v-else class="flex items-center gap-2 text-xs animate-fade-in">
-          <span class="text-red-400">Delete ALL logs &amp; streaks?</span>
-          <button @click="resetAllHistory" class="text-red-400 hover:text-red-300 font-medium">Yes, reset everything</button>
-          <button @click="resetConfirm = null" class="text-txt-muted hover:text-txt-primary">Cancel</button>
-        </div>
-      </div>
+      <!-- Reset Today / Reset History / Clear Cooldown moved to Settings to
+           avoid duplicate dangerous actions on the habits page. -->
     </template>
     <div v-else class="glass-card p-8 text-center">
       <p class="text-txt-muted">No habits set up yet.</p>
