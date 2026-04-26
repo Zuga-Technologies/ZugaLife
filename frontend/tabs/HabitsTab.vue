@@ -188,6 +188,16 @@ async function toggleHabit(item: HabitCheckInItem) {
   }
 }
 
+// On focus, select all text so the cursor lands consistently at "end"
+// (as it does after ↑/↓ steps). Typing replaces; arrow keys still step.
+// Chrome refuses setSelectionRange on type=number, so .select() is the
+// portable fallback that gives the same UX result.
+function handleAmountFocus(e: FocusEvent) {
+  const el = e.target as HTMLInputElement
+  // Defer — focus event fires before browser places caret.
+  requestAnimationFrame(() => { try { el.select() } catch { /* noop */ } })
+}
+
 // When the user presses ↑/↓ on an EMPTY amount input, seed it with the
 // habit's default target so the next step lands somewhere meaningful
 // instead of 0/1. Native step continues normally once a value exists.
@@ -479,6 +489,7 @@ onMounted(async () => {
               type="number"
               :value="amountInputs[item.habit.id] ?? ''"
               @input="amountInputs[item.habit.id] = ($event.target as HTMLInputElement).value"
+              @focus="handleAmountFocus($event)"
               @keydown="handleAmountKeydown(item, $event)"
               @blur="updateHabitAmount(item)"
               @keyup.enter="updateHabitAmount(item)"
