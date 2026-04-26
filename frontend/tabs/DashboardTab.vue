@@ -393,7 +393,8 @@ async function logDashMood(emoji: string) {
     }
     // Set cooldown for 6 hours from now
     dashMoodCooldownUntil.value = new Date(Date.now() + 6 * 3600000).toISOString()
-    await fetchDashboard()
+    // Refresh dashboard in background — UI is already responsive
+    void fetchDashboard()
   } catch (e) {
     if (e instanceof ApiError && e.status === 429) {
       const detail = (e.body as Record<string, string>).detail || ''

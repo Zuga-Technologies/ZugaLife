@@ -259,13 +259,20 @@ async function withCelebration<T>(action: () => Promise<T>, source?: string): Pr
     celebration.takeSnapshot(gamificationData.value)
   }
   const prevFreezes = gamificationData.value?.xp.streak_freezes ?? 0
+  const prevTotalXp = gamificationData.value?.xp.total_xp ?? 0
   const result = await action()
-  try {
-    const newData = await api.get<GamificationData>('/api/life/gamification')
-    if (gamificationData.value) {
+
+  // Gamification refetch + celebration runs in BACKGROUND so the action
+  // returns to the UI immediately. The toast/badge popup arrives when ready.
+  // /api/life/gamification can take 2-5s on first-of-day if Venice has to
+  // generate today's challenges inline — keeping that off the critical path
+  // is the difference between "snappy" and "feels broken".
+  void (async () => {
+    try {
+      const newData = await api.get<GamificationData>('/api/life/gamification')
       celebration.celebrateChanges(newData, ALL_BADGES.value)
       if (newData.xp.bonus_label && newData.xp.bonus_tier) {
-        const xpGained = newData.xp.total_xp - (gamificationData.value?.xp.total_xp ?? 0)
+        const xpGained = newData.xp.total_xp - prevTotalXp
         celebration.celebrateBonus(
           newData.xp.bonus_label,
           newData.xp.bonus_tier as 'rare' | 'epic' | 'legendary',
@@ -283,11 +290,12 @@ async function withCelebration<T>(action: () => Promise<T>, source?: string): Pr
         else if (newData.xp.bonus_tier === 'epic') playJackpotSound()
         else if (celebration.activeLevelUp.value) playLevelUpSound()
         else if (celebration.activeBadge.value) playBadgeSound()
-        else if (newData.xp.total_xp !== (gamificationData.value?.xp.total_xp ?? 0)) playXpSound()
+        else if (newData.xp.total_xp !== prevTotalXp) playXpSound()
       }
-    }
-    gamificationData.value = newData
-  } catch { /* gamification fetch is non-critical */ }
+      gamificationData.value = newData
+    } catch { /* gamification fetch is non-critical */ }
+  })()
+
   return result
 }
 
