@@ -625,11 +625,16 @@ Be direct and specific. Use the actual numbers."""
 
     try:
         from core.ai.gateway import ai_call, CreditBlockedError
+        # ai_call requires `prompt` positional. Previously this passed only
+        # `messages=` and silently TypeError'd into the fallback every time —
+        # which is why insights felt instant and canned. The system role is
+        # folded into the prompt body now.
+        full_prompt = (
+            "You are a concise goal coach. Be direct, use data, no fluff.\n\n"
+            + prompt
+        )
         result = await ai_call(
-            messages=[
-                {"role": "system", "content": "You are a concise goal coach. Be direct, use data, no fluff."},
-                {"role": "user", "content": prompt},
-            ],
+            full_prompt,
             task="chat",
             user_id=user.id,
             user_email=user.email,

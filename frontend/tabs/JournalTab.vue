@@ -709,7 +709,7 @@ onMounted(async () => {
           v-else
           @click="goToJournalList"
           class="text-xs text-txt-muted hover:text-txt-primary transition-colors px-3 py-2"
-        >Back to entries</button>
+        >All Entries</button>
       </div>
     </template>
     <div v-else class="glass-card p-6 text-center">

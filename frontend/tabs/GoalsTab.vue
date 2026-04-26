@@ -267,11 +267,13 @@ function availableHabitsForGoal(goal: Goal): HabitDefinition[] {
 
 async function linkHabit(goalId: number, habitId: number) {
   goalError.value = null
+  // Optimistic — close the linker dropdown immediately, refetch in bg.
+  linkingHabitTo.value = null
   try {
     await api.post(`/api/life/goals/${goalId}/habits`, { habit_id: habitId })
-    linkingHabitTo.value = null
-    await fetchGoals()
+    void fetchGoals()
   } catch (e) {
+    void fetchGoals()
     if (e instanceof ApiError) {
       goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
     } else {
@@ -282,10 +284,21 @@ async function linkHabit(goalId: number, habitId: number) {
 
 async function unlinkHabit(goalId: number, habitId: number) {
   goalError.value = null
+  // Optimistic — drop the chip from the goal's linked-habit list.
+  const goal = goals.value.find(g => g.id === goalId)
+  let removedHabit: any = null
+  let removedIdx = -1
+  if (goal && goal.linked_habits) {
+    removedIdx = goal.linked_habits.findIndex(h => h.id === habitId)
+    if (removedIdx >= 0) removedHabit = goal.linked_habits.splice(removedIdx, 1)[0]
+  }
   try {
     await api.delete(`/api/life/goals/${goalId}/habits/${habitId}`)
-    await fetchGoals()
+    void fetchGoals()
   } catch (e) {
+    if (goal && removedHabit && removedIdx >= 0) {
+      goal.linked_habits.splice(removedIdx, 0, removedHabit)
+    }
     if (e instanceof ApiError) {
       goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
     } else {
@@ -368,13 +381,17 @@ async function toggleGoalComplete(goal: Goal) {
 
 async function deleteGoal(goal: Goal) {
   goalError.value = null
+  // Optimistic — drop the goal from the list immediately.
+  const idx = goals.value.indexOf(goal)
+  if (idx >= 0) goals.value.splice(idx, 1)
+  goalSuccess.value = 'Goal deleted.'
+  setTimeout(() => { goalSuccess.value = null }, 2000)
   try {
     await api.delete(`/api/life/goals/${goal.id}`)
-    goalSuccess.value = 'Goal deleted.'
-    setTimeout(() => { goalSuccess.value = null }, 2000)
-    await fetchGoals()
+    void fetchGoals()
     emit('success')
   } catch (e) {
+    if (idx >= 0) goals.value.splice(idx, 0, goal)
     if (e instanceof ApiError) {
       goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
     } else {
@@ -404,20 +421,22 @@ async function addMilestone(goalId: number) {
 
 async function toggleMilestone(goalId: number, milestone: GoalMilestone) {
   goalError.value = null
+  // Optimistic — flip the milestone's state and progress count immediately.
+  const goal = goals.value.find(g => g.id === goalId)
+  const wasCompleted = milestone.is_completed
+  milestone.is_completed = !wasCompleted
+  if (goal) {
+    goal.milestone_done += wasCompleted ? -1 : 1
+  }
   try {
-    if (!milestone.is_completed) {
-      await withCelebration(() =>
-        api.patch(`/api/life/goals/${goalId}/milestones/${milestone.id}`, {
-          is_completed: true,
-        }), 'goal_milestone'
-      )
-    } else {
-      await api.patch(`/api/life/goals/${goalId}/milestones/${milestone.id}`, {
-        is_completed: false,
-      })
-    }
-    await fetchGoals()
+    await api.patch(`/api/life/goals/${goalId}/milestones/${milestone.id}`, {
+      is_completed: !wasCompleted,
+    })
+    void fetchGoals()
   } catch (e) {
+    // Revert on error
+    milestone.is_completed = wasCompleted
+    if (goal) goal.milestone_done += wasCompleted ? 1 : -1
     if (e instanceof ApiError) {
       goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
     } else {
@@ -799,7 +818,7 @@ onMounted(async () => {
               </div>
               <div class="w-full bg-surface-3 rounded-full h-1.5">
                 <div
-                  class="h-1.5 rounded-full transition-all duration-500"
+                  class="h-1.5 rounded-full transition-[width,background-color] duration-300 ease-out"
                   :class="goalMilestonePct(goal) === 100 ? 'bg-success' : 'bg-accent'"
                   :style="{ width: goalMilestonePct(goal) + '%' }"
                 />
@@ -878,7 +897,7 @@ onMounted(async () => {
             <div v-for="ms in goal.milestones" :key="ms.id" class="flex items-center gap-2 group">
               <button
                 @click="toggleMilestone(goal.id, ms)"
-                class="w-4 h-4 rounded border flex items-center justify-center transition-all flex-shrink-0"
+                class="w-4 h-4 rounded border flex items-center justify-center transition-colors duration-100 ease-out flex-shrink-0"
                 :class="ms.is_completed
                   ? 'bg-success border-success text-white'
                   : 'border-bdr hover:border-accent'"
@@ -1056,10 +1075,10 @@ onMounted(async () => {
           <template v-if="editingTargetFor === habit.id">
             <select
               v-model.number="editTargetValue"
-              class="input-field w-20 text-sm"
+              class="input-field w-32 text-sm"
             >
               <option :value="null">None</option>
-              <option v-for="n in 7" :key="n" :value="n">{{ n }}x/wk</option>
+              <option v-for="n in 7" :key="n" :value="n">{{ n }}x / week</option>
             </select>
             <button @click="setWeeklyTarget(habit.id)" class="text-xs text-accent">Save</button>
           </template>
@@ -1068,7 +1087,7 @@ onMounted(async () => {
             @click="startEditTarget(habit)"
             class="text-xs text-accent hover:text-accent/80"
           >
-            {{ habit.weekly_target ? habit.weekly_target + 'x/wk' : 'Set target' }}
+            {{ habit.weekly_target ? habit.weekly_target + 'x / week' : 'Set target' }}
           </button>
         </div>
       </div>
@@ -1093,7 +1112,7 @@ onMounted(async () => {
         </div>
         <div class="w-full bg-surface-3 rounded-full h-2">
           <div
-            class="h-2 rounded-full transition-all duration-500"
+            class="h-2 rounded-full transition-[width,background-color] duration-300 ease-out"
             :class="item.progress_pct >= 100 ? 'bg-success' : 'bg-accent'"
             :style="{ width: Math.min(item.progress_pct, 100) + '%' }"
           />
@@ -1118,10 +1137,10 @@ onMounted(async () => {
             <template v-if="editingTargetFor === habit.id">
               <select
                 v-model.number="editTargetValue"
-                class="input-field w-20 text-sm"
+                class="input-field w-32 text-sm"
               >
                 <option :value="null">None</option>
-                <option v-for="n in 7" :key="n" :value="n">{{ n }}x/wk</option>
+                <option v-for="n in 7" :key="n" :value="n">{{ n }}x / week</option>
               </select>
               <button @click="setWeeklyTarget(habit.id)" class="text-xs text-accent">Save</button>
             </template>
