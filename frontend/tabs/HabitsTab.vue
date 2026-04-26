@@ -351,6 +351,16 @@ async function resetSingleHabit(habitId: number) {
   } catch { habitError.value = 'Reset failed.' }
 }
 
+async function resetInsightsCooldown() {
+  habitError.value = null
+  try {
+    await api.delete('/api/life/habits/reset/insights')
+    habitInsightText.value = null
+  } catch {
+    habitError.value = 'Could not clear insight cooldown.'
+  }
+}
+
 async function fetchHabitInsight() {
   if (habitInsightLoading.value) return
   habitInsightLoading.value = true
@@ -514,13 +524,21 @@ onMounted(async () => {
       <div class="mt-6 glass-card p-4">
         <div class="flex items-center justify-between">
           <span class="text-xs font-medium text-txt-secondary">Weekly AI Insight</span>
-          <button
-            @click="fetchHabitInsight"
-            :disabled="habitInsightLoading"
-            class="text-xs text-accent-alt hover:text-accent-alt-bright transition-colors disabled:opacity-50"
-          >
-            {{ habitInsightLoading ? 'Analyzing...' : 'Generate Insight' }}
-          </button>
+          <div class="flex items-center gap-3">
+            <button
+              v-if="!habitInsightLoading"
+              @click="resetInsightsCooldown"
+              class="text-[10px] text-txt-muted hover:text-txt-secondary transition-colors"
+              title="Clear past insights so the 7-day cooldown resets"
+            >Clear cooldown</button>
+            <button
+              @click="fetchHabitInsight"
+              :disabled="habitInsightLoading"
+              class="text-xs text-accent-alt hover:text-accent-alt-bright transition-colors disabled:opacity-50"
+            >
+              {{ habitInsightLoading ? 'Analyzing...' : 'Generate Insight' }}
+            </button>
+          </div>
         </div>
         <div v-if="habitInsightText" class="mt-3 p-3 rounded-lg bg-accent-alt/10 border border-accent-alt/20 animate-fade-in">
           <p class="text-xs text-txt-secondary leading-relaxed whitespace-pre-line">{{ habitInsightText }}</p>

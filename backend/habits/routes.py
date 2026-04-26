@@ -521,19 +521,44 @@ async def reset_today(
     return {"deleted": count}
 
 
+@router.delete("/reset/insights", status_code=200)
+async def reset_insights_only(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Delete past AI insight rows so the 7-day cooldown clears.
+    Habit logs are preserved — this is for unblocking after a stale or
+    bad insight without losing tracking history."""
+    async with get_session() as session:
+        result = await session.execute(
+            delete(HabitInsight)
+            .where(HabitInsight.user_id == user.id)
+            .returning(HabitInsight.id)
+        )
+        count = len(result.all())
+    return {"deleted_insights": count}
+
+
 @router.delete("/reset/history", status_code=200)
 async def reset_all_history(
     user: CurrentUser = Depends(get_current_user),
 ):
-    """Delete ALL habit logs for this user. Streaks reset to zero."""
+    """Delete ALL habit logs AND past AI insights for this user. Streaks
+    reset to zero, and the 7-day insight cooldown also resets so a fresh
+    history can be analysed without being blocked by a stale insight."""
     async with get_session() as session:
-        result = await session.execute(
+        log_result = await session.execute(
             delete(HabitLog)
             .where(HabitLog.user_id == user.id)
             .returning(HabitLog.id)
         )
-        count = len(result.all())
-    return {"deleted": count}
+        deleted_logs = len(log_result.all())
+        insight_result = await session.execute(
+            delete(HabitInsight)
+            .where(HabitInsight.user_id == user.id)
+            .returning(HabitInsight.id)
+        )
+        deleted_insights = len(insight_result.all())
+    return {"deleted": deleted_logs, "deleted_insights": deleted_insights}
 
 
 @router.delete("/reset/{habit_id}", status_code=200)
