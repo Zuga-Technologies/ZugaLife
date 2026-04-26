@@ -8,6 +8,7 @@ import { Star, Flame as FlameIcon, ArrowLeft, Zap, AlertTriangle, Settings } fro
 import BackgroundTheme from './BackgroundTheme.vue'
 import CelebrationOverlay from './components/CelebrationOverlay.vue'
 import LifeOnboarding from './components/LifeOnboarding.vue'
+import BreathColdOpen from './components/BreathColdOpen.vue'
 import SettingsPanel from './SettingsPanel.vue'
 
 // ── Lazy-loaded tab components ─────────────────────────────────
@@ -121,6 +122,25 @@ function beforeUnloadHandler(e: BeforeUnloadEvent) {
 onMounted(() => window.addEventListener('beforeunload', beforeUnloadHandler))
 onUnmounted(() => window.removeEventListener('beforeunload', beforeUnloadHandler))
 
+// ── Breath cold-open (once per UTC day, dismissable) ───────────
+// Skipped automatically when LifeOnboarding is showing — first-time
+// users get the onboarding's own intro instead of two welcomes back-to-back.
+const BREATH_KEY = 'zugalife.breathDate'
+const showBreath = ref(false)
+function todayUtcDate(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+function maybeShowBreath() {
+  if (onboarding.showLifeOnboarding) return  // first-time user — onboarding handles it
+  const last = localStorage.getItem(BREATH_KEY)
+  if (last === todayUtcDate()) return        // already breathed today
+  showBreath.value = true
+}
+function onBreathDone() {
+  localStorage.setItem(BREATH_KEY, todayUtcDate())
+  showBreath.value = false
+}
+
 // ── Onboarding ─────────────────────────────────────────────────
 function onLifeOnboardingComplete(recommendedTab?: string) {
   onboarding.completeLifeOnboarding()
@@ -156,10 +176,11 @@ onMounted(() => window.addEventListener('zugatheme:navigate', handleThemeNavigat
 onUnmounted(() => window.removeEventListener('zugatheme:navigate', handleThemeNavigate as EventListener))
 
 // ── Init (gamification loaded here for the XP bar; tabs load their own data) ──
-onMounted(() => {
+onMounted(async () => {
   fetchGamification()
   notif.init()
-  onboarding.checkLifeOnboarding()
+  await onboarding.checkLifeOnboarding()
+  maybeShowBreath()
 })
 </script>
 
@@ -171,6 +192,8 @@ onMounted(() => {
     <CelebrationOverlay />
     <!-- Studio onboarding (first visit only) -->
     <LifeOnboarding v-if="onboarding.showLifeOnboarding" @complete="onLifeOnboardingComplete" />
+    <!-- Daily breath cold-open (once per UTC day, skippable, first-time users see onboarding instead) -->
+    <BreathColdOpen v-if="showBreath" @complete="onBreathDone" @skip="onBreathDone" />
 
     <div
       class="relative z-10 mx-auto py-10 animate-fade-in"
