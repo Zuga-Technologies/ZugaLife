@@ -338,6 +338,9 @@ async function fetchHabitInsight() {
       habitError.value = handleInsufficientTokens('Habit Insights')
     } else if (e instanceof ApiError && e.status === 429) {
       habitError.value = handleServiceError('Insight Cooldown', (e.body as Record<string, string>).detail ?? 'Insights are available once per week. Check back later!')
+    } else if (e instanceof ApiError && e.status === 400) {
+      // Sparse-data gate — show the backend's user-friendly message directly.
+      habitError.value = handleServiceError('Not Enough Data', (e.body as Record<string, string>).detail ?? 'Log a few more habits and moods, then try again.')
     } else if (e instanceof ApiError && e.status >= 500) {
       habitError.value = handleServiceError('Service Unavailable', 'The AI service is temporarily down. Your tokens were not charged. Please try again in a few minutes.')
     } else {
@@ -425,7 +428,7 @@ onMounted(async () => {
         </div>
         <div class="w-full bg-surface-3 rounded-full h-2.5">
           <div
-            class="h-2.5 rounded-full transition-all duration-500"
+            class="h-2.5 rounded-full transition-[width,background-color] duration-300 ease-out"
             :class="completionPercent === 100 ? 'bg-success' : 'bg-accent'"
             :style="{ width: completionPercent + '%' }"
           />
@@ -437,12 +440,12 @@ onMounted(async () => {
         <div
           v-for="item in habitCheckin.habits"
           :key="item.habit.id"
-          class="glass-card px-4 py-3 flex items-center gap-3 transition-all duration-200"
+          class="glass-card px-4 py-3 flex items-center gap-3 transition-shadow duration-150 ease-out"
           :class="item.logged ? 'ring-1 ring-success/30' : ''"
         >
           <button
             @click="toggleHabit(item)"
-            class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0"
+            class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors duration-100 ease-out flex-shrink-0"
             :class="item.logged
               ? 'bg-success border-success text-white'
               : 'border-bdr hover:border-accent'"

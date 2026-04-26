@@ -836,6 +836,21 @@ async def generate_insight(
         mood_entries = await _gather_mood_data(session, user.id, week_start)
         mood_text = _prompts.format_mood_data(mood_entries)
 
+        # Sparse-data gate: prevent the AI from hallucinating "you have N days of
+        # tracking history" when the dataset is mostly empty rows. Refuse early —
+        # cheaper than a Venice round-trip and a confused user.
+        habit_log_count = sum(len(d.get("habits") or []) for d in habit_days)
+        mood_log_count = len(mood_entries)
+        if habit_log_count < 3 or mood_log_count < 3:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Not enough data yet for a meaningful insight. "
+                    "Log at least 3 habits and 3 moods over the past week, "
+                    "then try again."
+                ),
+            )
+
         # Get previous insights for anti-repetition
         prev_result = await session.execute(
             select(HabitInsight.content)
