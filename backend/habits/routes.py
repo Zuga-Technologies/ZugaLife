@@ -20,6 +20,9 @@ _prompts = sys.modules["zugalife.habits.prompts"]
 
 # Also need journal model for AI insights (mood source)
 _journal_models = sys.modules["zugalife.journal.models"]
+# MoodEntry lives in the studio's root models module; users log moods there
+# from the dashboard, separately from journal entries.
+_root_models = sys.modules["zugalife.models"]
 
 def _get_gam_engine():
     """Lazy lookup — gamification loads after habits in plugin.py."""
@@ -32,6 +35,7 @@ HabitDefinition = _models.HabitDefinition
 HabitLog = _models.HabitLog
 HabitInsight = _models.HabitInsight
 JournalEntry = _journal_models.JournalEntry
+MoodEntry = _root_models.MoodEntry
 
 HabitCreateRequest = _schemas.HabitCreateRequest
 HabitUpdateRequest = _schemas.HabitUpdateRequest
@@ -1019,9 +1023,27 @@ async def _gather_habit_data(
 async def _gather_mood_data(
     session, user_id: str, since: date,
 ) -> list[dict]:
-    """Gather mood data from journal entries for the insight prompt."""
+    """Gather mood data for the insight prompt — unions two sources:
+
+    1. Direct mood logs from MoodEntry (the dashboard mood-check-in flow).
+    2. Journal entries that were tagged with a mood_emoji.
+
+    Both count toward the sparse-data gate, and both feed the prompt so the
+    AI sees the full mood signal regardless of where the user recorded it.
+    """
     since_dt = datetime(since.year, since.month, since.day, tzinfo=timezone.utc)
-    result = await session.execute(
+
+    mood_result = await session.execute(
+        select(MoodEntry)
+        .where(
+            MoodEntry.user_id == user_id,
+            MoodEntry.created_at >= since_dt,
+        )
+        .order_by(MoodEntry.created_at)
+    )
+    mood_rows = mood_result.scalars().all()
+
+    journal_result = await session.execute(
         select(JournalEntry)
         .where(
             JournalEntry.user_id == user_id,
@@ -1030,14 +1052,22 @@ async def _gather_mood_data(
         )
         .order_by(JournalEntry.created_at)
     )
-    entries = result.scalars().all()
+    journal_rows = journal_result.scalars().all()
 
-    return [
-        {
+    out: list[dict] = []
+    for m in mood_rows:
+        out.append({
+            "date": m.created_at.strftime("%Y-%m-%d"),
+            "emoji": m.emoji,
+            "label": m.label,
+            "note": (m.note or "")[:200] if hasattr(m, "note") else "",
+        })
+    for entry in journal_rows:
+        out.append({
             "date": entry.created_at.strftime("%Y-%m-%d"),
             "emoji": entry.mood_emoji,
             "label": entry.mood_label,
-            "note": entry.content[:200],
-        }
-        for entry in entries
-    ]
+            "note": (entry.content or "")[:200],
+        })
+    out.sort(key=lambda x: x["date"])
+    return out
