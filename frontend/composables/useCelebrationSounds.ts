@@ -87,3 +87,23 @@ export function playPrestigeSound() {
   setTimeout(() => playTone(1047, 0.4, 'triangle', 0.16), 480) // C6
   setTimeout(() => playTone(1319, 0.5, 'sine', 0.12), 600)     // E6 — shimmering top note
 }
+
+/**
+ * Zugabot signature jingle — the brand sound.
+ *
+ * Pattern: two quick triangle blips (tech/digital character), short gap,
+ * then a warm sine-wave D-major resolution with a high shimmer that fades.
+ * Total ~550ms. Distinct from playLevelUpSound (single arpeggio) and
+ * playBadgeSound (two-note chime). Use this for general action confirmations.
+ */
+export function playZugabotJingle() {
+  // Two quick "blips" — tech feel
+  playTone(494, 0.08, 'triangle', 0.10)                          // B4
+  setTimeout(() => playTone(494, 0.08, 'triangle', 0.10), 100)   // B4 again
+  // Warm chord-like resolution (D major, slight stagger for shimmer)
+  setTimeout(() => playTone(587, 0.25, 'sine', 0.12), 220)        // D5
+  setTimeout(() => playTone(740, 0.25, 'sine', 0.10), 240)        // F#5
+  setTimeout(() => playTone(880, 0.30, 'sine', 0.09), 320)        // A5
+  // Sparkle tail
+  setTimeout(() => playTone(1480, 0.35, 'sine', 0.05), 420)       // F#6 — soft overtone
+}

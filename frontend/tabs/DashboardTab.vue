@@ -6,6 +6,7 @@ import {
   MessageCircleHeart, Wind, Meh, Target,
 } from 'lucide-vue-next'
 import { moodIcons, getIcon } from '../icons'
+import { playZugabotJingle } from '../composables/useCelebrationSounds'
 import AnalyticsDashboard from '../AnalyticsDashboard.vue'
 import InsightCard from '../components/InsightCard.vue'
 import WeeklyNarrative from '../components/WeeklyNarrative.vue'
@@ -318,6 +319,7 @@ async function logDashMood(emoji: string) {
       title: res.entry.label,
       description,
     }
+    if (celebration.soundEnabled.value) playZugabotJingle()
     // Refresh dashboard in background — UI is already responsive
     void fetchDashboard()
   } catch (e) {
