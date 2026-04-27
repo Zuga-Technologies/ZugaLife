@@ -376,15 +376,40 @@ function handleExtensionMedComplete(session?: MeditationSession) {
   medGenStage.value = null
   notifyTokenSpend()
   fetchMedSessions().then(() => {
-    if (session) {
-      medSession.value = session
-      medMoodAfter.value = null
+    if (!session) return
+    medSession.value = session
+    medMoodAfter.value = null
+    medSuccess.value = 'Meditation ready — open Meditate to listen'
+    setTimeout(() => { medSuccess.value = null }, 4000)
+    fetchMedRemaining()
+
+    // Only auto-navigate to the player when the user is already on the
+    // Meditate tab. Don't yank them out of Dashboard / Habits / etc, and
+    // ABSOLUTELY don't auto-play audio in the background — that was
+    // playing meditations on the dashboard with no warning.
+    if (medView.value === 'new') {
       medView.value = 'player'
-      medSuccess.value = 'Meditation generated!'
-      setTimeout(() => { medSuccess.value = null }, 2000)
-      fetchMedRemaining()
-      setTimeout(() => loadAndPlayAudio(), 300)
     }
+
+    // System-level notification (if granted) so the user notices when
+    // they're on another tab/studio. Falls back to a celebration badge
+    // modal — same primitive used for mood-log confirmations.
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        const n = new Notification('Meditation ready', {
+          body: session.title || 'Tap to listen.',
+          icon: '/favicon.ico',
+          tag: `meditation-${session.id}`,
+        })
+        n.onclick = () => { window.focus(); n.close() }
+      } else {
+        celebration.activeBadge.value = {
+          badge_key: 'first_meditation',  // reuses Brain icon from badgeIcons
+          title: 'Meditation ready',
+          description: session.title || 'Tap Meditate to listen.',
+        }
+      }
+    } catch { /* notification API not available — silent */ }
   })
 }
 
