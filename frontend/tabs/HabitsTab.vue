@@ -195,30 +195,40 @@ async function toggleHabit(item: HabitCheckInItem) {
   }
 }
 
-// On focus, select all text so the cursor lands consistently at "end"
-// (as it does after ↑/↓ steps). Typing replaces; arrow keys still step.
-// Chrome refuses setSelectionRange on type=number, so .select() is the
-// portable fallback that gives the same UX result.
+// On focus, select all text so the cursor lands consistently and typing
+// replaces. The input is now type="text" with inputmode="numeric" so
+// setSelectionRange works on iOS Safari + Android Chrome (both refused
+// it on type="number"). Tested: iOS shows numeric keypad, cursor selects
+// reliably on tap.
 function handleAmountFocus(e: FocusEvent) {
   const el = e.target as HTMLInputElement
-  // Defer — focus event fires before browser places caret.
-  requestAnimationFrame(() => { try { el.select() } catch { /* noop */ } })
+  // Defer past the browser's own tap-positioning.
+  setTimeout(() => {
+    try {
+      el.setSelectionRange(0, el.value.length)
+    } catch { /* noop */ }
+  }, 0)
 }
 
-// When the user presses ↑/↓ on an EMPTY amount input, seed it with the
-// habit's default target so the next step lands somewhere meaningful
-// instead of 0/1. Native step continues normally once a value exists.
+// Step the value on ↑/↓. Without type="number" the native step behavior
+// is gone, so we replicate it here. Empty inputs seed from default_target.
 function handleAmountKeydown(item: HabitCheckInItem, e: KeyboardEvent) {
   if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
-  const current = amountInputs.value[item.habit.id]
-  if (current) return  // existing value — let native step take over
-  const target = item.habit.default_target
-  if (target == null) return
   e.preventDefault()
-  const seeded = e.key === 'ArrowUp'
-    ? Number(target) + 1
-    : Math.max(0, Number(target) - 1)
-  amountInputs.value[item.habit.id] = String(seeded)
+  const current = amountInputs.value[item.habit.id]
+  const target = item.habit.default_target
+  if (!current) {
+    if (target == null) return
+    const seeded = e.key === 'ArrowUp'
+      ? Number(target) + 1
+      : Math.max(0, Number(target) - 1)
+    amountInputs.value[item.habit.id] = String(seeded)
+    return
+  }
+  const n = Number(current)
+  if (Number.isNaN(n)) return
+  const next = e.key === 'ArrowUp' ? n + 1 : Math.max(0, n - 1)
+  amountInputs.value[item.habit.id] = String(next)
 }
 
 async function updateHabitAmount(item: HabitCheckInItem) {
@@ -618,9 +628,11 @@ onMounted(async () => {
           </div>
           <div v-if="item.habit.unit" class="flex items-center gap-1.5">
             <input
-              type="number"
+              type="text"
+              inputmode="decimal"
+              pattern="[0-9]*\.?[0-9]*"
               :value="amountInputs[item.habit.id] ?? ''"
-              @input="amountInputs[item.habit.id] = ($event.target as HTMLInputElement).value"
+              @input="amountInputs[item.habit.id] = ($event.target as HTMLInputElement).value.replace(/[^0-9.]/g, '')"
               @focus="handleAmountFocus($event)"
               @keydown="handleAmountKeydown(item, $event)"
               @blur="updateHabitAmount(item)"
