@@ -276,6 +276,8 @@ class ZugaLifePlugin(StudioPlugin):
                 "ALTER TABLE therapist_session_notes ADD COLUMN mood_after VARCHAR(32)",
                 "ALTER TABLE therapist_session_notes ADD COLUMN rating INTEGER",
                 "ALTER TABLE life_weekly_quests ADD COLUMN completion_source VARCHAR(50)",
+                # Daily breath cold-open cross-device gate (2026-04-26)
+                "ALTER TABLE life_user_settings ADD COLUMN last_breath_date VARCHAR(10)",
             ]
             for sql in additive_migrations:
                 try:

@@ -123,20 +123,37 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnloadHandler
 // ── Breath cold-open (once per UTC day, dismissable) ───────────
 // Skipped automatically when LifeOnboarding is showing — first-time
 // users get the onboarding's own intro instead of two welcomes back-to-back.
+//
+// Gate is now CROSS-DEVICE: the server stores last_breath_date in
+// LifeUserSettings, so completing on phone skips the prompt on desktop
+// (and vice-versa). localStorage stays as a fast-path cache so the
+// component doesn't render then immediately disappear on second visits.
+import { api } from '@core/api/client'
 const BREATH_KEY = 'zugalife.breathDate'
 const showBreath = ref(false)
 function todayUtcDate(): string {
   return new Date().toISOString().slice(0, 10)
 }
-function maybeShowBreath() {
+async function maybeShowBreath() {
   if (onboarding.showLifeOnboarding) return  // first-time user — onboarding handles it
-  const last = localStorage.getItem(BREATH_KEY)
-  if (last === todayUtcDate()) return        // already breathed today
+  const today = todayUtcDate()
+  // Fast-path: localStorage knows we did it today, skip immediately.
+  if (localStorage.getItem(BREATH_KEY) === today) return
+  // Slow-path: ask the server in case the user did it on another device.
+  try {
+    const res = await api.get<{ done_today: boolean }>('/api/life/breath/today')
+    if (res.done_today) {
+      localStorage.setItem(BREATH_KEY, today)  // cache server answer
+      return
+    }
+  } catch { /* network blip — fall through and show */ }
   showBreath.value = true
 }
 function onBreathDone() {
   localStorage.setItem(BREATH_KEY, todayUtcDate())
   showBreath.value = false
+  // Fire-and-forget — server gate so other devices skip too.
+  void api.post('/api/life/breath/done').catch(() => { /* non-critical */ })
 }
 
 // ── Onboarding ─────────────────────────────────────────────────

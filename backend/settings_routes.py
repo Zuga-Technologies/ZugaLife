@@ -147,6 +147,37 @@ async def reset_life_onboarding(
     return {"status": "ok"}
 
 
+# ── Daily breath cold-open (cross-device gate) ──────────────────
+
+
+@router.get("/breath/today")
+async def get_breath_today(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Return whether the user has completed today's breath ritual on any device."""
+    from datetime import date
+    async with get_session() as session:
+        settings = await _get_or_create_settings(session, user.id)
+        today_iso = date.today().isoformat()
+        return {
+            "done_today": settings.last_breath_date == today_iso,
+            "last_breath_date": settings.last_breath_date,
+        }
+
+
+@router.post("/breath/done")
+async def mark_breath_done(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Mark today's breath ritual complete. Idempotent — safe to call repeatedly."""
+    from datetime import date
+    async with get_session() as session:
+        settings = await _get_or_create_settings(session, user.id)
+        today_iso = date.today().isoformat()
+        settings.last_breath_date = today_iso
+    return {"status": "ok", "last_breath_date": today_iso}
+
+
 # ── Zugabot Personalization Layer ────────────────────────────────
 
 

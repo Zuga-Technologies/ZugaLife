@@ -22,15 +22,11 @@ const CYCLES = 3
 type Phase = 'in' | 'out'
 const phase = ref<Phase>('in')
 const cycle = ref(1)
-const elapsed = ref(0) // ms, for the progress bar
 
 const totalMs = PHASE_MS * 2 * CYCLES
-const progressPct = computed(() => Math.min(100, (elapsed.value / totalMs) * 100))
-
 const phaseLabel = computed(() => phase.value === 'in' ? 'Breathe in' : 'Breathe out')
 
 let phaseTimer: ReturnType<typeof setTimeout> | null = null
-let progressTimer: ReturnType<typeof setInterval> | null = null
 
 function nextPhase() {
   if (phase.value === 'in') {
@@ -58,14 +54,11 @@ function skip() {
 
 function cleanup() {
   if (phaseTimer) clearTimeout(phaseTimer)
-  if (progressTimer) clearInterval(progressTimer)
   phaseTimer = null
-  progressTimer = null
 }
 
 onMounted(() => {
   phaseTimer = setTimeout(nextPhase, PHASE_MS)
-  progressTimer = setInterval(() => { elapsed.value += 50 }, 50)
 })
 
 onUnmounted(cleanup)
@@ -98,9 +91,11 @@ onUnmounted(cleanup)
         <div class="breath-cycle">{{ Math.min(cycle, CYCLES) }} of {{ CYCLES }}</div>
       </div>
 
-      <!-- Progress bar at bottom -->
+      <!-- Progress bar at bottom — pure CSS animation, no JS tick.
+           Eliminates the 50ms-interval reactive churn that was competing
+           with the orb's CSS transition for main-thread time. -->
       <div class="breath-progress" aria-hidden="true">
-        <div class="breath-progress__fill" :style="{ width: progressPct + '%' }" />
+        <div class="breath-progress__fill" :style="{ animationDuration: totalMs + 'ms' }" />
       </div>
     </div>
   </Teleport>
@@ -162,12 +157,16 @@ onUnmounted(cleanup)
   display: flex;
   align-items: center;
   justify-content: center;
-  /* The single transition handles the breath scale.
-     PHASE_MS in JS must match the CSS transition-duration here. */
-  transition: transform 4s cubic-bezier(0.4, 0, 0.6, 1);
+  /* Sine-like easing feels more natural for breathing than the default
+     ease-in-out — slower at the peaks (held inhale/exhale), quicker
+     through the transition. PHASE_MS in JS must match this duration.
+     translate3d(0,0,0) forces GPU compositing without the cost of
+     will-change on a bunch of static elements. */
+  transition: transform 4s cubic-bezier(0.45, 0.05, 0.55, 0.95);
+  transform: translate3d(0, 0, 0) scale(1);
 }
-.breath-orb--in  { transform: scale(1); }
-.breath-orb--out { transform: scale(0.6); }
+.breath-orb--in  { transform: translate3d(0, 0, 0) scale(1); }
+.breath-orb--out { transform: translate3d(0, 0, 0) scale(0.6); }
 
 .breath-orb__core {
   width: 100%;
@@ -219,8 +218,17 @@ onUnmounted(cleanup)
 }
 .breath-progress__fill {
   height: 100%;
+  width: 0;
   background: linear-gradient(90deg, rgba(139, 92, 246, 0.6), rgba(168, 85, 247, 0.85));
-  transition: width 100ms linear;
+  /* Single linear animation matching the total breath duration — no JS
+     interval ticks. animation-duration is set inline by the parent. */
+  animation: breath-progress-fill linear forwards;
+  transform: translateZ(0);
+}
+
+@keyframes breath-progress-fill {
+  from { width: 0; }
+  to   { width: 100%; }
 }
 
 /* ── Reduced motion ─────────────────────────────────────────────── */

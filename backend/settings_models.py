@@ -32,6 +32,11 @@ class LifeUserSettings(Base, TimestampMixin):
     # Onboarding
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Daily breath cold-open — ISO date string of last completion (YYYY-MM-DD).
+    # Stored as string to avoid migration headaches with Date column on SQLite.
+    # Used to gate the breath ritual cross-device (mobile + desktop share state).
+    last_breath_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
     # Custom studio colors (JSON: {"colors": {...}, "css": "..."})
     custom_colors: Mapped[str | None] = mapped_column(Text, nullable=True)
 
