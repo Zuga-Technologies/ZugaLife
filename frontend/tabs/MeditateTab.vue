@@ -902,7 +902,7 @@ onUnmounted(() => {
 <template>
   <div>
     <!-- Sub-nav -->
-    <div class="flex gap-3 mb-6">
+    <div class="flex gap-2 sm:gap-3 mb-5 sm:mb-6">
       <button
         v-for="view in [
           { key: 'new', label: 'New Session' },
@@ -910,15 +910,16 @@ onUnmounted(() => {
         ] as { key: MedView; label: string }[]"
         :key="view.key"
         @click="medError = null; medView = view.key; if (view.key === 'history') fetchMedSessions()"
-        class="px-4 py-2.5 text-xs font-medium rounded-lg transition-colors"
+        class="px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-medium rounded-lg transition-colors"
         :class="medView === view.key || (medView === 'player' && view.key === 'new')
           ? 'bg-accent/15 text-accent'
           : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
       >
         {{ view.label }}
       </button>
-      <span v-if="medRemaining" class="ml-auto text-xs text-txt-muted self-center">
-        {{ medRemaining.remaining }}/{{ medRemaining.limit }} sessions left today
+      <span v-if="medRemaining" class="ml-auto text-[11px] sm:text-xs text-txt-muted self-center whitespace-nowrap">
+        <span class="sm:hidden">{{ medRemaining.remaining }}/{{ medRemaining.limit }} left</span>
+        <span class="hidden sm:inline">{{ medRemaining.remaining }}/{{ medRemaining.limit }} sessions left today</span>
       </span>
     </div>
 
@@ -983,15 +984,15 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Ambience -->
+      <!-- Ambience — 3-col grid on mobile (2 rows), flex on sm+ -->
       <div class="mb-6">
         <h3 class="text-sm font-semibold text-txt-primary mb-3">Ambience</h3>
-        <div class="flex gap-2">
+        <div class="grid grid-cols-3 sm:flex gap-2">
           <button
             v-for="a in ambienceOptions"
             :key="a.key"
             @click="medAmbience = a.key"
-            class="flex-1 py-2.5 rounded-lg text-center transition-all duration-150"
+            class="sm:flex-1 py-2.5 rounded-lg text-center transition-all duration-150"
             :class="medAmbience === a.key
               ? 'bg-accent/15 ring-1 ring-accent/50 text-accent'
               : 'glass-card text-txt-muted hover:text-txt-primary'"
@@ -1002,7 +1003,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Voice -->
+      <!-- Voice — sub-descriptions hidden on mobile to keep buttons compact -->
       <div class="mb-6">
         <h3 class="text-sm font-semibold text-txt-primary mb-3">Voice</h3>
         <div class="flex gap-2">
@@ -1014,7 +1015,7 @@ onUnmounted(() => {
               : 'glass-card text-txt-muted hover:text-txt-primary'"
           >
             Serene
-            <span class="block text-xs opacity-70">Calm &amp; soothing</span>
+            <span class="hidden sm:block text-xs opacity-70">Calm &amp; soothing</span>
           </button>
           <button
             @click="medVoice = 'gentle'"
@@ -1024,7 +1025,7 @@ onUnmounted(() => {
               : 'glass-card text-txt-muted hover:text-txt-primary'"
           >
             Gentle
-            <span class="block text-xs opacity-70">Warm &amp; nurturing</span>
+            <span class="hidden sm:block text-xs opacity-70">Warm &amp; nurturing</span>
           </button>
           <button
             @click="medVoice = 'whisper'"
@@ -1034,7 +1035,7 @@ onUnmounted(() => {
               : 'glass-card text-txt-muted hover:text-txt-primary'"
           >
             Whisper
-            <span class="block text-xs opacity-70">Soft &amp; breathy</span>
+            <span class="hidden sm:block text-xs opacity-70">Soft &amp; breathy</span>
           </button>
         </div>
       </div>
@@ -1077,17 +1078,17 @@ onUnmounted(() => {
     <template v-if="medView === 'player' && medSession">
       <div class="med-view-slide-in">
       <!-- Session card -->
-      <div class="glass-card p-6 mb-4">
-        <div class="flex items-start justify-between mb-3">
-          <div>
-            <h2 class="text-lg font-semibold text-txt-primary">{{ medSession.title }}</h2>
-            <div class="flex items-center gap-2 mt-1">
+      <div class="glass-card p-4 sm:p-6 mb-4">
+        <div class="flex items-start justify-between gap-3 mb-3">
+          <div class="min-w-0 flex-1">
+            <h2 class="text-base sm:text-lg font-semibold text-txt-primary truncate">{{ medSession.title }}</h2>
+            <div class="flex items-center gap-2 mt-1 flex-wrap">
               <span class="text-xs text-txt-muted">{{ getMedTypeLabel(medSession.type) }}</span>
               <span class="text-xs text-txt-muted">{{ Math.floor(medSession.duration_seconds / 60) }}:{{ String(medSession.duration_seconds % 60).padStart(2, '0') }}</span>
               <span class="text-xs text-txt-muted">{{ tokenLabel(medSession.cost) }}</span>
             </div>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-shrink-0">
             <button
               @click="toggleMedFavorite"
               class="text-xl transition-colors"
@@ -1170,7 +1171,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Live transcript -->
-      <div ref="transcriptContainer" class="glass-card p-5 mb-4 max-h-64 overflow-y-auto scroll-smooth">
+      <div ref="transcriptContainer" class="glass-card p-4 sm:p-5 mb-4 max-h-64 overflow-y-auto scroll-smooth">
         <h3 class="text-xs font-semibold text-txt-muted uppercase tracking-wide mb-3">Transcript</h3>
         <div class="space-y-3">
           <p
