@@ -458,6 +458,35 @@ async function resetAllHistory() {
   }
 }
 
+// Two-step delete for a whole day in the History view. First click sets
+// deletingDay = date, which swaps the row to a Confirm/Cancel pair.
+const deletingDay = ref<string | null>(null)
+
+async function deleteHabitDay(logDate: string) {
+  habitError.value = null
+  deletingDay.value = null
+  habitSuccess.value = 'Deleting day...'
+  // Optimistic: drop the day from history immediately.
+  if (habitHistory.value) {
+    habitHistory.value.days = habitHistory.value.days.filter(d => d.date !== logDate)
+  }
+  try {
+    const res = await api.delete<{ deleted: number }>(`/api/life/habits/reset/day/${logDate}`)
+    habitSuccess.value = `Cleared ${res.deleted} log${res.deleted === 1 ? '' : 's'} for ${logDate}.`
+    setTimeout(() => { habitSuccess.value = null }, 2500)
+    void fetchHabitHistory()
+    void fetchHabitCheckin()
+  } catch (e) {
+    habitSuccess.value = null
+    if (e instanceof ApiError) {
+      habitError.value = (e.body as Record<string, string>).detail ?? `Error (${(e as ApiError).status})`
+    } else {
+      habitError.value = 'Network error'
+    }
+    void fetchHabitHistory()
+  }
+}
+
 async function resetSingleHabit(habitId: number) {
   habitError.value = null
   resettingHabit.value = null
@@ -728,9 +757,35 @@ onMounted(async () => {
         :key="day.date"
         class="glass-card px-4 py-3"
       >
-        <div class="flex items-center justify-between mb-1.5">
+        <div class="flex items-center justify-between mb-1.5 gap-2">
           <span class="text-sm font-medium text-txt-primary">{{ new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) }}</span>
-          <span class="text-xs text-txt-muted">{{ day.completed_count }}/{{ day.total_active }}</span>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <span class="text-xs text-txt-muted">{{ day.completed_count }}/{{ day.total_active }}</span>
+            <!-- Two-step delete: first click reveals Confirm/Cancel -->
+            <template v-if="deletingDay !== day.date">
+              <button
+                @click="deletingDay = day.date"
+                class="text-xs text-txt-muted hover:text-red-400 transition-colors px-2 py-0.5 rounded"
+                title="Delete this day's logs"
+              >
+                Delete
+              </button>
+            </template>
+            <template v-else>
+              <button
+                @click="deleteHabitDay(day.date)"
+                class="text-xs text-red-400 hover:text-red-300 font-medium px-2 py-0.5 rounded"
+              >
+                Confirm
+              </button>
+              <button
+                @click="deletingDay = null"
+                class="text-xs text-txt-muted hover:text-txt-primary px-2 py-0.5 rounded"
+              >
+                Cancel
+              </button>
+            </template>
+          </div>
         </div>
         <div class="w-full bg-surface-3 rounded-full h-1.5 mb-1.5">
           <div

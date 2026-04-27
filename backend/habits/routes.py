@@ -575,6 +575,23 @@ async def reset_all_history(
     return {"deleted": deleted_logs, "deleted_insights": deleted_insights}
 
 
+@router.delete("/reset/day/{log_date}", status_code=200)
+async def reset_single_day(
+    log_date: date,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Delete all habit logs for a single day. Use from the History view
+    to remove an entire day (e.g. one bad day skewing the streaks)."""
+    async with get_session() as session:
+        result = await session.execute(
+            delete(HabitLog)
+            .where(HabitLog.user_id == user.id, HabitLog.log_date == log_date)
+            .returning(HabitLog.id)
+        )
+        deleted = len(result.all())
+    return {"deleted": deleted, "log_date": log_date.isoformat()}
+
+
 @router.delete("/reset/{habit_id}", status_code=200)
 async def reset_single_habit(
     habit_id: int,
