@@ -892,68 +892,75 @@ onMounted(async () => {
       </button>
     </div>
 
-    <!-- Habit list -->
+    <!-- Habit list — mobile stacks the action row below the icon/name; sm+ keeps the original single-row layout -->
     <div class="space-y-2">
       <div
         v-for="habit in allHabits"
         :key="habit.id"
-        class="glass-card px-4 py-3 flex items-center gap-3"
+        class="glass-card px-4 py-3 flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-x-3 gap-y-2"
         :class="!habit.is_active ? 'opacity-50' : ''"
       >
-        <component :is="getIcon(habit.emoji)" :size="22" class="text-accent flex-shrink-0" v-if="getIcon(habit.emoji)" />
-        <CircleDot v-else :size="22" class="text-accent flex-shrink-0" />
-        <div class="flex-1 min-w-0">
-          <span class="text-sm font-medium text-txt-primary">{{ habit.name }}</span>
-          <div class="flex items-center gap-2">
-            <span v-if="habit.unit" class="text-xs text-txt-muted">{{ habit.default_target }} {{ habit.unit }}</span>
-            <span v-if="habit.is_preset" class="text-xs text-txt-muted">(preset)</span>
+        <!-- Icon + name + meta (always grouped, takes full row on mobile) -->
+        <div class="flex items-center gap-3 min-w-0 flex-1 w-full sm:w-auto">
+          <component :is="getIcon(habit.emoji)" :size="22" class="text-accent flex-shrink-0" v-if="getIcon(habit.emoji)" />
+          <CircleDot v-else :size="22" class="text-accent flex-shrink-0" />
+          <div class="min-w-0 flex-1">
+            <span class="text-sm font-medium text-txt-primary block truncate">{{ habit.name }}</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span v-if="habit.unit" class="text-xs text-txt-muted">{{ habit.default_target }} {{ habit.unit }}</span>
+              <span v-if="habit.is_preset" class="text-xs text-txt-muted">(preset)</span>
+            </div>
           </div>
         </div>
-        <!-- Weekly target editor (moved from Goals tab) -->
-        <template v-if="editingTargetFor === habit.id">
-          <select
-            v-model.number="editTargetValue"
-            @change="setWeeklyTarget(habit.id)"
-            @blur="setWeeklyTarget(habit.id)"
-            class="input-field w-32 text-xs"
+
+        <!-- Actions row (target pill + Deactivate + Reset + Delete) — wraps to its own line on mobile -->
+        <div class="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
+          <!-- Weekly target editor (moved from Goals tab) -->
+          <template v-if="editingTargetFor === habit.id">
+            <select
+              v-model.number="editTargetValue"
+              @change="setWeeklyTarget(habit.id)"
+              @blur="setWeeklyTarget(habit.id)"
+              class="input-field w-32 text-xs"
+            >
+              <option :value="null">No target</option>
+              <option v-for="n in 7" :key="n" :value="n">{{ n }}x / week</option>
+            </select>
+          </template>
+          <button
+            v-else
+            @click="startEditTarget(habit)"
+            class="text-xs px-2.5 py-1 rounded-full border border-bdr text-txt-muted hover:text-accent hover:border-accent/50 transition-colors whitespace-nowrap"
+            :title="habit.weekly_target ? 'Change weekly target' : 'Set a weekly target'"
           >
-            <option :value="null">No target</option>
-            <option v-for="n in 7" :key="n" :value="n">{{ n }}x / week</option>
-          </select>
-        </template>
-        <button
-          v-else
-          @click="startEditTarget(habit)"
-          class="text-xs px-2.5 py-1 rounded-full border border-bdr text-txt-muted hover:text-accent hover:border-accent/50 transition-colors"
-          :title="habit.weekly_target ? 'Change weekly target' : 'Set a weekly target'"
-        >
-          {{ habit.weekly_target ? habit.weekly_target + 'x / week' : 'No target' }}
-        </button>
-        <button
-          @click="toggleHabitActive(habit)"
-          class="text-xs px-3 py-2 rounded transition-colors"
-          :class="habit.is_active ? 'text-accent hover:bg-accent-bright/10' : 'text-success hover:bg-success/10'"
-        >
-          {{ habit.is_active ? 'Deactivate' : 'Activate' }}
-        </button>
-        <button
-          v-if="resettingHabit !== habit.id"
-          @click="resettingHabit = habit.id"
-          class="text-xs text-txt-muted hover:text-red-400 transition-colors px-3 py-2"
-        >
-          Reset
-        </button>
-        <div v-else class="flex items-center gap-2 animate-fade-in">
-          <button @click="resetSingleHabit(habit.id)" class="text-xs text-red-400 hover:text-red-300 font-medium px-2 py-1.5">Clear logs</button>
-          <button @click="resettingHabit = null" class="text-xs text-txt-muted hover:text-txt-primary px-2 py-1.5">Cancel</button>
+            {{ habit.weekly_target ? habit.weekly_target + 'x / week' : 'No target' }}
+          </button>
+          <button
+            @click="toggleHabitActive(habit)"
+            class="text-xs px-3 py-2 rounded transition-colors whitespace-nowrap"
+            :class="habit.is_active ? 'text-accent hover:bg-accent-bright/10' : 'text-success hover:bg-success/10'"
+          >
+            {{ habit.is_active ? 'Deactivate' : 'Activate' }}
+          </button>
+          <button
+            v-if="resettingHabit !== habit.id"
+            @click="resettingHabit = habit.id"
+            class="text-xs text-txt-muted hover:text-red-400 transition-colors px-3 py-2"
+          >
+            Reset
+          </button>
+          <div v-else class="flex items-center gap-2 animate-fade-in">
+            <button @click="resetSingleHabit(habit.id)" class="text-xs text-red-400 hover:text-red-300 font-medium px-2 py-1.5">Clear logs</button>
+            <button @click="resettingHabit = null" class="text-xs text-txt-muted hover:text-txt-primary px-2 py-1.5">Cancel</button>
+          </div>
+          <button
+            v-if="!habit.is_preset"
+            @click="deleteCustomHabit(habit)"
+            class="text-xs text-txt-muted hover:text-red-400 transition-colors px-3 py-2"
+          >
+            Delete
+          </button>
         </div>
-        <button
-          v-if="!habit.is_preset"
-          @click="deleteCustomHabit(habit)"
-          class="text-xs text-txt-muted hover:text-red-400 transition-colors px-3 py-2"
-        >
-          Delete
-        </button>
       </div>
     </div>
   </template>
