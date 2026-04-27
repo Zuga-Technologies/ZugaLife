@@ -396,6 +396,15 @@ async def log_habit(
         if not habit or habit.user_id != user.id:
             raise HTTPException(status_code=404, detail="Habit not found")
 
+        # Cache scalar attributes BEFORE any flush/refresh/create_task work.
+        # Once we yield via await on a fire-and-forget emit task, the ORM may
+        # mark `habit`'s attributes as needing reload; subsequent f-string
+        # access (`habit.name`) triggers a lazy load that fails with
+        # MissingGreenlet because it's evaluated synchronously inside a
+        # filter expression. Reading into locals freezes the values.
+        habit_id = habit.id
+        habit_name = habit.name
+
         # Upsert: check for existing log
         existing = await session.execute(
             select(HabitLog).where(
@@ -447,8 +456,8 @@ async def log_habit(
             try:
                 from core.events.proxy import emit
                 asyncio.create_task(emit("life:habit_completed", {
-                    "habit_id": habit.id,
-                    "habit_name": habit.name,
+                    "habit_id": habit_id,
+                    "habit_name": habit_name,
                     "log_date": str(log_date),
                 }, user_id=user.id))
             except Exception:
@@ -457,6 +466,7 @@ async def log_habit(
         # Only award XP once per habit per day — check XP transaction log
         gam = _get_gam_engine()
         already_awarded = False
+        xp_description = f"Completed {habit_name}"
         if gam and body.completed:
             _gam_models = sys.modules.get("zugalife.gamification.models")
             if _gam_models:
@@ -464,7 +474,7 @@ async def log_habit(
                     select(_gam_models.XPTransaction.id).where(
                         _gam_models.XPTransaction.user_id == user.id,
                         _gam_models.XPTransaction.source == "habit_check",
-                        _gam_models.XPTransaction.description == f"Completed {habit.name}",
+                        _gam_models.XPTransaction.description == xp_description,
                         func.date(_gam_models.XPTransaction.created_at) == log_date,
                     ).limit(1)
                 )
@@ -474,7 +484,7 @@ async def log_habit(
                 await gam.award_xp(
                     session, user_id=user.id,
                     source="habit_check",
-                    description=f"Completed {habit.name}",
+                    description=xp_description,
                 )
             except Exception:
                 logger.warning("XP award failed for %s", user.id, exc_info=True)
