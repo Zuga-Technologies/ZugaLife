@@ -20,6 +20,7 @@ const {
   withCelebration,
   tokenLabel,
   timeAgo,
+  pendingMeditationToast,
 } = useLifeShared()
 
 // ============================
@@ -391,9 +392,11 @@ function handleExtensionMedComplete(session?: MeditationSession) {
       medView.value = 'player'
     }
 
-    // System-level notification (if granted) so the user notices when
-    // they're on another tab/studio. Falls back to a celebration badge
-    // modal — same primitive used for mood-log confirmations.
+    // In-app clickable toast (mobile + desktop) — LifeView renders it
+    // and click routes back here via the 'zugalife-open-meditation' event.
+    pendingMeditationToast.value = { id: session.id, title: session.title || 'Your meditation' }
+
+    // System-level Notification (cross-tab) — only when permission granted.
     try {
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         const n = new Notification('Meditation ready', {
@@ -401,12 +404,12 @@ function handleExtensionMedComplete(session?: MeditationSession) {
           icon: '/favicon.ico',
           tag: `meditation-${session.id}`,
         })
-        n.onclick = () => { window.focus(); n.close() }
-      } else {
-        celebration.activeBadge.value = {
-          badge_key: 'first_meditation',  // reuses Brain icon from badgeIcons
-          title: 'Meditation ready',
-          description: session.title || 'Tap Meditate to listen.',
+        n.onclick = () => {
+          window.focus()
+          window.dispatchEvent(new CustomEvent('zugalife-open-meditation', {
+            detail: { sessionId: session.id },
+          }))
+          n.close()
         }
       }
     } catch { /* notification API not available — silent */ }
@@ -869,6 +872,16 @@ function getMedTypeIcon(type: string) {
 // LIFECYCLE
 // ============================
 
+// Listener — LifeView's meditation-ready toast clicks dispatch this event
+// so MeditateTab can load the session and switch to the player view.
+async function handleOpenMeditationEvent(e: Event) {
+  const ce = e as CustomEvent<{ sessionId: number }>
+  const id = ce.detail?.sessionId
+  if (!id) return
+  pendingMeditationToast.value = null
+  await openMedSession(id)
+}
+
 onMounted(async () => {
   await Promise.all([
     fetchMedRemaining(),
@@ -876,11 +889,13 @@ onMounted(async () => {
   ])
   loadingMeditation.value = false
   await checkInProgressMeditation()
+  window.addEventListener('zugalife-open-meditation', handleOpenMeditationEvent)
 })
 
 onUnmounted(() => {
   stopAudio()
   clearExtensionMedTimers()
+  window.removeEventListener('zugalife-open-meditation', handleOpenMeditationEvent)
 })
 </script>
 

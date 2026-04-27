@@ -4,7 +4,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { useLifeShared } from './composables/useLifeShared'
 import { useOnboardingStore } from '@zugaapp/stores/onboarding'
 import { useNotifications } from './composables/useNotifications'
-import { ArrowLeft, AlertTriangle, Zap } from 'lucide-vue-next'
+import { ArrowLeft, AlertTriangle, Zap, Brain } from 'lucide-vue-next'
 import BackgroundTheme from './BackgroundTheme.vue'
 import CelebrationOverlay from './components/CelebrationOverlay.vue'
 import LifeOnboarding from './components/LifeOnboarding.vue'
@@ -24,6 +24,7 @@ const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: fa
 
 // ── Shared state ───────────────────────────────────────────────
 const {
+  pendingMeditationToast,
   showBillingPrompt,
   billingPromptFeature,
   showBillingPacks,
@@ -156,6 +157,22 @@ function onBreathDone() {
   void api.post('/api/life/breath/done').catch(() => { /* non-critical */ })
 }
 
+// Meditation-ready toast click — switch to meditate sub-tab + dispatch
+// the event MeditateTab listens for, which loads the session into the
+// player. Toast clears via the explicit setter inside MeditateTab's
+// handler so it doesn't disappear before the load resolves.
+function openPendingMeditation() {
+  if (!pendingMeditationToast.value) return
+  const id = pendingMeditationToast.value.id
+  activeTab.value = 'meditate'
+  // nextTick so MeditateTab mounts and its event listener attaches first.
+  setTimeout(() => {
+    window.dispatchEvent(new CustomEvent('zugalife-open-meditation', {
+      detail: { sessionId: id },
+    }))
+  }, 50)
+}
+
 // ── Onboarding ─────────────────────────────────────────────────
 function onLifeOnboardingComplete(recommendedTab?: string) {
   onboarding.completeLifeOnboarding()
@@ -208,6 +225,29 @@ onMounted(async () => {
     <LifeOnboarding v-if="onboarding.showLifeOnboarding" @complete="onLifeOnboardingComplete" />
     <!-- Daily breath cold-open (once per UTC day, skippable, first-time users see onboarding instead) -->
     <BreathColdOpen v-if="showBreath" @complete="onBreathDone" @skip="onBreathDone" />
+
+    <!-- Meditation-ready toast (cross-sub-tab, clickable) -->
+    <Teleport to="body">
+      <Transition name="med-toast">
+        <button
+          v-if="pendingMeditationToast"
+          @click="openPendingMeditation"
+          class="med-ready-toast"
+          aria-label="Open ready meditation"
+        >
+          <Brain :size="18" class="text-accent flex-shrink-0" />
+          <div class="flex-1 min-w-0 text-left">
+            <div class="text-xs font-semibold text-txt-primary">Meditation ready</div>
+            <div class="text-[11px] text-txt-secondary truncate">{{ pendingMeditationToast.title }} — tap to listen</div>
+          </div>
+          <span
+            @click.stop="pendingMeditationToast = null"
+            class="text-txt-muted hover:text-txt-primary text-sm px-1"
+            role="button"
+          >×</span>
+        </button>
+      </Transition>
+    </Teleport>
 
     <div
       class="relative z-10 mx-auto py-10 animate-fade-in"
@@ -389,3 +429,55 @@ onMounted(async () => {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+/* Meditation-ready toast — bottom-right desktop, top-banner mobile.
+   Persists across sub-tabs because LifeView holds it. */
+.med-ready-toast {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 1rem;
+  border-radius: 0.75rem;
+  background: rgba(15, 15, 25, 0.96);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 24px rgba(168, 85, 247, 0.15);
+  color: #e2e8f0;
+  cursor: pointer;
+  max-width: 360px;
+  -webkit-tap-highlight-color: transparent;
+}
+.med-ready-toast:hover {
+  border-color: rgba(168, 85, 247, 0.5);
+}
+@media (max-width: 640px) {
+  .med-ready-toast {
+    bottom: auto;
+    top: 0.75rem;
+    left: 0.75rem;
+    right: 0.75rem;
+    max-width: none;
+  }
+}
+.med-toast-enter-active,
+.med-toast-leave-active {
+  transition: opacity 280ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.med-toast-enter-from,
+.med-toast-leave-to {
+  opacity: 0;
+  transform: translateY(20px);
+}
+@media (max-width: 640px) {
+  .med-toast-enter-from,
+  .med-toast-leave-to {
+    transform: translateY(-20px);
+  }
+}
+</style>

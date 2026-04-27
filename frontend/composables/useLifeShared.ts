@@ -85,6 +85,12 @@ const serviceErrorTitle = ref('')
 const serviceErrorMessage = ref('')
 const serviceErrorRetryFn = ref<(() => void) | null>(null)
 
+// Meditation-ready toast — surfaces a clickable in-app banner when an
+// extension-generated meditation finishes while the user is on another
+// tab. Singleton so MeditateTab can set it from anywhere and LifeView
+// renders it across all sub-tabs.
+const pendingMeditationToast = ref<{ id: number; title: string } | null>(null)
+
 // ── Static badge definitions ──
 const STATIC_BADGES: Array<{ key: string; title: string; description: string }> = [
   { key: 'first_mood',       title: 'Mood Tracker',        description: 'Log your first mood' },
@@ -279,6 +285,7 @@ export function useLifeShared() {
 
     // Service error
     showServiceError,
+    pendingMeditationToast,
     serviceErrorTitle,
     serviceErrorMessage,
     serviceErrorRetryFn,

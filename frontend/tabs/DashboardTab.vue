@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { api, ApiError } from '@core/api/client'
 import {
-  Settings, Brain as BrainIcon, ChevronRight, CalendarDays, TrendingUp, BookOpen,
+  Settings, Brain as BrainIcon, CalendarDays, TrendingUp, BookOpen,
   MessageCircleHeart, Wind, Meh, Target,
 } from 'lucide-vue-next'
 import { moodIcons, getIcon } from '../icons'
@@ -567,7 +567,6 @@ onMounted(async () => {
               </div>
               <span class="text-sm font-semibold text-txt-primary">Habits</span>
             </div>
-            <ChevronRight :size="16" class="text-txt-muted/40 group-hover:text-txt-muted transition-colors" />
           </div>
           <template v-if="dashboardData.habits.has_data">
             <!-- Progress bar -->
@@ -616,7 +615,6 @@ onMounted(async () => {
               </div>
               <span class="text-sm font-semibold text-txt-primary">Goals</span>
             </div>
-            <ChevronRight :size="16" class="text-txt-muted/40 group-hover:text-txt-muted transition-colors" />
           </div>
           <template v-if="dashboardData.goals.has_data">
             <div class="flex-1 flex flex-col">
@@ -676,7 +674,6 @@ onMounted(async () => {
               </div>
               <span class="text-sm font-semibold text-txt-primary">Meditation</span>
             </div>
-            <ChevronRight :size="16" class="text-txt-muted/40 group-hover:text-txt-muted transition-colors" />
           </div>
           <template v-if="dashboardData.meditation.has_data && dashboardData.meditation.sessions_this_week > 0">
             <div class="flex items-baseline gap-4 mb-2">
@@ -714,7 +711,6 @@ onMounted(async () => {
               </div>
               <span class="text-sm font-semibold text-txt-primary">Journal & Mood</span>
             </div>
-            <ChevronRight :size="16" class="text-txt-muted/40 group-hover:text-txt-muted transition-colors" />
           </div>
           <template v-if="dashboardData.journal.has_data">
             <div class="flex items-baseline gap-1 mb-1">
@@ -758,7 +754,6 @@ onMounted(async () => {
               </div>
               <span class="text-sm font-semibold text-txt-primary">Wellness Bot</span>
             </div>
-            <ChevronRight :size="16" class="text-txt-muted/40 group-hover:text-txt-muted transition-colors" />
           </div>
           <template v-if="dashboardData.therapist.has_data">
             <p class="text-sm text-txt-secondary mb-2 line-clamp-1">{{ dashboardData.therapist.last_themes }}</p>
@@ -789,7 +784,6 @@ onMounted(async () => {
               </div>
               <span class="text-sm font-semibold text-txt-primary">Breathwork</span>
             </div>
-            <ChevronRight :size="16" class="text-txt-muted/40 group-hover:text-txt-muted transition-colors" />
           </div>
           <p class="text-sm text-txt-secondary mb-1">Box breathing exercises</p>
           <p class="text-xs text-txt-muted mt-auto">theboxbreather.com</p>
