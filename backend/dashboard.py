@@ -135,12 +135,16 @@ async def _forecast_preview(session, user_id: str) -> dict:
 
 
 async def _habit_metrics(session, user_id: str, week_start: date, today: date) -> dict:
-    """Weekly completion rate + streak."""
+    """Weekly completion rate — full-week target (Mon-Sun), not week-to-date.
+
+    Per habit: target = weekly_target if set, else 7 (every day).
+    Counts completed days within [week_start, today] but denominator is the
+    full weekly target, so the dashboard shows true weekly progress.
+    """
     _h = sys.modules["zugalife.habits.models"]
     HabitDefinition = _h.HabitDefinition
     HabitLog = _h.HabitLog
 
-    # Active habits
     habits_result = await session.execute(
         select(HabitDefinition)
         .where(HabitDefinition.user_id == user_id, HabitDefinition.is_active == True)
@@ -149,13 +153,12 @@ async def _habit_metrics(session, user_id: str, week_start: date, today: date) -
     if not habits:
         return {"has_data": False, "active_count": 0}
 
-    # This week's completions
-    days_in_week = (today - week_start).days + 1
-    total_possible = len(habits) * days_in_week
+    total_possible = 0
     completed = 0
     habit_stats = []
 
     for h in habits:
+        target = h.weekly_target if h.weekly_target else 7
         log_result = await session.execute(
             select(func.count())
             .select_from(HabitLog)
@@ -168,15 +171,17 @@ async def _habit_metrics(session, user_id: str, week_start: date, today: date) -
             )
         )
         days = log_result.scalar_one()
-        completed += days
+        # Cap displayed completion at the target so 5/3 doesn't appear
+        capped = min(days, target)
+        completed += capped
+        total_possible += target
         habit_stats.append({
             "name": h.name,
             "emoji": h.emoji,
-            "completed": days,
-            "total": days_in_week,
+            "completed": capped,
+            "total": target,
         })
 
-    # Sort by completion rate descending for display
     habit_stats.sort(key=lambda x: x["completed"] / max(x["total"], 1), reverse=True)
 
     return {

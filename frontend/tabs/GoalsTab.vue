@@ -530,7 +530,6 @@ onMounted(async () => {
   <p v-if="goalError" class="text-sm text-red-400 mb-4">{{ goalError }}</p>
 
   <!-- ===== LIFE GOALS ===== -->
-  <template>
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg font-semibold text-txt-primary">Life Goals</h2>
       <button
@@ -976,7 +975,6 @@ onMounted(async () => {
         </div>
       </div>
     </div>
-  </template>
 
   <!-- Weekly Targets sub-view removed 2026-04-26. Habit weekly targets now
        live on each row in Habits → Manage where they conceptually belong. -->
