@@ -195,24 +195,30 @@ async function toggleHabit(item: HabitCheckInItem) {
   }
 }
 
-// Force select-all when the user taps the amount input. On iOS Safari,
-// tapping a populated text-aligned input puts the cursor wherever the
-// finger landed — even after `focus` fires. We can't beat the touch
-// handler with one rAF, so we fire select() at every plausible point
-// (focus + click + after a short timeout). Tradeoff: harmless extra
-// select() calls vs. a cursor that lands mid-number on mobile.
-function selectAmountAll(el: HTMLInputElement) {
-  if (!el || !el.value) return  // empty: nothing to select, cursor at end naturally
-  const sel = () => { try { el.select() } catch { /* noop */ } }
-  sel()                                      // immediate (covers desktop)
-  requestAnimationFrame(() => requestAnimationFrame(sel))  // after layout
-  setTimeout(sel, 50)                        // after iOS touchend cursor-positioning
+// Clear-on-focus pattern. iOS Safari refuses to honor select()/setSelectionRange
+// reliably when the user taps a populated input — the touchend handler positions
+// the cursor wherever the finger landed, regardless of what we did in @focus.
+// Solution: clear the value the moment the input is focused. Empty input = no
+// cursor-positioning ambiguity. User types fresh. On blur, if they didn't type,
+// we restore the prior value so an accidental tap doesn't lose data.
+const savedAmount: Record<number, string> = {}
+
+function handleAmountFocus(e: FocusEvent, habitId: number) {
+  const el = e.target as HTMLInputElement
+  savedAmount[habitId] = el.value
+  amountInputs.value[habitId] = ''
 }
-function handleAmountFocus(e: FocusEvent) {
-  selectAmountAll(e.target as HTMLInputElement)
-}
-function handleAmountClick(e: MouseEvent) {
-  selectAmountAll(e.target as HTMLInputElement)
+
+function handleAmountBlur(item: HabitCheckInItem) {
+  const id = item.habit.id
+  if (!amountInputs.value[id]) {
+    // User didn't type — restore prior value silently, no log update.
+    if (savedAmount[id] !== undefined) amountInputs.value[id] = savedAmount[id]
+    delete savedAmount[id]
+    return
+  }
+  delete savedAmount[id]
+  void updateHabitAmount(item)
 }
 
 // Step the value on ↑/↓. Without type="number" the native step behavior
@@ -638,11 +644,10 @@ onMounted(async () => {
               pattern="[0-9]*\.?[0-9]*"
               :value="amountInputs[item.habit.id] ?? ''"
               @input="amountInputs[item.habit.id] = ($event.target as HTMLInputElement).value.replace(/[^0-9.]/g, '')"
-              @focus="handleAmountFocus($event)"
-              @click="handleAmountClick($event)"
+              @focus="handleAmountFocus($event, item.habit.id)"
               @keydown="handleAmountKeydown(item, $event)"
-              @blur="updateHabitAmount(item)"
-              @keyup.enter="updateHabitAmount(item)"
+              @blur="handleAmountBlur(item)"
+              @keyup.enter="handleAmountBlur(item)"
               :placeholder="item.habit.default_target ? String(item.habit.default_target) : '0'"
               class="w-14 px-1.5 py-1 text-sm text-right rounded-md bg-surface-3 text-txt-primary border border-bdr focus:border-accent focus:outline-none"
             />
