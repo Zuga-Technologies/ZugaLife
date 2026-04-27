@@ -195,19 +195,23 @@ async function toggleHabit(item: HabitCheckInItem) {
   }
 }
 
-// On focus, select all text so the cursor lands consistently and typing
-// replaces. The input is now type="text" with inputmode="numeric" so
-// setSelectionRange works on iOS Safari + Android Chrome (both refused
-// it on type="number"). Tested: iOS shows numeric keypad, cursor selects
-// reliably on tap.
+// Select all on focus/tap so the cursor doesn't land mid-number on mobile.
+// iOS Safari fires `focus` before touchend's cursor-positioning, so a
+// setTimeout(0) gets overwritten. Two rAFs defers past the touch handler.
+// `select()` is more reliable than setSelectionRange on iOS. `@click`
+// handles the already-focused tap case (focus event doesn't refire).
+function selectAmountAll(el: HTMLInputElement) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      try { el.select() } catch { /* noop */ }
+    })
+  })
+}
 function handleAmountFocus(e: FocusEvent) {
-  const el = e.target as HTMLInputElement
-  // Defer past the browser's own tap-positioning.
-  setTimeout(() => {
-    try {
-      el.setSelectionRange(0, el.value.length)
-    } catch { /* noop */ }
-  }, 0)
+  selectAmountAll(e.target as HTMLInputElement)
+}
+function handleAmountClick(e: MouseEvent) {
+  selectAmountAll(e.target as HTMLInputElement)
 }
 
 // Step the value on ↑/↓. Without type="number" the native step behavior
@@ -634,6 +638,7 @@ onMounted(async () => {
               :value="amountInputs[item.habit.id] ?? ''"
               @input="amountInputs[item.habit.id] = ($event.target as HTMLInputElement).value.replace(/[^0-9.]/g, '')"
               @focus="handleAmountFocus($event)"
+              @click="handleAmountClick($event)"
               @keydown="handleAmountKeydown(item, $event)"
               @blur="updateHabitAmount(item)"
               @keyup.enter="updateHabitAmount(item)"
