@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { api, ApiError } from '@core/api/client'
 import { habitIcons, habitIconPicker, habitIconCategories, getIcon } from '../icons'
-import { ChevronDown, ChevronUp, CircleDot } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, CircleDot, Trash2 } from 'lucide-vue-next'
 import { useLifeShared } from '../composables/useLifeShared'
 
 const emit = defineEmits<{
@@ -765,10 +765,11 @@ onMounted(async () => {
             <template v-if="deletingDay !== day.date">
               <button
                 @click="deletingDay = day.date"
-                class="text-xs text-txt-muted hover:text-red-400 transition-colors px-2 py-0.5 rounded"
+                class="text-txt-muted hover:text-red-400 transition-colors p-1 rounded"
                 title="Delete this day's logs"
+                aria-label="Delete this day's logs"
               >
-                Delete
+                <Trash2 :size="14" />
               </button>
             </template>
             <template v-else>
