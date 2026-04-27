@@ -924,9 +924,11 @@ onUnmounted(() => {
 
     <p v-if="medError" class="text-sm text-red-400 mb-4">{{ medError }}</p>
 
-    <!-- Extension status banner -->
-    <div v-if="medView === 'new' && !medGenerating" class="mb-4 px-3 py-2 rounded-lg text-xs flex items-center gap-2"
-      :class="hasZugaExtension() ? 'bg-accent-alt/10 text-accent-alt-bright' : 'bg-surface-2 text-txt-muted'"
+    <!-- Extension status banner — hidden on mobile when extension isn't
+         installed (mobile can't install Chrome extensions, so the prompt
+         is noise). Active state still renders if somehow detected. -->
+    <div v-if="medView === 'new' && !medGenerating" class="mb-4 px-3 py-2 rounded-lg text-xs items-center gap-2"
+      :class="hasZugaExtension() ? 'bg-accent-alt/10 text-accent-alt-bright flex' : 'bg-surface-2 text-txt-muted hidden sm:flex'"
     >
       <template v-if="hasZugaExtension()">
         <span class="w-2 h-2 rounded-full bg-accent-alt animate-pulse" />
