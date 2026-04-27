@@ -666,7 +666,7 @@ onMounted(async () => {
         <!-- MEDITATION CARD -->
         <button
           @click="emit('navigate', 'meditate')"
-          class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
+          class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
           style="animation-delay: 150ms"
         >
           <div class="flex items-center justify-between mb-4">
@@ -704,7 +704,7 @@ onMounted(async () => {
         <!-- JOURNAL & MOOD CARD -->
         <button
           @click="emit('navigate', 'journal')"
-          class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group"
+          class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
           style="animation-delay: 200ms"
         >
           <div class="flex items-center justify-between mb-3">

@@ -89,28 +89,10 @@ interface GoalTemplate {
   already_adopted: boolean
 }
 
-interface WeeklyTargetItem {
-  habit_id: number
-  habit_name: string
-  habit_emoji: string
-  weekly_target: number
-  this_week_count: number
-  progress_pct: number
-}
-
-interface WeeklyTargetsResponse {
-  habits: WeeklyTargetItem[]
-  week_start: string
-}
-
 // ── State ──────────────────────────────────────────────────────
-
-type GoalSubView = 'goals' | 'weekly'
-const goalSubView = ref<GoalSubView>('goals')
 
 const activeGoals = ref<Goal[]>([])
 const completedGoals = ref<Goal[]>([])
-const weeklyTargets = ref<WeeklyTargetItem[]>([])
 const loadingGoals = ref(true)
 const goalError = ref<string | null>(null)
 const goalSuccess = ref<string | null>(null)
@@ -143,10 +125,6 @@ const editGoalDescription = ref('')
 const editGoalDeadline = ref('')
 const editGoalSaving = ref(false)
 
-// Editing weekly target
-const editingTargetFor = ref<number | null>(null)
-const editTargetValue = ref<number | null>(null)
-
 // AI goal insight
 const goalInsightLoading = ref<number | null>(null)
 const goalInsights = ref<Record<number, string>>({})
@@ -171,13 +149,6 @@ async function fetchGoals() {
 async function fetchGoalTemplates() {
   try {
     goalTemplates.value = await api.get<GoalTemplate[]>('/api/life/goals/templates')
-  } catch { /* silent */ }
-}
-
-async function fetchWeeklyTargets() {
-  try {
-    const res = await api.get<WeeklyTargetsResponse>('/api/life/habits/weekly')
-    weeklyTargets.value = res.habits
   } catch { /* silent */ }
 }
 
@@ -459,30 +430,6 @@ async function deleteMilestone(goalId: number, milestoneId: number) {
   }
 }
 
-async function setWeeklyTarget(habitId: number) {
-  goalError.value = null
-  try {
-    await api.patch(`/api/life/habits/${habitId}`, {
-      weekly_target: editTargetValue.value || null,
-    })
-    editingTargetFor.value = null
-    editTargetValue.value = null
-    await fetchWeeklyTargets()
-    await fetchAllHabits()
-  } catch (e) {
-    if (e instanceof ApiError) {
-      goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
-    } else {
-      goalError.value = 'Network error'
-    }
-  }
-}
-
-function startEditTarget(habit: HabitDefinition) {
-  editingTargetFor.value = habit.id
-  editTargetValue.value = habit.weekly_target ?? null
-}
-
 function goalMilestonePct(goal: Goal): number {
   if (goal.milestone_count === 0) return 0
   return Math.round((goal.milestone_done / goal.milestone_count) * 100)
@@ -573,7 +520,6 @@ onMounted(async () => {
   await Promise.all([
     fetchGoals(),
     fetchGoalTemplates(),
-    fetchWeeklyTargets(),
     fetchAllHabits(),
   ])
   loadingGoals.value = false
@@ -581,26 +527,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <!-- Sub-nav -->
-  <div class="flex gap-3 mb-6">
-    <button
-      v-for="view in [
-        { key: 'goals', label: 'Life Goals' },
-        { key: 'weekly', label: 'Weekly Targets' },
-      ] as { key: GoalSubView; label: string }[]"
-      :key="view.key"
-      @click="goalSubView = view.key; if (view.key === 'weekly') fetchWeeklyTargets()"
-      class="px-4 py-2.5 text-xs font-medium rounded-lg transition-colors"
-      :class="goalSubView === view.key ? 'bg-accent/15 text-accent' : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
-    >
-      {{ view.label }}
-    </button>
-  </div>
-
   <p v-if="goalError" class="text-sm text-red-400 mb-4">{{ goalError }}</p>
 
-  <!-- ===== LIFE GOALS SUB-VIEW ===== -->
-  <template v-if="goalSubView === 'goals'">
+  <!-- ===== LIFE GOALS ===== -->
+  <template>
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg font-semibold text-txt-primary">Life Goals</h2>
       <button
@@ -1048,112 +978,6 @@ onMounted(async () => {
     </div>
   </template>
 
-  <!-- ===== WEEKLY TARGETS SUB-VIEW ===== -->
-  <template v-if="goalSubView === 'weekly'">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold text-txt-primary">Weekly Targets</h2>
-      <span class="text-xs text-txt-muted">This week's progress</span>
-    </div>
-
-    <!-- Set targets prompt -->
-    <div v-if="weeklyTargets.length === 0" class="glass-card p-6 text-center">
-      <p class="text-sm text-txt-muted mb-2">No weekly targets set yet.</p>
-      <p class="text-xs text-txt-muted">
-        Go to Habits &rarr; Manage to set weekly frequency targets for your habits.
-      </p>
-      <!-- Quick-set targets from here -->
-      <div v-if="allHabits.filter(h => h.is_active).length > 0" class="mt-4 space-y-2">
-        <p class="text-xs text-txt-muted font-medium">Or set targets here:</p>
-        <div
-          v-for="habit in allHabits.filter(h => h.is_active)"
-          :key="habit.id"
-          class="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-2"
-        >
-          <component :is="getIcon(habit.emoji)" :size="20" class="text-accent flex-shrink-0" v-if="getIcon(habit.emoji)" />
-          <CircleDot v-else :size="20" class="text-accent flex-shrink-0" />
-          <span class="text-sm text-txt-primary flex-1">{{ habit.name }}</span>
-          <template v-if="editingTargetFor === habit.id">
-            <select
-              v-model.number="editTargetValue"
-              class="input-field w-32 text-sm"
-            >
-              <option :value="null">None</option>
-              <option v-for="n in 7" :key="n" :value="n">{{ n }}x / week</option>
-            </select>
-            <button @click="setWeeklyTarget(habit.id)" class="text-xs text-accent">Save</button>
-          </template>
-          <button
-            v-else
-            @click="startEditTarget(habit)"
-            class="text-xs text-accent hover:text-accent/80"
-          >
-            {{ habit.weekly_target ? habit.weekly_target + 'x / week' : 'Set target' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Weekly targets with progress -->
-    <div v-else class="space-y-3">
-      <div
-        v-for="item in weeklyTargets"
-        :key="item.habit_id"
-        class="glass-card px-4 py-3"
-      >
-        <div class="flex items-center gap-3 mb-2">
-          <component :is="getIcon(item.habit_emoji)" :size="22" class="text-accent flex-shrink-0" v-if="getIcon(item.habit_emoji)" />
-          <CircleDot v-else :size="22" class="text-accent flex-shrink-0" />
-          <div class="flex-1 min-w-0">
-            <span class="text-sm font-medium text-txt-primary">{{ item.habit_name }}</span>
-          </div>
-          <span class="text-sm font-medium" :class="item.this_week_count >= item.weekly_target ? 'text-success' : 'text-txt-muted'">
-            {{ item.this_week_count }}/{{ item.weekly_target }}
-          </span>
-        </div>
-        <div class="w-full bg-surface-3 rounded-full h-2">
-          <div
-            class="h-2 rounded-full transition-[width,background-color] duration-300 ease-out"
-            :class="item.progress_pct >= 100 ? 'bg-success' : 'bg-accent'"
-            :style="{ width: Math.min(item.progress_pct, 100) + '%' }"
-          />
-        </div>
-      </div>
-
-      <!-- Also show habits without targets for easy setup -->
-      <div
-        v-if="allHabits.filter(h => h.is_active && !h.weekly_target).length > 0"
-        class="mt-4"
-      >
-        <p class="text-xs text-txt-muted mb-2">Habits without targets:</p>
-        <div class="space-y-1">
-          <div
-            v-for="habit in allHabits.filter(h => h.is_active && !h.weekly_target)"
-            :key="habit.id"
-            class="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-2"
-          >
-            <component :is="getIcon(habit.emoji)" :size="18" class="text-accent flex-shrink-0" v-if="getIcon(habit.emoji)" />
-            <CircleDot v-else :size="18" class="text-accent flex-shrink-0" />
-            <span class="text-sm text-txt-muted flex-1">{{ habit.name }}</span>
-            <template v-if="editingTargetFor === habit.id">
-              <select
-                v-model.number="editTargetValue"
-                class="input-field w-32 text-sm"
-              >
-                <option :value="null">None</option>
-                <option v-for="n in 7" :key="n" :value="n">{{ n }}x / week</option>
-              </select>
-              <button @click="setWeeklyTarget(habit.id)" class="text-xs text-accent">Save</button>
-            </template>
-            <button
-              v-else
-              @click="startEditTarget(habit)"
-              class="text-xs text-accent hover:text-accent/80"
-            >
-              Set target
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </template>
+  <!-- Weekly Targets sub-view removed 2026-04-26. Habit weekly targets now
+       live on each row in Habits → Manage where they conceptually belong. -->
 </template>

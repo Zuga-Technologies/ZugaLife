@@ -289,6 +289,37 @@ async function escalateHabit(habitId: number) {
   }
 }
 
+// --- Weekly target editor (moved from Goals tab — habits-feature, lives here) ---
+const editingTargetFor = ref<number | null>(null)
+const editTargetValue = ref<number | null>(null)
+
+function startEditTarget(habit: HabitDefinition) {
+  editingTargetFor.value = habit.id
+  editTargetValue.value = habit.weekly_target ?? null
+}
+
+async function setWeeklyTarget(habitId: number) {
+  habitError.value = null
+  // Optimistic — write the value into the local list, close the editor.
+  const habit = allHabits.value.find(h => h.id === habitId)
+  const previous = habit?.weekly_target ?? null
+  if (habit) habit.weekly_target = editTargetValue.value
+  editingTargetFor.value = null
+  try {
+    await api.patch(`/api/life/habits/${habitId}`, {
+      weekly_target: editTargetValue.value || null,
+    })
+    void fetchAllHabits()
+  } catch (e) {
+    if (habit) habit.weekly_target = previous
+    if (e instanceof ApiError) {
+      habitError.value = (e.body as Record<string, string>).detail ?? `Error (${(e as ApiError).status})`
+    } else {
+      habitError.value = 'Network error'
+    }
+  }
+}
+
 async function toggleHabitActive(habit: HabitDefinition) {
   habitError.value = null
   // Optimistic flip — both in the manage list AND in the checkin list (so
@@ -855,6 +886,26 @@ onMounted(async () => {
             <span v-if="habit.is_preset" class="text-xs text-txt-muted">(preset)</span>
           </div>
         </div>
+        <!-- Weekly target editor (moved from Goals tab) -->
+        <template v-if="editingTargetFor === habit.id">
+          <select
+            v-model.number="editTargetValue"
+            @change="setWeeklyTarget(habit.id)"
+            @blur="setWeeklyTarget(habit.id)"
+            class="input-field w-32 text-xs"
+          >
+            <option :value="null">No target</option>
+            <option v-for="n in 7" :key="n" :value="n">{{ n }}x / week</option>
+          </select>
+        </template>
+        <button
+          v-else
+          @click="startEditTarget(habit)"
+          class="text-xs px-2.5 py-1 rounded-full border border-bdr text-txt-muted hover:text-accent hover:border-accent/50 transition-colors"
+          :title="habit.weekly_target ? 'Change weekly target' : 'Set a weekly target'"
+        >
+          {{ habit.weekly_target ? habit.weekly_target + 'x / week' : 'No target' }}
+        </button>
         <button
           @click="toggleHabitActive(habit)"
           class="text-xs px-3 py-2 rounded transition-colors"
