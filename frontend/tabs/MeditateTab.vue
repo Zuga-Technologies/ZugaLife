@@ -146,7 +146,13 @@ interface TranscriptSegment {
 }
 
 const transcriptSegments = computed<TranscriptSegment[]>(() => {
-  if (!medSession.value?.transcript || !medDurationSec.value) return []
+  if (!medSession.value?.transcript) return []
+  // Use the audio element's measured duration once loaded; otherwise fall
+  // back to the session record's stored duration. Without this fallback the
+  // transcript stayed empty until the user pressed play (which kicked the
+  // audio metadata load that set medDurationSec for the first time).
+  const totalDuration = medDurationSec.value || medSession.value.duration_seconds || 0
+  if (!totalDuration) return []
   const raw = medSession.value.transcript
   const pausePattern = /\[PAUSE\s*(\d+)s?\]/gi
 
@@ -173,7 +179,7 @@ const transcriptSegments = computed<TranscriptSegment[]>(() => {
   // Total silence from pause markers
   const totalSilence = pauses.reduce((a, b) => a + b, 0)
   // Speech duration = total audio minus silences
-  const speechDuration = Math.max(medDurationSec.value - totalSilence, 1)
+  const speechDuration = Math.max(totalDuration - totalSilence, 1)
   // Total chars across all segments (for proportional timing)
   const totalChars = texts.reduce((a, t) => a + t.length, 0) || 1
 
@@ -888,7 +894,7 @@ onUnmounted(() => {
       </template>
       <template v-else>
         <span class="w-2 h-2 rounded-full bg-txt-muted/50" />
-        Install the <a href="https://zugabot.ai/extension" class="text-accent hover:underline">Zugabot extension</a> for background generation on PC.
+        Install the <a href="https://zugabot.ai/extension" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline">Zugabot extension</a> for background generation on PC.
       </template>
     </div>
 
@@ -1022,11 +1028,12 @@ onUnmounted(() => {
       </button>
     </template>
 
-    <!-- ===== PLAYER VIEW ===== -->
+    <!-- ===== PLAYER VIEW =====
+         Back arrow removed — the 'New session' sub-nav button already returns
+         here. View slides in from the right so the transition reads as a
+         step forward into the session, not a fresh page load. -->
     <template v-if="medView === 'player' && medSession">
-      <!-- Back button -->
-      <button @click="goToNewMeditation" class="text-txt-muted hover:text-txt-primary transition-colors text-sm mb-4">&larr;</button>
-
+      <div class="med-view-slide-in">
       <!-- Session card -->
       <div class="glass-card p-6 mb-4">
         <div class="flex items-start justify-between mb-3">
@@ -1141,6 +1148,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Post-session mood removed — cluttered the meditation experience -->
+      </div>
     </template>
 
     <!-- ===== HISTORY VIEW ===== -->
@@ -1199,3 +1207,19 @@ onUnmounted(() => {
     </template>
   </div>
 </template>
+
+<style scoped>
+/* Slide-in for the meditation player view — smoother than a hard cut
+   when the user generates a session and the view swaps from 'new' to
+   'player'. ~280ms quart-out so it reads as a step forward. */
+.med-view-slide-in {
+  animation: med-slide-in 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes med-slide-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .med-view-slide-in { animation: none; }
+}
+</style>
