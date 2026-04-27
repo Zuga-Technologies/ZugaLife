@@ -21,6 +21,8 @@ const {
   tokenLabel,
   timeAgo,
   pendingMeditationToast,
+  persistMeditationReady,
+  clearMeditationReady,
 } = useLifeShared()
 
 // ============================
@@ -293,6 +295,11 @@ async function _pollUntilDone(sessionId: number) {
         medView.value = 'player'
         medSuccess.value = 'Meditation generated!'
         setTimeout(() => { medSuccess.value = null }, 2000)
+        // Flip the generating toast to 'ready' + persist so it surfaces
+        // on next app open if the user closed the tab during generation.
+        const readyTitle = session.title || 'Your meditation'
+        pendingMeditationToast.value = { id: session.id, title: readyTitle, state: 'ready' }
+        persistMeditationReady(session.id, readyTitle)
         notifyTokenSpend()
         await fetchMedRemaining()
         await fetchMedSessions()
@@ -392,9 +399,12 @@ function handleExtensionMedComplete(session?: MeditationSession) {
       medView.value = 'player'
     }
 
-    // In-app clickable toast (mobile + desktop) — LifeView renders it
-    // and click routes back here via the 'zugalife-open-meditation' event.
-    pendingMeditationToast.value = { id: session.id, title: session.title || 'Your meditation' }
+    // In-app clickable toast — LifeView renders it across sub-tabs.
+    // Persisted to localStorage so it also surfaces on next app open if
+    // the user closed the tab while we were generating.
+    const toastTitle = session.title || 'Your meditation'
+    pendingMeditationToast.value = { id: session.id, title: toastTitle, state: 'ready' }
+    persistMeditationReady(session.id, toastTitle)
 
     // System-level Notification (cross-tab) — only when permission granted.
     try {
@@ -514,6 +524,15 @@ async function generateMeditation() {
   medGenStage.value = null
   medError.value = null
 
+  // Generating-state toast — flips to 'ready' when generation finishes
+  // (handleExtensionMedComplete or _pollUntilDone update it). Cleared on
+  // error in the catch/finally below.
+  pendingMeditationToast.value = {
+    id: null,
+    title: 'Your meditation',
+    state: 'generating',
+  }
+
   const payload: Record<string, unknown> = {
     type: medType.value,
     length: medLength.value,
@@ -563,6 +582,12 @@ async function generateMeditation() {
       }
     } else {
       medError.value = handleServiceError('Connection Issue', 'We couldn\'t reach the server. Check your internet connection and try again.', startMeditation)
+    }
+    // Drop the generating-state toast on error — only persist when generation
+    // actually starts and a session id exists. Don't clobber a 'ready' toast
+    // that might've raced in.
+    if (pendingMeditationToast.value?.state === 'generating') {
+      pendingMeditationToast.value = null
     }
   } finally {
     medGenerating.value = false
@@ -879,6 +904,7 @@ async function handleOpenMeditationEvent(e: Event) {
   const id = ce.detail?.sessionId
   if (!id) return
   pendingMeditationToast.value = null
+  clearMeditationReady()
   await openMedSession(id)
 }
 

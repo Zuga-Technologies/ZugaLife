@@ -25,6 +25,8 @@ const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: fa
 // ── Shared state ───────────────────────────────────────────────
 const {
   pendingMeditationToast,
+  loadMeditationReady,
+  clearMeditationReady,
   showBillingPrompt,
   billingPromptFeature,
   showBillingPacks,
@@ -163,7 +165,11 @@ function onBreathDone() {
 // handler so it doesn't disappear before the load resolves.
 function openPendingMeditation() {
   if (!pendingMeditationToast.value) return
+  // 'generating' has no session id yet — toast is non-clickable, only the
+  // × button works (handled by the dismiss button in the template).
+  if (pendingMeditationToast.value.state !== 'ready') return
   const id = pendingMeditationToast.value.id
+  if (id == null) return
   activeTab.value = 'meditate'
   // nextTick so MeditateTab mounts and its event listener attaches first.
   setTimeout(() => {
@@ -171,6 +177,11 @@ function openPendingMeditation() {
       detail: { sessionId: id },
     }))
   }, 50)
+}
+
+function dismissMeditationToast() {
+  pendingMeditationToast.value = null
+  clearMeditationReady()
 }
 
 // ── Onboarding ─────────────────────────────────────────────────
@@ -212,6 +223,16 @@ onMounted(async () => {
   notif.init()
   await onboarding.checkLifeOnboarding()
   maybeShowBreath()
+
+  // Restore the "meditation ready" toast if a previous session generated
+  // one and the user closed the tab before clicking it. Cleared by
+  // openPendingMeditation (click) or the × button (dismiss).
+  if (!pendingMeditationToast.value) {
+    const saved = loadMeditationReady()
+    if (saved) {
+      pendingMeditationToast.value = { id: saved.id, title: saved.title, state: 'ready' }
+    }
+  }
 })
 </script>
 
@@ -226,22 +247,36 @@ onMounted(async () => {
     <!-- Daily breath cold-open (once per UTC day, skippable, first-time users see onboarding instead) -->
     <BreathColdOpen v-if="showBreath" @complete="onBreathDone" @skip="onBreathDone" />
 
-    <!-- Meditation-ready toast (cross-sub-tab, clickable) -->
+    <!-- Meditation toast: 'generating' (non-clickable, spinner) →
+         'ready' (clickable, brain icon, persisted across reload). -->
     <Teleport to="body">
       <Transition name="med-toast">
         <button
           v-if="pendingMeditationToast"
           @click="openPendingMeditation"
           class="med-ready-toast"
-          aria-label="Open ready meditation"
+          :class="{ 'cursor-default': pendingMeditationToast.state === 'generating' }"
+          :aria-label="pendingMeditationToast.state === 'ready' ? 'Open ready meditation' : 'Meditation generating'"
         >
-          <Brain :size="18" class="text-accent flex-shrink-0" />
-          <div class="flex-1 min-w-0 text-left">
-            <div class="text-xs font-semibold text-txt-primary">Meditation ready</div>
-            <div class="text-[11px] text-txt-secondary truncate">{{ pendingMeditationToast.title }} — tap to listen</div>
-          </div>
+          <template v-if="pendingMeditationToast.state === 'generating'">
+            <svg class="animate-spin h-[18px] w-[18px] text-accent flex-shrink-0" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <div class="flex-1 min-w-0 text-left">
+              <div class="text-xs font-semibold text-txt-primary">Generating meditation</div>
+              <div class="text-[11px] text-txt-secondary truncate">{{ pendingMeditationToast.title }} — we'll notify you when ready</div>
+            </div>
+          </template>
+          <template v-else>
+            <Brain :size="18" class="text-accent flex-shrink-0" />
+            <div class="flex-1 min-w-0 text-left">
+              <div class="text-xs font-semibold text-txt-primary">Meditation ready</div>
+              <div class="text-[11px] text-txt-secondary truncate">{{ pendingMeditationToast.title }} — tap to listen</div>
+            </div>
+          </template>
           <span
-            @click.stop="pendingMeditationToast = null"
+            @click.stop="dismissMeditationToast"
             class="text-txt-muted hover:text-txt-primary text-sm px-1"
             role="button"
           >×</span>

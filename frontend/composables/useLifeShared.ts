@@ -85,11 +85,36 @@ const serviceErrorTitle = ref('')
 const serviceErrorMessage = ref('')
 const serviceErrorRetryFn = ref<(() => void) | null>(null)
 
-// Meditation-ready toast — surfaces a clickable in-app banner when an
-// extension-generated meditation finishes while the user is on another
-// tab. Singleton so MeditateTab can set it from anywhere and LifeView
-// renders it across all sub-tabs.
-const pendingMeditationToast = ref<{ id: number; title: string } | null>(null)
+// Meditation toast — covers both "currently generating" and "ready to play"
+// states. Singleton so MeditateTab can set it from anywhere and LifeView
+// renders it across all sub-tabs. The 'ready' state persists to localStorage
+// (key MED_READY_KEY) so a user who closes the tab while generation is
+// running sees the toast next time they open ZugaLife.
+type MeditationToastState = 'generating' | 'ready'
+const MED_READY_KEY = 'zugalife.meditation.unseenReady'
+const pendingMeditationToast = ref<{
+  id: number | null
+  title: string
+  state: MeditationToastState
+} | null>(null)
+
+function persistMeditationReady(id: number, title: string) {
+  try {
+    localStorage.setItem(MED_READY_KEY, JSON.stringify({ id, title }))
+  } catch { /* quota / private mode — non-critical */ }
+}
+function loadMeditationReady(): { id: number; title: string } | null {
+  try {
+    const raw = localStorage.getItem(MED_READY_KEY)
+    if (!raw) return null
+    const v = JSON.parse(raw)
+    if (typeof v?.id === 'number' && typeof v?.title === 'string') return v
+  } catch { /* corrupt — drop it */ }
+  return null
+}
+function clearMeditationReady() {
+  try { localStorage.removeItem(MED_READY_KEY) } catch { /* noop */ }
+}
 
 // ── Static badge definitions ──
 const STATIC_BADGES: Array<{ key: string; title: string; description: string }> = [
@@ -286,6 +311,9 @@ export function useLifeShared() {
     // Service error
     showServiceError,
     pendingMeditationToast,
+    persistMeditationReady,
+    loadMeditationReady,
+    clearMeditationReady,
     serviceErrorTitle,
     serviceErrorMessage,
     serviceErrorRetryFn,
