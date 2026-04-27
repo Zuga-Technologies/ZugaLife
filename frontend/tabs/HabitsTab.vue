@@ -195,17 +195,18 @@ async function toggleHabit(item: HabitCheckInItem) {
   }
 }
 
-// Select all on focus/tap so the cursor doesn't land mid-number on mobile.
-// iOS Safari fires `focus` before touchend's cursor-positioning, so a
-// setTimeout(0) gets overwritten. Two rAFs defers past the touch handler.
-// `select()` is more reliable than setSelectionRange on iOS. `@click`
-// handles the already-focused tap case (focus event doesn't refire).
+// Force select-all when the user taps the amount input. On iOS Safari,
+// tapping a populated text-aligned input puts the cursor wherever the
+// finger landed — even after `focus` fires. We can't beat the touch
+// handler with one rAF, so we fire select() at every plausible point
+// (focus + click + after a short timeout). Tradeoff: harmless extra
+// select() calls vs. a cursor that lands mid-number on mobile.
 function selectAmountAll(el: HTMLInputElement) {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      try { el.select() } catch { /* noop */ }
-    })
-  })
+  if (!el || !el.value) return  // empty: nothing to select, cursor at end naturally
+  const sel = () => { try { el.select() } catch { /* noop */ } }
+  sel()                                      // immediate (covers desktop)
+  requestAnimationFrame(() => requestAnimationFrame(sel))  // after layout
+  setTimeout(sel, 50)                        // after iOS touchend cursor-positioning
 }
 function handleAmountFocus(e: FocusEvent) {
   selectAmountAll(e.target as HTMLInputElement)
@@ -643,7 +644,7 @@ onMounted(async () => {
               @blur="updateHabitAmount(item)"
               @keyup.enter="updateHabitAmount(item)"
               :placeholder="item.habit.default_target ? String(item.habit.default_target) : '0'"
-              class="w-14 px-1.5 py-1 text-sm text-center rounded-md bg-surface-3 text-txt-primary border border-bdr focus:border-accent focus:outline-none"
+              class="w-14 px-1.5 py-1 text-sm text-right rounded-md bg-surface-3 text-txt-primary border border-bdr focus:border-accent focus:outline-none"
             />
             <span class="text-xs text-txt-muted w-12">{{ item.habit.unit }}</span>
           </div>
