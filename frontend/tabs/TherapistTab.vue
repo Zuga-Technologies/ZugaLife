@@ -5,6 +5,7 @@ import { useLifeShared } from '../composables/useLifeShared'
 import { moodIcons } from '../icons'
 import {
   AlertTriangle,
+  Lightbulb,
   MessageCircleHeart,
   ScrollText,
   Send,
@@ -86,11 +87,42 @@ const therapistMessagesRemaining = ref(20)
 const therapistMoodBefore = ref<string | null>(null)
 const therapistMoodAfter = ref<string | null>(null)
 const therapistRating = ref<number | null>(null)
-const therapistStarters = ref<{ text: string; source: string }[]>([])
-const showTherapistStarters = ref(false)
 const therapistShowEndMood = ref(false)
 
-const therapistRegeneratingGreeting = ref(false)
+// ── Tips on how to write to the wellness companion ──────────────
+// Static pool — rotates each session, user can cycle manually.
+const THERAPIST_TIPS = [
+  'Start with one specific situation from today, not a general feeling.',
+  'Be honest about the messy parts — vague input gets vague guidance.',
+  'Name the emotion if you can. "Frustrated" lands different from "fine."',
+  'Write like no one is listening, then send what is true.',
+  'Not sure where to start? Describe the last thing that bothered you.',
+  'Specifics help more than summaries — the time, the place, what was said.',
+  'Push back when something does not fit. This is not a quiz.',
+  'Notice what your body is doing. Tight shoulders? Holding breath?',
+  'If a thought keeps looping, write the loop out — it loses power on the page.',
+  'You can ask for a reframe, a question back, or just to be heard. Say which.',
+  'Bring the smallest version of the problem first. You can zoom out later.',
+  'Try writing in second person if first person feels too close.',
+  'If you are avoiding a topic, that is usually the one worth opening.',
+  'No warm-up needed — start in the middle.',
+  'Describe the situation as if to a friend who was not there.',
+  'If you keep saying "I should..." — what would happen if you did not?',
+  'Distinguish what happened from what it meant to you.',
+  'Ask what you are hoping to get out of this session before you start.',
+  'Where you are emotionally matters — morning lands different from late-night.',
+  'It is okay to not know what is wrong. Start with "something feels off."',
+]
+const currentTip = ref(THERAPIST_TIPS[Math.floor(Math.random() * THERAPIST_TIPS.length)])
+function cycleTip() {
+  // Pick a different tip than the current one
+  let next = currentTip.value
+  while (next === currentTip.value && THERAPIST_TIPS.length > 1) {
+    next = THERAPIST_TIPS[Math.floor(Math.random() * THERAPIST_TIPS.length)]
+  }
+  currentTip.value = next
+}
+
 
 const chatContainer = ref<HTMLElement | null>(null)
 
@@ -177,11 +209,8 @@ async function startTherapistSession() {
   therapistShowEndMood.value = false
   therapistSending.value = true
 
-  // Fetch conversation starters
-  try {
-    const res = await api.get<{ starters: { text: string; source: string }[] }>('/api/life/therapist/starters')
-    therapistStarters.value = res.starters
-  } catch { therapistStarters.value = [] }
+  // Pick a fresh tip for this session
+  cycleTip()
 
   // Reuse cached greeting if available, otherwise fetch (costs tokens)
   const cached = getCachedGreeting()
@@ -194,24 +223,6 @@ async function startTherapistSession() {
     therapistMessages.value.push({ role: 'assistant', content: therapistGreeting.value })
   }
   therapistSending.value = false
-}
-
-function useStarter(text: string) {
-  therapistInput.value = text
-  therapistStarters.value = []  // hide starters once one is selected
-}
-
-async function regenerateTherapistGreeting() {
-  if (therapistRegeneratingGreeting.value) return
-  therapistRegeneratingGreeting.value = true
-  try {
-    await fetchTherapistGreeting()
-    if (therapistGreeting.value && therapistMessages.value.length > 0 && therapistMessages.value[0].role === 'assistant') {
-      therapistMessages.value[0].content = therapistGreeting.value
-    }
-  } finally {
-    therapistRegeneratingGreeting.value = false
-  }
 }
 
 async function sendTherapistMessage() {
@@ -465,17 +476,6 @@ defineExpose({ therapistSessionActive, therapistMessages })
             >
               <p v-for="(para, j) in msg.content.split('\n\n')" :key="j" :class="j > 0 ? 'mt-2' : ''" v-html="renderMarkdown(para)">
               </p>
-              <!-- Regenerate greeting button — only on the first assistant message before user replies -->
-              <button
-                v-if="i === 0 && msg.role === 'assistant' && therapistMessages.length <= 1"
-                @click="regenerateTherapistGreeting()"
-                :disabled="therapistRegeneratingGreeting"
-                class="mt-2 flex items-center gap-1 text-xs text-txt-secondary hover:text-accent transition-colors disabled:opacity-40"
-                title="Regenerate greeting"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="therapistRegeneratingGreeting ? 'animate-spin' : ''"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
-                {{ therapistRegeneratingGreeting ? 'Regenerating...' : 'Regenerate' }}
-              </button>
             </div>
           </div>
 
@@ -491,25 +491,18 @@ defineExpose({ therapistSessionActive, therapistMessages })
           </div>
         </div>
 
-        <!-- Conversation starters (shown after greeting, before user types) -->
-        <div v-if="therapistStarters.length > 0 && therapistMessages.length <= 1" class="mb-3">
+        <!-- Writing tip (shown before user replies) -->
+        <div v-if="therapistMessages.length <= 1" class="mb-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-surface-2/40 border border-bdr/40">
+          <Lightbulb :size="14" class="text-accent/70 flex-shrink-0 mt-0.5" />
+          <p class="flex-1 text-xs text-txt-secondary italic leading-relaxed">{{ currentTip }}</p>
           <button
-            @click="showTherapistStarters = !showTherapistStarters"
-            class="flex items-center gap-1 text-xs text-txt-muted hover:text-txt-secondary transition-colors mb-1.5"
+            @click="cycleTip()"
+            class="flex-shrink-0 p-1 rounded text-txt-muted/60 hover:text-txt-secondary hover:bg-surface-3 transition-colors"
+            title="Show a different tip"
+            aria-label="Show a different tip"
           >
-            <svg :class="showTherapistStarters ? 'rotate-90' : ''" class="w-3 h-3 transition-transform duration-150" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-            Suggested topics
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
           </button>
-          <div v-if="showTherapistStarters" class="space-y-1.5 animate-fade-in">
-            <button
-              v-for="starter in therapistStarters"
-              :key="starter.text"
-              @click="useStarter(starter.text)"
-              class="w-full text-left px-3 py-2 rounded-lg bg-surface-2/50 border border-bdr/50 text-xs text-txt-secondary hover:text-txt-primary hover:border-accent/30 transition-all"
-            >
-              {{ starter.text }}
-            </button>
-          </div>
         </div>
 
         <!-- End-session mood + rating capture -->
