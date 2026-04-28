@@ -88,15 +88,18 @@ _m_schemas = _load_submodule("meditation", "schemas")
 _m_prompts = _load_submodule("meditation", "prompts")
 _m_routes = _load_submodule("meditation", "routes")
 
-# Load therapist submodule: models → schemas → safety → prompts → context → routes
+# Load therapist submodule: models → schemas → safety → prompts → context → routes → speech
 # SECURITY: therapist data flows ONE WAY — other modules read INTO therapist context,
 # but therapist notes NEVER flow out to other modules.
+# speech MUST load after schemas (speech.py reads TherapistSpeakRequest from sys.modules
+# at import time; schemas must already be registered as "zugalife.therapist.schemas").
 _t_models = _load_submodule("therapist", "models")
 _t_schemas = _load_submodule("therapist", "schemas")
 _t_safety = _load_submodule("therapist", "safety")
 _t_prompts = _load_submodule("therapist", "prompts")
 _t_context = _load_submodule("therapist", "context")
 _t_routes = _load_submodule("therapist", "routes")
+_t_speech = _load_submodule("therapist", "speech")
 
 # Load forecasting submodule: models → engine → schemas → context → narrative → routes
 _f_models = _load_submodule("forecasting", "models")
@@ -140,6 +143,7 @@ _combined_router.include_router(_h_routes.router)
 _combined_router.include_router(_g_routes.router)
 _combined_router.include_router(_m_routes.router)
 _combined_router.include_router(_t_routes.router)
+_combined_router.include_router(_t_speech.router)
 _combined_router.include_router(_s_routes.router)
 _combined_router.include_router(_f_routes.router)
 _combined_router.include_router(_gam_routes.router)
