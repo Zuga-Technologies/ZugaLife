@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { api, ApiError } from '@core/api/client'
-import { CircleDot, Pencil } from 'lucide-vue-next'
+import { CircleDot, Pencil, Trash2 } from 'lucide-vue-next'
 import { getIcon } from '../icons'
 import { useLifeShared } from '../composables/useLifeShared'
 import WoopGoalWizard from '../components/WoopGoalWizard.vue'
@@ -160,6 +160,10 @@ async function fetchAllHabits() {
 
 // ── Goal helpers ───────────────────────────────────────────────
 
+function findGoalById(id: number): Goal | undefined {
+  return activeGoals.value.find(g => g.id === id) || completedGoals.value.find(g => g.id === id)
+}
+
 function toggleGoalExpand(id: number) {
   if (expandedGoals.value.has(id)) {
     expandedGoals.value.delete(id)
@@ -256,11 +260,11 @@ async function linkHabit(goalId: number, habitId: number) {
 async function unlinkHabit(goalId: number, habitId: number) {
   goalError.value = null
   // Optimistic — drop the chip from the goal's linked-habit list.
-  const goal = goals.value.find(g => g.id === goalId)
-  let removedHabit: any = null
+  const goal = findGoalById(goalId)
+  let removedHabit: LinkedHabit | null = null
   let removedIdx = -1
   if (goal && goal.linked_habits) {
-    removedIdx = goal.linked_habits.findIndex(h => h.id === habitId)
+    removedIdx = goal.linked_habits.findIndex(h => h.habit_id === habitId)
     if (removedIdx >= 0) removedHabit = goal.linked_habits.splice(removedIdx, 1)[0]
   }
   try {
@@ -352,9 +356,10 @@ async function toggleGoalComplete(goal: Goal) {
 
 async function deleteGoal(goal: Goal) {
   goalError.value = null
-  // Optimistic — drop the goal from the list immediately.
-  const idx = goals.value.indexOf(goal)
-  if (idx >= 0) goals.value.splice(idx, 1)
+  // Optimistic — drop the goal from whichever list it lives in.
+  const list = activeGoals.value.indexOf(goal) >= 0 ? activeGoals : completedGoals
+  const idx = list.value.indexOf(goal)
+  if (idx >= 0) list.value.splice(idx, 1)
   goalSuccess.value = 'Goal deleted.'
   setTimeout(() => { goalSuccess.value = null }, 2000)
   try {
@@ -362,7 +367,7 @@ async function deleteGoal(goal: Goal) {
     void fetchGoals()
     emit('success')
   } catch (e) {
-    if (idx >= 0) goals.value.splice(idx, 0, goal)
+    if (idx >= 0) list.value.splice(idx, 0, goal)
     if (e instanceof ApiError) {
       goalError.value = (e.body as Record<string, string>).detail ?? `Error (${e.status})`
     } else {
@@ -393,7 +398,7 @@ async function addMilestone(goalId: number) {
 async function toggleMilestone(goalId: number, milestone: GoalMilestone) {
   goalError.value = null
   // Optimistic — flip the milestone's state and progress count immediately.
-  const goal = goals.value.find(g => g.id === goalId)
+  const goal = findGoalById(goalId)
   const wasCompleted = milestone.is_completed
   milestone.is_completed = !wasCompleted
   if (goal) {
@@ -901,9 +906,11 @@ onMounted(async () => {
             </button>
             <button
               @click="deleteGoal(goal)"
-              class="text-xs text-txt-muted hover:text-red-400 transition-colors ml-auto"
+              class="ml-auto p-1.5 rounded-lg text-txt-muted/60 hover:text-red-400 hover:bg-red-400/10 transition-all"
+              title="Delete goal"
+              aria-label="Delete goal"
             >
-              Delete Goal
+              <Trash2 :size="14" />
             </button>
           </div>
 
