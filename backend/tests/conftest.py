@@ -73,6 +73,7 @@ sys.modules["core.ai.providers"] = _ai_providers_mod
 # works inside speech.py even though `core` package was already bound.
 
 import importlib as _importlib
+import importlib.util as _ilu
 
 if "core.gateway" not in sys.modules:
     _core_mod = sys.modules.get("core")
@@ -85,10 +86,9 @@ if "core.gateway" not in sys.modules:
     sys.modules["core.gateway"] = _gw_pkg
 
 if "core.gateway.providers" not in sys.modules:
-    import importlib.util as _ilu2
     _gw_providers_path = Path(_ZUGALIFE_BACKEND).parent / "core" / "gateway" / "providers.py"
-    _gw_spec = _ilu2.spec_from_file_location("core.gateway.providers", _gw_providers_path)
-    _gw_mod = _ilu2.module_from_spec(_gw_spec)
+    _gw_spec = _ilu.spec_from_file_location("core.gateway.providers", _gw_providers_path)
+    _gw_mod = _ilu.module_from_spec(_gw_spec)
     sys.modules["core.gateway.providers"] = _gw_mod
     _gw_spec.loader.exec_module(_gw_mod)
     sys.modules["core.gateway"].providers = _gw_mod
@@ -96,8 +96,6 @@ if "core.gateway.providers" not in sys.modules:
 # ── Pre-register zugalife.therapist.schemas ──────────────────────────────────
 # speech.py reads TherapistSpeakRequest from sys.modules["zugalife.therapist.schemas"]
 # at import time. We pre-load the real schemas module so the lookup succeeds.
-
-import importlib.util as _ilu
 
 _schemas_path = Path(_BACKEND_DIR) / "therapist" / "schemas.py"
 _schemas_spec = _ilu.spec_from_file_location("zugalife.therapist.schemas", _schemas_path)
