@@ -757,9 +757,19 @@ onMounted(async () => {
           </div>
           <template v-if="dashboardData.therapist.has_data">
             <p class="text-sm text-txt-secondary mb-2 line-clamp-1">{{ dashboardData.therapist.last_themes }}</p>
+            <!-- Mood snapshot now renders as a full-width clamped block instead
+                 of an inline pill — the field grew from a short label into
+                 multi-paragraph narrative summaries, which broke the metadata
+                 flex row (squished session count + timeAgo to a vertical
+                 stack on the right). -->
+            <p
+              v-if="dashboardData.therapist.last_mood"
+              class="text-xs text-teal-400/90 leading-relaxed mb-3 px-3 py-2 rounded-lg bg-teal-500/10 border border-teal-500/20 line-clamp-3"
+            >
+              {{ dashboardData.therapist.last_mood }}
+            </p>
             <div class="flex items-center gap-2 text-xs text-txt-muted mt-auto">
-              <span v-if="dashboardData.therapist.last_mood" class="px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400">{{ dashboardData.therapist.last_mood }}</span>
-              <span>{{ dashboardData.therapist.total_sessions }} sessions</span>
+              <span>{{ dashboardData.therapist.total_sessions }} {{ dashboardData.therapist.total_sessions === 1 ? 'session' : 'sessions' }}</span>
               <span v-if="dashboardData.therapist.last_date">· {{ timeAgo(dashboardData.therapist.last_date) }}</span>
             </div>
           </template>
