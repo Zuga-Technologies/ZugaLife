@@ -235,6 +235,13 @@ function getCachedGreeting(): string | null {
       localStorage.removeItem(GREETING_CACHE_KEY)
       return null
     }
+    // An empty cached value is a poison pill — happened to a real user when
+    // a previous fetch failed and the empty greeting got cached anyway. Treat
+    // empty/whitespace as a miss so we re-fetch.
+    if (!cached.greeting || !cached.greeting.trim()) {
+      localStorage.removeItem(GREETING_CACHE_KEY)
+      return null
+    }
     return cached.greeting
   } catch {
     return null
@@ -320,6 +327,14 @@ async function startTherapistSession() {
   }
   if (therapistGreeting.value) {
     therapistMessages.value.push({ role: 'assistant', content: therapistGreeting.value })
+    // Speak the greeting too when the avatar is on — without this the
+    // session opened with the avatar visible but silent until the user
+    // sent their first message, which felt like the bot "wasn't talking."
+    // The greeting is the bot's first turn, so it should get the same
+    // voice treatment as every subsequent reply.
+    if (avatarEnabled.value) {
+      avatarSpeak(therapistGreeting.value).catch(() => { /* silent — text already showing */ })
+    }
   }
   therapistSending.value = false
 }
