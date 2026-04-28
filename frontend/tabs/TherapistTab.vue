@@ -685,6 +685,32 @@ defineExpose({ therapistSessionActive, therapistMessages })
               {{ therapistEndingSession ? 'Saving...' : 'End Session' }}
             </button>
           </div>
+          <!-- Recording status banner — sits above the input so the user
+               can't miss the "tap mic again to send" affordance. The mic
+               button alone wasn't a strong enough signal: users were
+               tapping once and waiting, expecting the bot to pick up. -->
+          <div
+            v-if="voiceRecording"
+            class="flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 animate-fade-in"
+          >
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+              <span class="text-xs text-red-300">Recording — tap the mic again to stop &amp; transcribe</span>
+            </div>
+            <button
+              @click="voiceCancel()"
+              class="text-xs text-txt-muted hover:text-txt-primary transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+          <div
+            v-else-if="transcribing"
+            class="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/30 animate-fade-in"
+          >
+            <Loader2 :size="14" class="text-accent animate-spin" />
+            <span class="text-xs text-accent">Transcribing your voice...</span>
+          </div>
           <div class="flex gap-2">
             <textarea
               v-model="therapistInput"

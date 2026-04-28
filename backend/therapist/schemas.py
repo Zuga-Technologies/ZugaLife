@@ -44,9 +44,16 @@ class TherapistChatResponse(BaseModel):
 
 
 class TherapistSpeakRequest(BaseModel):
-    """Request to synthesize an assistant utterance to audio."""
+    """Request to synthesize an assistant utterance to audio.
+
+    `voice` is a Cartesia voice UUID (browse at https://play.cartesia.ai/).
+    When empty (the default), the BE falls through to settings.cartesia_voice_id
+    and then to CARTESIA_DEFAULT_VOICE — the named friendly key "calm-female"
+    used to be passed through here but Cartesia rejected it because it expects
+    a real UUID, not a label.
+    """
     text: str = Field(..., min_length=1, max_length=2000, description="Assistant text to speak")
-    voice: str = Field(default="calm-female", description="Cartesia voice key (see CARTESIA_VOICE_MAP)")
+    voice: str = Field(default="", description="Cartesia voice UUID. Empty = use server default.")
 
 
 class TherapistTranscribeResponse(BaseModel):
