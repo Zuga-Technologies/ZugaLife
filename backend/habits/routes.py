@@ -385,9 +385,16 @@ async def log_habit(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Log or update a habit for a date. Upserts — same habit+date updates the existing log."""
-    log_date = body.log_date or date.today()
-
     async with get_session() as session:
+        if body.log_date:
+            log_date = body.log_date
+        else:
+            # User-tz today, not server UTC. Otherwise a habit logged late
+            # in the user's evening lands on tomorrow's UTC date and the
+            # dashboard (which queries in user-tz) misses it.
+            _helpers = sys.modules["zugalife.settings_helpers"]
+            log_date = await _helpers.get_user_today(session, user.id)
+
         # Verify habit exists and belongs to user
         habit_result = await session.execute(
             select(HabitDefinition).where(HabitDefinition.id == body.habit_id)
@@ -523,11 +530,13 @@ async def reset_today(
 ):
     """Delete all habit logs for today — uncheck everything."""
     async with get_session() as session:
+        _helpers = sys.modules["zugalife.settings_helpers"]
+        today = await _helpers.get_user_today(session, user.id)
         result = await session.execute(
             delete(HabitLog)
             .where(
                 HabitLog.user_id == user.id,
-                HabitLog.log_date == date.today(),
+                HabitLog.log_date == today,
             )
             .returning(HabitLog.id)
         )
@@ -630,9 +639,13 @@ async def get_checkin(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Get today's (or a specific date's) check-in view — all habits with their log status."""
-    target_date = check_date or date.today()
-
     async with get_session() as session:
+        if check_date:
+            target_date = check_date
+        else:
+            _helpers = sys.modules["zugalife.settings_helpers"]
+            target_date = await _helpers.get_user_today(session, user.id)
+
         await _ensure_presets(session, user.id)
 
         # Return ALL habits (active + paused) so the UI can render paused ones
