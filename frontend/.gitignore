@@ -1,0 +1,14 @@
+# Vite
+dist/
+.vite/
+
+# Node
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Avatar binaries
+public/avatars/*.vrm
