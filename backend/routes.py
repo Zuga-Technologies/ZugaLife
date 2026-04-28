@@ -203,38 +203,60 @@ async def get_streak(
 async def _calculate_streak(session, user_id: str) -> int:
     """Count consecutive days with at least one mood entry, ending today.
 
-    Uses the user's configured timezone so streaks reset at the
-    user's local midnight — not UTC midnight.
+    Uses the user's configured timezone so streaks reset at the user's
+    local midnight — not UTC midnight. Earlier versions delegated date
+    extraction to `func.date(created_at)` which returns the UTC date in
+    SQLite/Postgres; that broke evening logs (8pm EST = 1am UTC next day),
+    causing streaks to silently undercount or stick at small numbers
+    regardless of how many consecutive days the user actually logged.
+
+    The fix: pull every timestamp, convert each to the user's local date
+    in Python, then count consecutive days from today backwards. Mood
+    entries are sparse (≤ a few per day per user) so the read isn't
+    expensive.
     """
-    _helpers = sys.modules["zugalife.settings_helpers"]
-    today = await _helpers.get_user_today(session, user_id)
+    import zoneinfo
+    from zoneinfo import ZoneInfo
+
+    LifeUserSettings = sys.modules["zugalife.settings_models"].LifeUserSettings
+
+    tz_result = await session.execute(
+        select(LifeUserSettings.timezone).where(LifeUserSettings.user_id == user_id)
+    )
+    tz_name = tz_result.scalar_one_or_none() or "America/New_York"
+    try:
+        user_tz = ZoneInfo(tz_name)
+    except (KeyError, zoneinfo.ZoneInfoNotFoundError):
+        user_tz = ZoneInfo("America/New_York")
+
+    today = datetime.now(user_tz).date()
 
     result = await session.execute(
-        select(func.date(MoodEntry.created_at))
+        select(MoodEntry.created_at)
         .where(MoodEntry.user_id == user_id)
-        .group_by(func.date(MoodEntry.created_at))
-        .order_by(desc(func.date(MoodEntry.created_at)))
+        .order_by(desc(MoodEntry.created_at))
     )
-    log_dates = [row[0] for row in result.all()]
-
-    if not log_dates:
+    timestamps = [row[0] for row in result.all()]
+    if not timestamps:
         return 0
 
-    # Parse if SQLite returned strings
-    def _to_date(d):
-        return date.fromisoformat(d) if isinstance(d, str) else d
+    # Stored timestamps may be naive (SQLite strips tzinfo). Treat naive as
+    # UTC — that's what the model writes.
+    local_dates = set()
+    for ts in timestamps:
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        local_dates.add(ts.astimezone(user_tz).date())
 
-    first = _to_date(log_dates[0])
+    sorted_dates = sorted(local_dates, reverse=True)
 
     # Streak must include today (strict — no grace period)
-    if first != today:
+    if sorted_dates[0] != today:
         return 0
 
     streak = 1
-    for i in range(1, len(log_dates)):
-        current = _to_date(log_dates[i])
-        previous = _to_date(log_dates[i - 1])
-        if previous - current == timedelta(days=1):
+    for i in range(1, len(sorted_dates)):
+        if sorted_dates[i - 1] - sorted_dates[i] == timedelta(days=1):
             streak += 1
         else:
             break
