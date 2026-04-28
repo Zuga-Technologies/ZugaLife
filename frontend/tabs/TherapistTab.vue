@@ -458,8 +458,13 @@ defineExpose({ therapistSessionActive, therapistMessages })
         </div>
       </div>
 
-      <!-- Active session: chat -->
-      <div v-else class="flex flex-col" style="height: calc(100vh - 300px); min-height: 400px;">
+      <!-- Active session: chat. Fit to visible viewport so the input is
+           anchored at the bottom and only the messages area scrolls.
+           - 100dvh (dynamic) tracks mobile URL bar + soft keyboard so the
+             input doesn't fall below the fold on iOS Safari.
+           - 220px ≈ TopNav + page top padding + back-nav row + bottom
+             padding (rough but stable enough for both mobile and desktop). -->
+      <div v-else class="flex flex-col h-[calc(100dvh-220px)] min-h-[320px] max-h-[calc(100dvh-220px)]">
         <!-- Messages -->
         <div class="flex-1 overflow-y-auto space-y-4 mb-4 pr-1" ref="chatContainer">
           <div
