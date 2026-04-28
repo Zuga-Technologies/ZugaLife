@@ -262,12 +262,10 @@ function exportJournal() {
         </div>
       </div>
 
-      <div class="flex items-center justify-between gap-4 py-3 px-4 rounded-lg bg-surface-2/50">
-        <label class="flex items-center gap-3">
-          <span class="text-sm text-txt-secondary">Enable wellness avatar</span>
-        </label>
+      <label class="flex items-center justify-between gap-4 py-3 px-4 rounded-lg bg-surface-2/50 cursor-pointer">
+        <span class="text-sm text-txt-secondary">Enable wellness avatar</span>
         <input type="checkbox" v-model="avatarEnabled" class="accent-accent" />
-      </div>
+      </label>
     </div>
 
     <!-- ── Section 3: Data Management ──────────────────────────────────────── -->
