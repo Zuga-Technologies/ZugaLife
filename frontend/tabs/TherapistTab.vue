@@ -13,6 +13,8 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-vue-next'
+import WellnessAvatar from '../components/WellnessAvatar.vue'
+import { useAvatarSpeech } from '../composables/useAvatarSpeech'
 
 // ── Shared composable ──────────────────────────────────────────
 const {
@@ -134,6 +136,21 @@ function cycleTip() {
 
 const chatContainer = ref<HTMLElement | null>(null)
 
+// ── Avatar + speech ───────────────────────────────────────────
+const avatarRef = ref<InstanceType<typeof WellnessAvatar> | null>(null)
+const avatarEnabled = ref(localStorage.getItem('zugalife_avatar_enabled') !== '0')
+const voiceEnabled = ref(localStorage.getItem('zugalife_voice_enabled') !== '0')
+
+const { speak: avatarSpeak, stop: avatarStop, speaking: avatarSpeaking } = useAvatarSpeech((v) => {
+  ;(avatarRef.value as any)?.setMouthOpen(v)
+})
+
+function toggleVoice() {
+  voiceEnabled.value = !voiceEnabled.value
+  localStorage.setItem('zugalife_voice_enabled', voiceEnabled.value ? '1' : '0')
+  if (!voiceEnabled.value) avatarStop()
+}
+
 // ── Greeting cache ─────────────────────────────────────────────
 const GREETING_CACHE_KEY = 'zugalife_therapist_greeting'
 
@@ -252,6 +269,9 @@ async function sendTherapistMessage() {
       { messages: apiMessages },
     )
     therapistMessages.value.push({ role: 'assistant', content: res.content })
+    if (voiceEnabled.value && avatarEnabled.value) {
+      avatarSpeak(res.content).catch(() => { /* silent — chat still works */ })
+    }
     therapistMessagesRemaining.value = res.session_messages_remaining
     notifyTokenSpend()
 
@@ -297,6 +317,7 @@ async function endTherapistSession() {
 
   // Capture messages before clearing UI — user doesn't wait for the save
   const apiMessages = therapistMessages.value.map(m => ({ role: m.role, content: m.content }))
+  avatarStop()
   therapistSessionActive.value = false
   therapistMessages.value = []
   therapistEndingSession.value = false
@@ -485,6 +506,20 @@ defineExpose({ therapistSessionActive, therapistMessages })
            - 220px ≈ TopNav + page top padding + back-nav row + bottom
              padding (rough but stable enough for both mobile and desktop). -->
       <div v-else class="flex flex-col h-[calc(100dvh-220px)] min-h-[320px] max-h-[calc(100dvh-220px)]">
+        <!-- Avatar -->
+        <div v-if="avatarEnabled" class="mb-3 rounded-xl overflow-hidden bg-surface-2/40 border border-bdr/40">
+          <WellnessAvatar ref="avatarRef" :height="280" />
+          <div class="flex items-center justify-between px-3 py-1.5 text-xs text-txt-muted border-t border-bdr/40">
+            <span>{{ avatarSpeaking ? 'Speaking…' : 'Listening' }}</span>
+            <button
+              @click="toggleVoice()"
+              class="px-2 py-0.5 rounded hover:bg-surface-3 transition-colors"
+              :title="voiceEnabled ? 'Mute voice' : 'Unmute voice'"
+            >
+              {{ voiceEnabled ? 'Mute' : 'Unmute' }}
+            </button>
+          </div>
+        </div>
         <!-- Messages -->
         <div class="flex-1 overflow-y-auto space-y-4 mb-4 pr-1" ref="chatContainer">
           <div
