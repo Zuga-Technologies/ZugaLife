@@ -22,6 +22,16 @@ watch(avatarEnabled, (v) => {
   localStorage.setItem('zugalife_avatar_enabled', v ? '1' : '0')
 })
 
+// ─── Voice input (Whisper STT) ──────────────────────────────────────────────
+// Independent of avatar / TTS — works in text-mode and avatar-mode alike.
+// Cost is metered through the BE's record_spend so it shows in the same
+// ZugaTokens transaction log as chat and TTS.
+const voiceInputEnabled = ref(localStorage.getItem('zugalife_voice_input_enabled') !== '0')
+
+watch(voiceInputEnabled, (v) => {
+  localStorage.setItem('zugalife_voice_input_enabled', v ? '1' : '0')
+})
+
 async function fetchSettings() {
   try {
     const data = await api.get<{ med_length: string; med_voice: string; med_ambience: string }>(
@@ -265,6 +275,26 @@ function exportJournal() {
       <label class="flex items-center justify-between gap-4 py-3 px-4 rounded-lg bg-surface-2/50 cursor-pointer">
         <span class="text-sm text-txt-secondary">Enable wellness avatar</span>
         <input type="checkbox" v-model="avatarEnabled" class="accent-accent" />
+      </label>
+    </div>
+
+    <!-- ── Section 2b: Voice Input ─────────────────────────────────────────── -->
+    <!-- Separate from avatar/TTS. Works in text-mode and avatar-mode alike.
+         Costs ZugaTokens per recording (Whisper-1: ~$0.006/min, billed
+         through the same ledger as chat). -->
+    <div class="bg-surface-1 rounded-xl border border-bdr p-6">
+      <div class="flex items-start justify-between mb-5">
+        <div>
+          <h2 class="text-base font-semibold text-txt-primary">Voice Input</h2>
+          <p class="text-sm text-txt-muted mt-0.5">
+            Speak instead of typing — transcribed via Whisper. Each recording uses ZugaTokens.
+          </p>
+        </div>
+      </div>
+
+      <label class="flex items-center justify-between gap-4 py-3 px-4 rounded-lg bg-surface-2/50 cursor-pointer">
+        <span class="text-sm text-txt-secondary">Enable voice input (mic button in chat)</span>
+        <input type="checkbox" v-model="voiceInputEnabled" class="accent-accent" />
       </label>
     </div>
 

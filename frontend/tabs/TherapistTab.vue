@@ -8,6 +8,8 @@ import {
   Lightbulb,
   Loader2,
   MessageCircleHeart,
+  Mic,
+  MicOff,
   ScrollText,
   Send,
   Trash2,
@@ -15,6 +17,7 @@ import {
 } from 'lucide-vue-next'
 import WellnessAvatar from '../components/WellnessAvatar.vue'
 import { useAvatarSpeech } from '../composables/useAvatarSpeech'
+import { useVoiceInput, transcribeBlob } from '../composables/useVoiceInput'
 
 // ── Shared composable ──────────────────────────────────────────
 const {
@@ -150,6 +153,74 @@ function toggleVoice() {
   localStorage.setItem('zugalife_voice_enabled', voiceEnabled.value ? '1' : '0')
   if (!voiceEnabled.value) avatarStop()
 }
+
+// ── Voice input (Whisper STT) ─────────────────────────────────
+// Available in BOTH text-mode and avatar-mode sessions; toggled separately
+// from voice OUTPUT (avatar speech). Cost is metered in ZugaTokens via the
+// /api/life/therapist/transcribe BE — same ledger as chat + TTS.
+const voiceInputEnabled = ref(localStorage.getItem('zugalife_voice_input_enabled') !== '0')
+const { recording: voiceRecording, lastError: voiceInputError, isSupported: voiceInputSupported, start: voiceStart, stop: voiceStop, cancel: voiceCancel } = useVoiceInput()
+const transcribing = ref(false)
+
+async function startVoiceCapture() {
+  if (transcribing.value || voiceRecording.value) return
+  therapistError.value = null
+  const ok = await voiceStart()
+  if (!ok) {
+    if (voiceInputError.value === 'NotAllowedError') {
+      therapistError.value = 'Microphone permission denied. Allow mic access in your browser to use voice input.'
+    } else if (voiceInputError.value === 'unsupported') {
+      therapistError.value = 'Voice input not supported on this browser. Type your message instead.'
+    } else if (voiceInputError.value) {
+      therapistError.value = `Mic error: ${voiceInputError.value}. Type your message instead.`
+    }
+  }
+}
+
+async function stopVoiceCaptureAndTranscribe() {
+  if (!voiceRecording.value) return
+  transcribing.value = true
+  try {
+    const blob = await voiceStop()
+    if (!blob) {
+      therapistError.value = 'No audio captured. Try again.'
+      return
+    }
+    const { result, error } = await transcribeBlob(blob)
+    if (error === 'no-credits') {
+      therapistError.value = handleInsufficientTokens('Voice Input')
+    } else if (error === 'too-large') {
+      therapistError.value = 'Recording too long. Keep it under ~10 minutes.'
+    } else if (error === 'provider-down') {
+      therapistError.value = handleServiceError('Transcription Unavailable', 'The voice service is temporarily down. Type your message instead.')
+    } else if (error) {
+      therapistError.value = handleServiceError('Transcription Failed', `Could not transcribe (${error}). Type your message instead.`)
+    } else if (result) {
+      // Append (don't overwrite) so users can mix typed + spoken without losing
+      // text they were already drafting.
+      therapistInput.value = therapistInput.value
+        ? `${therapistInput.value} ${result.text}`.trim()
+        : result.text
+      notifyTokenSpend()
+    }
+  } finally {
+    transcribing.value = false
+  }
+}
+
+// If the user disables voice input mid-recording (toggled from settings tab
+// while a session is open), abort the in-flight recording cleanly.
+watch(voiceInputEnabled, (v) => {
+  if (!v && voiceRecording.value) voiceCancel()
+})
+
+// Keep voiceInputEnabled in sync with the settings panel — the panel writes
+// localStorage; this picks up the change when the user comes back to chat.
+window.addEventListener('storage', (e) => {
+  if (e.key === 'zugalife_voice_input_enabled') {
+    voiceInputEnabled.value = e.newValue !== '0'
+  }
+})
 
 // ── Greeting cache ─────────────────────────────────────────────
 const GREETING_CACHE_KEY = 'zugalife_therapist_greeting'
@@ -623,14 +694,34 @@ defineExpose({ therapistSessionActive, therapistMessages })
             <textarea
               v-model="therapistInput"
               @keydown.enter.exact.prevent="sendTherapistMessage()"
-              placeholder="What's on your mind..."
+              :placeholder="voiceRecording ? 'Recording…' : (transcribing ? 'Transcribing…' : 'What\'s on your mind...')"
               rows="2"
               class="flex-1 bg-surface-2 border border-bdr rounded-xl px-4 py-3 text-sm text-txt-primary placeholder-txt-muted resize-none focus:outline-none focus:ring-1 focus:ring-accent/50"
-              :disabled="therapistSending || therapistMessagesRemaining <= 0"
+              :disabled="therapistSending || therapistMessagesRemaining <= 0 || transcribing"
             ></textarea>
+            <!-- Voice input mic — visible only when the setting is on AND the
+                 browser supports MediaRecorder. Tap to start, tap to stop +
+                 transcribe. Spinner replaces the icon while Whisper runs. -->
+            <button
+              v-if="voiceInputEnabled && voiceInputSupported"
+              @click="voiceRecording ? stopVoiceCaptureAndTranscribe() : startVoiceCapture()"
+              :disabled="therapistSending || therapistMessagesRemaining <= 0 || transcribing"
+              :class="[
+                'self-end px-4 py-3 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed',
+                voiceRecording
+                  ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
+                  : 'bg-surface-3 text-txt-secondary hover:bg-surface-4 border border-bdr',
+              ]"
+              :title="voiceRecording ? 'Stop and transcribe' : 'Hold-free voice input — tap to start, tap to send'"
+              :aria-label="voiceRecording ? 'Stop recording' : 'Start voice input'"
+            >
+              <Loader2 v-if="transcribing" :size="18" class="animate-spin" />
+              <MicOff v-else-if="voiceRecording" :size="18" />
+              <Mic v-else :size="18" />
+            </button>
             <button
               @click="sendTherapistMessage()"
-              :disabled="!therapistInput.trim() || therapistSending || therapistMessagesRemaining <= 0"
+              :disabled="!therapistInput.trim() || therapistSending || therapistMessagesRemaining <= 0 || transcribing"
               class="self-end px-4 py-3 rounded-xl bg-accent text-white hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Send :size="18" />

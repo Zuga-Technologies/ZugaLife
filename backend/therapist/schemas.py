@@ -49,6 +49,13 @@ class TherapistSpeakRequest(BaseModel):
     voice: str = Field(default="calm-female", description="Cartesia voice key (see CARTESIA_VOICE_MAP)")
 
 
+class TherapistTranscribeResponse(BaseModel):
+    """Whisper STT result. Audio is sent as multipart, not in this schema."""
+    text: str = Field(..., description="Transcribed text")
+    duration_sec: float = Field(..., description="Audio duration in seconds (Whisper-reported)")
+    cost_usd: float = Field(..., description="USD cost of the transcription call")
+
+
 class TherapistSpeakResponse(BaseModel):
     """Audio + cost metadata. Audio is delivered as the response body (MP3);
     this schema is only used for the OpenAPI doc and 4xx error envelopes."""
