@@ -18,6 +18,7 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
   const lastError = ref<string | null>(null)
   let audio: HTMLAudioElement | null = null
   let ctx: AudioContext | null = null
+  let source: MediaElementAudioSourceNode | null = null
   let analyser: AnalyserNode | null = null
   let rafId = 0
   let currentObjectUrl: string | null = null
@@ -27,6 +28,10 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
     audio?.pause()
     if (audio) audio.src = ''
     audio = null
+    source?.disconnect()
+    source = null
+    analyser?.disconnect()
+    analyser = null
     if (currentObjectUrl) {
       URL.revokeObjectURL(currentObjectUrl)
       currentObjectUrl = null
@@ -78,7 +83,7 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
     audio.crossOrigin = 'anonymous'
 
     const audioCtx = ensureCtx()
-    const source = audioCtx.createMediaElementSource(audio)
+    source = audioCtx.createMediaElementSource(audio)
     analyser = audioCtx.createAnalyser()
     analyser.fftSize = 512
     source.connect(analyser)

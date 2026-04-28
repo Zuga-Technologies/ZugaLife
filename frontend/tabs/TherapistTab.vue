@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, onMounted } from 'vue'
+import { ref, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { api, ApiError } from '@core/api/client'
 import { useLifeShared } from '../composables/useLifeShared'
 import { moodIcons } from '../icons'
@@ -142,7 +142,7 @@ const avatarEnabled = ref(localStorage.getItem('zugalife_avatar_enabled') !== '0
 const voiceEnabled = ref(localStorage.getItem('zugalife_voice_enabled') !== '0')
 
 const { speak: avatarSpeak, stop: avatarStop, speaking: avatarSpeaking } = useAvatarSpeech((v) => {
-  ;(avatarRef.value as any)?.setMouthOpen(v)
+  avatarRef.value?.setMouthOpen(v)
 })
 
 function toggleVoice() {
@@ -414,6 +414,10 @@ onMounted(async () => {
     fetchTherapistNotes(),
   ])
   loadingTherapist.value = false
+})
+
+onBeforeUnmount(() => {
+  avatarStop()
 })
 
 // ── Expose for parent guard ───────────────────────────────────
