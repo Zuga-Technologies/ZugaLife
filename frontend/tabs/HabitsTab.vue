@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { api, ApiError } from '@core/api/client'
 import { habitIcons, habitIconPicker, habitIconCategories, getIcon } from '../icons'
 import { ChevronDown, ChevronUp, CircleDot, Trash2 } from 'lucide-vue-next'
@@ -126,9 +126,14 @@ const pausedCount = computed(() => {
 
 async function fetchHabitCheckin() {
   try {
+    const prevDate = habitCheckin.value?.date
     habitCheckin.value = await api.get<DailyCheckInResponse>('/api/life/habits/checkin')
-    // Init amount inputs from existing logs
     if (habitCheckin.value) {
+      // Day rolled over server-side — wipe stale per-habit amount inputs so
+      // yesterday's values don't seed today's check-in row.
+      if (prevDate && prevDate !== habitCheckin.value.date) {
+        amountInputs.value = {}
+      }
       for (const item of habitCheckin.value.habits) {
         if (item.amount !== null) {
           amountInputs.value[item.habit.id] = String(item.amount)
@@ -565,10 +570,28 @@ const habitUnits = [
   { value: 'count', label: '(general)' },
 ]
 
+// Refetch when the tab/window regains visibility. Without this, leaving the
+// app open across local midnight (or backgrounding a PWA) leaves yesterday's
+// check-in state on screen — the backend's user-tz "today" has rolled but
+// the Vue ref still holds the old payload. visibilitychange fires for tab
+// switches and PWA foreground; focus catches desktop window-focus changes.
+function handleVisible() {
+  if (document.visibilityState !== 'visible') return
+  void fetchHabitCheckin()
+  void fetchHabitStreaks()
+}
+
 onMounted(async () => {
   loadingHabits.value = true
   await Promise.all([fetchHabitCheckin(), fetchHabitStreaks(), fetchAllHabits()])
   loadingHabits.value = false
+  document.addEventListener('visibilitychange', handleVisible)
+  window.addEventListener('focus', handleVisible)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleVisible)
+  window.removeEventListener('focus', handleVisible)
 })
 </script>
 
