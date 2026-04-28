@@ -49,7 +49,7 @@ async def therapist_transcribe(
     we 402 before calling Whisper. The actual recorded spend uses Whisper's
     reported duration so users only pay for real audio length.
     """
-    from core.config import settings
+    from app.config import settings
     from core.credits.client import dollars_to_tokens, get_credit_client
 
     if not settings.openai_api_key:
