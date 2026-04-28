@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { api, getToken } from '@core/api/client'
 import {
   Smile, Target, Trophy, BookOpen, Headphones,
@@ -13,6 +13,14 @@ const medVoice = ref<string>('nova')
 const medAmbience = ref<string>('rain')
 const savedIndicator = ref(false)
 let savedTimer: ReturnType<typeof setTimeout> | null = null
+
+// ─── Wellness avatar ────────────────────────────────────────────────────────
+
+const avatarEnabled = ref(localStorage.getItem('zugalife_avatar_enabled') !== '0')
+
+watch(avatarEnabled, (v) => {
+  localStorage.setItem('zugalife_avatar_enabled', v ? '1' : '0')
+})
 
 async function fetchSettings() {
   try {
@@ -245,7 +253,24 @@ function exportJournal() {
       </div>
     </div>
 
-    <!-- ── Section 2: Data Management ──────────────────────────────────────── -->
+    <!-- ── Section 2: Wellness Avatar ──────────────────────────────────────── -->
+    <div class="bg-surface-1 rounded-xl border border-bdr p-6">
+      <div class="flex items-start justify-between mb-5">
+        <div>
+          <h2 class="text-base font-semibold text-txt-primary">Wellness Avatar</h2>
+          <p class="text-sm text-txt-muted mt-0.5">3D character + voice in the wellness chat</p>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-4 py-3 px-4 rounded-lg bg-surface-2/50">
+        <label class="flex items-center gap-3">
+          <span class="text-sm text-txt-secondary">Enable wellness avatar</span>
+        </label>
+        <input type="checkbox" v-model="avatarEnabled" class="accent-accent" />
+      </div>
+    </div>
+
+    <!-- ── Section 3: Data Management ──────────────────────────────────────── -->
     <div class="bg-surface-1 rounded-xl border border-bdr p-6">
       <div class="mb-5">
         <h2 class="text-base font-semibold text-txt-primary">Data Management</h2>
@@ -307,7 +332,7 @@ function exportJournal() {
       </div>
     </div>
 
-    <!-- ── Section 3: Export ────────────────────────────────────────────────── -->
+    <!-- ── Section 4: Export ────────────────────────────────────────────────── -->
     <div class="bg-surface-1 rounded-xl border border-bdr p-6">
       <div class="mb-5">
         <h2 class="text-base font-semibold text-txt-primary">Export</h2>
