@@ -59,6 +59,23 @@ onMounted(async () => {
     vrm = gltf.userData.vrm as VRM
     VRMUtils.removeUnnecessaryVertices(gltf.scene)
     VRMUtils.removeUnnecessaryJoints(gltf.scene)
+    // VRM 1.0 spec: model "front" is -Z. Camera sits at +Z, so without
+    // this rotation we'd see the back of the head. 180° on Y flips the
+    // model to face the camera.
+    vrm.scene.rotation.y = Math.PI
+    // Break out of T-pose into a relaxed idle stance. VRM rest pose has
+    // arms extended outward; rotating the upper-arm Z axis brings them
+    // down to the sides. Sign is opposite per side because of the
+    // mirrored arm chain.
+    const leftUpperArm = vrm.humanoid?.getNormalizedBoneNode('leftUpperArm')
+    const rightUpperArm = vrm.humanoid?.getNormalizedBoneNode('rightUpperArm')
+    if (leftUpperArm) leftUpperArm.rotation.z = 1.3   // ~75° down
+    if (rightUpperArm) rightUpperArm.rotation.z = -1.3
+    // Slight forearm bend for a natural standing pose
+    const leftLowerArm = vrm.humanoid?.getNormalizedBoneNode('leftLowerArm')
+    const rightLowerArm = vrm.humanoid?.getNormalizedBoneNode('rightLowerArm')
+    if (leftLowerArm) leftLowerArm.rotation.y = 0.2
+    if (rightLowerArm) rightLowerArm.rotation.y = -0.2
     scene.add(vrm.scene)
     status.value = 'ready'
   } catch (e) {
