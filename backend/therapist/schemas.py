@@ -43,6 +43,20 @@ class TherapistChatResponse(BaseModel):
     crisis_detected: bool = False
 
 
+class TherapistSpeakRequest(BaseModel):
+    """Request to synthesize an assistant utterance to audio."""
+    text: str = Field(..., min_length=1, max_length=2000, description="Assistant text to speak")
+    voice: str = Field(default="calm-female", description="Cartesia voice key (see CARTESIA_VOICE_MAP)")
+
+
+class TherapistSpeakResponse(BaseModel):
+    """Audio + cost metadata. Audio is delivered as the response body (MP3);
+    this schema is only used for the OpenAPI doc and 4xx error envelopes."""
+    cost: float = Field(..., description="USD cost of this TTS call")
+    duration_ms: int = Field(..., description="Approximate audio duration in milliseconds")
+    voice: str = Field(..., description="Echoed Cartesia voice key actually used")
+
+
 class SessionNoteResponse(BaseModel):
     model_config = {"from_attributes": True}
 
