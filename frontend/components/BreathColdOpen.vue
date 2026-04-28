@@ -18,20 +18,29 @@ const emit = defineEmits<{ complete: []; skip: [] }>()
 // 4s in / 4s out × 3 cycles = 24s total
 const PHASE_MS = 4000
 const CYCLES = 3
+// Smooth exit when the ritual completes naturally — orb expands & fades,
+// overlay dims out, THEN we emit complete so the parent unmounts us.
+// Skip stays instant — if the user wants out, give them out.
+const EXIT_MS = 900
 
-type Phase = 'in' | 'out'
+type Phase = 'in' | 'out' | 'done'
 const phase = ref<Phase>('in')
 const cycle = ref(1)
+const exiting = ref(false)
 
 const totalMs = PHASE_MS * 2 * CYCLES
-const phaseLabel = computed(() => phase.value === 'in' ? 'Breathe in' : 'Breathe out')
+const phaseLabel = computed(() => {
+  if (phase.value === 'done') return ''
+  return phase.value === 'in' ? 'Breathe in' : 'Breathe out'
+})
 
 let phaseTimer: ReturnType<typeof setTimeout> | null = null
+let exitTimer: ReturnType<typeof setTimeout> | null = null
 
 function nextPhase() {
   if (phase.value === 'in') {
     phase.value = 'out'
-  } else {
+  } else if (phase.value === 'out') {
     phase.value = 'in'
     cycle.value += 1
   }
@@ -44,7 +53,10 @@ function nextPhase() {
 
 function finish() {
   cleanup()
-  emit('complete')
+  // Trigger the smooth exit — orb releases, overlay fades — then emit.
+  exiting.value = true
+  phase.value = 'done'
+  exitTimer = setTimeout(() => emit('complete'), EXIT_MS)
 }
 
 function skip() {
@@ -54,7 +66,9 @@ function skip() {
 
 function cleanup() {
   if (phaseTimer) clearTimeout(phaseTimer)
+  if (exitTimer) clearTimeout(exitTimer)
   phaseTimer = null
+  exitTimer = null
 }
 
 onMounted(() => {
@@ -66,7 +80,7 @@ onUnmounted(cleanup)
 
 <template>
   <Teleport to="body">
-    <div class="breath-overlay" role="dialog" aria-label="Breathing exercise">
+    <div :class="['breath-overlay', { 'breath-overlay--exiting': exiting }]" role="dialog" aria-label="Breathing exercise">
       <button
         @click="skip"
         class="breath-skip"
@@ -113,6 +127,20 @@ onUnmounted(cleanup)
   background: radial-gradient(ellipse at center, rgba(20, 20, 35, 0.96) 0%, rgba(8, 8, 16, 0.99) 100%);
   backdrop-filter: blur(8px);
   animation: overlay-fade 480ms cubic-bezier(0.16, 1, 0.3, 1);
+  /* Exit transitions — driven by .breath-overlay--exiting */
+  transition:
+    opacity 900ms cubic-bezier(0.32, 0.72, 0, 1),
+    backdrop-filter 900ms cubic-bezier(0.32, 0.72, 0, 1),
+    -webkit-backdrop-filter 900ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.breath-overlay--exiting {
+  /* Override the entrance animation so opacity transition isn't fighting it */
+  animation: none;
+  opacity: 0;
+  backdrop-filter: blur(0);
+  -webkit-backdrop-filter: blur(0);
+  pointer-events: none;
 }
 
 @keyframes overlay-fade {
@@ -167,6 +195,14 @@ onUnmounted(cleanup)
 }
 .breath-orb--in  { transform: translate3d(0, 0, 0) scale(1); }
 .breath-orb--out { transform: translate3d(0, 0, 0) scale(0.6); }
+/* Final release — orb softly expands past 1 and dissolves */
+.breath-orb--done {
+  transform: translate3d(0, 0, 0) scale(1.45);
+  opacity: 0;
+  transition:
+    transform 900ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 700ms cubic-bezier(0.4, 0, 0.2, 1);
+}
 
 .breath-orb__core {
   width: 100%;
@@ -198,6 +234,7 @@ onUnmounted(cleanup)
 }
 .breath-label--in  { opacity: 1; transform: translateY(0); }
 .breath-label--out { opacity: 0.85; transform: translateY(0); }
+.breath-label--done { opacity: 0; transform: translateY(0); transition: opacity 600ms ease; }
 
 .breath-cycle {
   font-size: 0.75rem;
