@@ -5,15 +5,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-@pytest.fixture
-def mock_user():
-    """Stub current user dependency."""
-    from core.auth.models import CurrentUser
-    # DEVIATION from plan: CurrentUser.id is str (not int) and has no supertokens_id field.
-    # The conftest also defines mock_user; this local fixture matches the real dataclass API.
-    return CurrentUser(id="user-test-1", email="test@example.com")
-
-
 def test_speak_returns_mp3_for_valid_text(client: TestClient, mock_user):
     """Happy path: text → MP3 bytes + cost header."""
     from core.ai.providers import TTSResponse
@@ -64,3 +55,24 @@ def test_speak_returns_402_on_insufficient_credits(client: TestClient, mock_user
             json={"text": "Take a slow breath in.", "voice": "calm-female"},
         )
     assert r.status_code == 402
+
+
+def test_speak_returns_503_when_provider_errors(client: TestClient, mock_user):
+    """When call_cartesia_tts raises RuntimeError, endpoint returns 503."""
+    with patch(
+        "core.ai.providers.call_cartesia_tts",
+        new=AsyncMock(side_effect=RuntimeError("CARTESIA_API_KEY not configured")),
+    ), patch(
+        "core.credits.client.get_credit_client"
+    ) as mock_credits:
+        mock_credits.return_value.can_spend = AsyncMock(return_value=True)
+        mock_credits.return_value.record_spend = AsyncMock(return_value=None)
+
+        r = client.post(
+            "/api/life/therapist/speak",
+            json={"text": "Take a slow breath in.", "voice": "calm-female"},
+        )
+
+    assert r.status_code == 503
+    # Verify NO spend was recorded (provider errored before we'd charge)
+    mock_credits.return_value.record_spend.assert_not_called()

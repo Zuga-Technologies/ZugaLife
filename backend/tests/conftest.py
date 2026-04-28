@@ -118,10 +118,9 @@ def _make_app(current_user):
     from core.auth.middleware import get_current_user
 
     # Import the speech module (it reads TherapistSpeakRequest from sys.modules)
-    import importlib.util as ilu
     _speech_path = Path(_BACKEND_DIR) / "therapist" / "speech.py"
-    _speech_spec = ilu.spec_from_file_location("zugalife.therapist.speech", _speech_path)
-    _speech_mod = ilu.module_from_spec(_speech_spec)
+    _speech_spec = _ilu.spec_from_file_location("zugalife.therapist.speech", _speech_path)
+    _speech_mod = _ilu.module_from_spec(_speech_spec)
     sys.modules["zugalife.therapist.speech"] = _speech_mod
     _speech_spec.loader.exec_module(_speech_mod)
 

@@ -38,7 +38,6 @@ async def therapist_speak(
     Budget: pre-flight `can_spend`, post-success `record_spend`. Errors return
     402 (no credits), 503 (provider down), or 500 (unexpected).
 
-    estimate_tts_cost model name: "tts-1-hd" is used (30.0 USD/1M chars rate).
     "cartesia-sonic-3" is not in the model registry and would fall back to the
     same default rate — using the canonical "tts-1-hd" is explicit and matches
     meditation/routes.py L296.
