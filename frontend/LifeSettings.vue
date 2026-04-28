@@ -268,12 +268,16 @@ function exportJournal() {
       <div class="flex items-start justify-between mb-5">
         <div>
           <h2 class="text-base font-semibold text-txt-primary">Wellness Avatar</h2>
-          <p class="text-sm text-txt-muted mt-0.5">3D character + voice in the wellness chat</p>
+          <p class="text-sm text-txt-muted mt-0.5">
+            Turn the wellness bot into a 3D character that speaks her replies aloud.
+            The text chat stays the same — the avatar is presence on top, for the
+            psychological weight of being seen and heard.
+          </p>
         </div>
       </div>
 
       <label class="flex items-center justify-between gap-4 py-3 px-4 rounded-lg bg-surface-2/50 cursor-pointer">
-        <span class="text-sm text-txt-secondary">Enable wellness avatar</span>
+        <span class="text-sm text-txt-secondary">Show avatar &amp; speak replies</span>
         <input type="checkbox" v-model="avatarEnabled" class="accent-accent" />
       </label>
     </div>

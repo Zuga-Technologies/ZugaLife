@@ -142,17 +142,17 @@ const chatContainer = ref<HTMLElement | null>(null)
 // ── Avatar + speech ───────────────────────────────────────────
 const avatarRef = ref<InstanceType<typeof WellnessAvatar> | null>(null)
 const avatarEnabled = ref(localStorage.getItem('zugalife_avatar_enabled') !== '0')
-const voiceEnabled = ref(localStorage.getItem('zugalife_voice_enabled') !== '0')
-
 const { speak: avatarSpeak, stop: avatarStop, speaking: avatarSpeaking } = useAvatarSpeech((v) => {
   avatarRef.value?.setMouthOpen(v)
 })
 
-function toggleVoice() {
-  voiceEnabled.value = !voiceEnabled.value
-  localStorage.setItem('zugalife_voice_enabled', voiceEnabled.value ? '1' : '0')
-  if (!voiceEnabled.value) avatarStop()
-}
+// Avatar visibility AND voice are one concept now. When avatarEnabled is on,
+// the user sees the 3D character AND hears the bot speak its replies — there
+// is no separate "mute voice" mode. Toggling avatarEnabled off mid-utterance
+// stops any in-flight speech immediately.
+watch(avatarEnabled, (enabled) => {
+  if (!enabled) avatarStop()
+})
 
 // ── Voice input (Whisper STT) ─────────────────────────────────
 // Available in BOTH text-mode and avatar-mode sessions; toggled separately
@@ -340,7 +340,7 @@ async function sendTherapistMessage() {
       { messages: apiMessages },
     )
     therapistMessages.value.push({ role: 'assistant', content: res.content })
-    if (voiceEnabled.value && avatarEnabled.value) {
+    if (avatarEnabled.value) {
       avatarSpeak(res.content).catch(() => { /* silent — chat still works */ })
     }
     therapistMessagesRemaining.value = res.session_messages_remaining
@@ -581,18 +581,13 @@ defineExpose({ therapistSessionActive, therapistMessages })
            - 220px ≈ TopNav + page top padding + back-nav row + bottom
              padding (rough but stable enough for both mobile and desktop). -->
       <div v-else class="flex flex-col h-[calc(100dvh-220px)] min-h-[320px] max-h-[calc(100dvh-220px)]">
-        <!-- Avatar -->
+        <!-- Avatar — when on, she's both visible AND speaks the replies.
+             No separate mute toggle: the avatar is the wellness bot. To go
+             text-only, disable the avatar in Settings. -->
         <div v-if="avatarEnabled" class="mb-3 rounded-xl overflow-hidden bg-surface-2/40 border border-bdr/40">
           <WellnessAvatar ref="avatarRef" :height="280" />
-          <div class="flex items-center justify-between px-3 py-1.5 text-xs text-txt-muted border-t border-bdr/40">
+          <div class="px-3 py-1.5 text-xs text-txt-muted border-t border-bdr/40">
             <span>{{ avatarSpeaking ? 'Speaking…' : 'Listening' }}</span>
-            <button
-              @click="toggleVoice()"
-              class="px-2 py-0.5 rounded hover:bg-surface-3 transition-colors"
-              :title="voiceEnabled ? 'Mute voice' : 'Unmute voice'"
-            >
-              {{ voiceEnabled ? 'Mute' : 'Unmute' }}
-            </button>
           </div>
         </div>
         <!-- Messages -->
