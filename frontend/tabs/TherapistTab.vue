@@ -6,6 +6,7 @@ import { moodIcons } from '../icons'
 import {
   AlertTriangle,
   Lightbulb,
+  Loader2,
   MessageCircleHeart,
   ScrollText,
   Send,
@@ -79,6 +80,13 @@ const therapistAvailable = ref(true)
 const therapistNotes = ref<TherapistSessionNote[]>([])
 const therapistCurrentNote = ref<TherapistSessionNote | null>(null)
 const therapistEditingNote = ref(false)
+// Spinner states for the Notes view: `loadingNotes` while the list fetch is
+// in flight, `notesGenerating` while a just-ended session is saving server-
+// side. The latter renders a "Generating your notes..." card at the top of
+// the list, so a user who pops over to Notes immediately after pressing
+// "Save & End Session" sees something is happening instead of a stale list.
+const loadingNotes = ref(false)
+const notesGenerating = ref(false)
 const therapistEditThemes = ref('')
 const therapistEditPatterns = ref('')
 const therapistEditFollowUp = ref('')
@@ -192,10 +200,13 @@ async function fetchTherapistGreeting() {
 }
 
 async function fetchTherapistNotes() {
+  loadingNotes.value = true
   try {
     const res = await api.get<{ notes: TherapistSessionNote[]; total: number }>('/api/life/therapist/notes')
     therapistNotes.value = res.notes
-  } catch { /* silent */ }
+  } catch { /* silent */ } finally {
+    loadingNotes.value = false
+  }
 }
 
 async function startTherapistSession() {
@@ -293,8 +304,16 @@ async function endTherapistSession() {
   clearCachedGreeting()
   therapistView.value = 'chat'
 
-  // Fire celebration toast immediately
-  celebration.pushToast({ type: 'info', message: 'Session ended — saving notes...', duration: 3000 })
+  // Domain-milestone modal — mirrors the mood-tracking confirmation pattern
+  // (sets celebration.activeBadge, rendered by CelebrationOverlay). Notes
+  // generation is async server-side, so the description nudges the user
+  // toward Session Notes rather than implying immediate availability.
+  notesGenerating.value = true
+  celebration.activeBadge.value = {
+    badge_key: 'therapy_session_saved',
+    title: 'Session Saved',
+    description: 'Your notes are being generated — check Session Notes in a moment.',
+  }
 
   // Save in background with mood and rating
   withCelebration(() =>
@@ -308,10 +327,11 @@ async function endTherapistSession() {
     await fetchTherapistStatus()
     await fetchTherapistNotes()
     therapistCurrentNote.value = savedNote
-    celebration.pushToast({ type: 'challenge', message: 'Session notes saved!', duration: 3000 })
     emit('success')
   }).catch(() => {
     celebration.pushToast({ type: 'info', message: 'Failed to save session notes', duration: 4000 })
+  }).finally(() => {
+    notesGenerating.value = false
   })
 }
 
@@ -583,12 +603,28 @@ defineExpose({ therapistSessionActive, therapistMessages })
 
     <!-- ===== NOTES LIST VIEW ===== -->
     <template v-if="therapistView === 'notes'">
-      <div v-if="therapistNotes.length === 0" class="glass-card p-8 text-center">
+      <!-- Loading: list fetch in flight (first visit / refresh) -->
+      <div v-if="loadingNotes && therapistNotes.length === 0 && !notesGenerating" class="glass-card p-8 text-center">
+        <Loader2 :size="22" class="mx-auto mb-2 text-accent animate-spin" />
+        <p class="text-sm text-txt-muted">Loading your session notes…</p>
+      </div>
+
+      <div v-else-if="therapistNotes.length === 0 && !notesGenerating" class="glass-card p-8 text-center">
         <ScrollText :size="32" class="mx-auto mb-3 text-txt-muted" />
         <p class="text-sm text-txt-muted">No session notes yet. Complete a session to see notes here.</p>
       </div>
 
       <div v-else class="space-y-3">
+        <!-- Generating: a session was just ended, end-session POST is in flight.
+             Sits at the top of the list; replaced by the real note row when the
+             save resolves and fetchTherapistNotes returns. -->
+        <div v-if="notesGenerating" class="glass-card p-4 flex items-center gap-3 border border-accent/30 animate-fade-in">
+          <Loader2 :size="20" class="text-accent animate-spin flex-shrink-0" />
+          <div>
+            <p class="text-sm font-medium text-txt-primary">Generating your session notes…</p>
+            <p class="text-xs text-txt-muted mt-0.5">This usually takes a few seconds.</p>
+          </div>
+        </div>
         <div
           v-for="note in therapistNotes"
           :key="note.id"
