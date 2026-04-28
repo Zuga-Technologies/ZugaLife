@@ -154,11 +154,17 @@ async def reset_life_onboarding(
 async def get_breath_today(
     user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """Return whether the user has completed today's breath ritual on any device."""
-    from datetime import date
+    """Return whether the user has completed today's breath ritual on any device.
+
+    "Today" is in the user's configured timezone — so rollover happens at the
+    user's midnight, not UTC's. Otherwise the prompt re-appears at 8pm EDT
+    (UTC midnight) instead of true local midnight.
+    """
+    import sys
+    _helpers = sys.modules["zugalife.settings_helpers"]
     async with get_session() as session:
         settings = await _get_or_create_settings(session, user.id)
-        today_iso = date.today().isoformat()
+        today_iso = (await _helpers.get_user_today(session, user.id)).isoformat()
         return {
             "done_today": settings.last_breath_date == today_iso,
             "last_breath_date": settings.last_breath_date,
@@ -170,10 +176,11 @@ async def mark_breath_done(
     user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     """Mark today's breath ritual complete. Idempotent — safe to call repeatedly."""
-    from datetime import date
+    import sys
+    _helpers = sys.modules["zugalife.settings_helpers"]
     async with get_session() as session:
         settings = await _get_or_create_settings(session, user.id)
-        today_iso = date.today().isoformat()
+        today_iso = (await _helpers.get_user_today(session, user.id)).isoformat()
         settings.last_breath_date = today_iso
     return {"status": "ok", "last_breath_date": today_iso}
 

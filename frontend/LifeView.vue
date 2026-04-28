@@ -132,7 +132,7 @@ function beforeUnloadHandler(e: BeforeUnloadEvent) {
 onMounted(() => window.addEventListener('beforeunload', beforeUnloadHandler))
 onUnmounted(() => window.removeEventListener('beforeunload', beforeUnloadHandler))
 
-// ── Breath cold-open (once per UTC day, dismissable) ───────────
+// ── Breath cold-open (once per LOCAL day, dismissable) ─────────
 // Skipped automatically when LifeOnboarding is showing — first-time
 // users get the onboarding's own intro instead of two welcomes back-to-back.
 //
@@ -140,15 +140,24 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnloadHandler
 // LifeUserSettings, so completing on phone skips the prompt on desktop
 // (and vice-versa). localStorage stays as a fast-path cache so the
 // component doesn't render then immediately disappear on second visits.
+//
+// Rollover is the user's local midnight (browser tz on the client,
+// settings.timezone on the server). Without this the prompt would
+// reset at UTC midnight = 8pm EDT, which feels random to the user.
 import { api } from '@core/api/client'
 const BREATH_KEY = 'zugalife.breathDate'
 const showBreath = ref(false)
-function todayUtcDate(): string {
-  return new Date().toISOString().slice(0, 10)
+function todayLocalDate(): string {
+  // YYYY-MM-DD in the browser's local timezone. Avoids toISOString (UTC).
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 async function maybeShowBreath() {
   if (onboarding.showLifeOnboarding) return  // first-time user — onboarding handles it
-  const today = todayUtcDate()
+  const today = todayLocalDate()
   // Fast-path: localStorage knows we did it today, skip immediately.
   if (localStorage.getItem(BREATH_KEY) === today) return
   // Slow-path: ask the server in case the user did it on another device.
@@ -162,7 +171,7 @@ async function maybeShowBreath() {
   showBreath.value = true
 }
 function onBreathDone() {
-  localStorage.setItem(BREATH_KEY, todayUtcDate())
+  localStorage.setItem(BREATH_KEY, todayLocalDate())
   showBreath.value = false
   // Fire-and-forget — server gate so other devices skip too.
   void api.post('/api/life/breath/done').catch(() => { /* non-critical */ })
@@ -256,7 +265,7 @@ onMounted(async () => {
     <CelebrationOverlay />
     <!-- Studio onboarding (first visit only) -->
     <LifeOnboarding v-if="onboarding.showLifeOnboarding" @complete="onLifeOnboardingComplete" />
-    <!-- Daily breath cold-open (once per UTC day, skippable, first-time users see onboarding instead) -->
+    <!-- Daily breath cold-open (once per local day, skippable, first-time users see onboarding instead) -->
     <BreathColdOpen v-if="showBreath" @complete="onBreathDone" @skip="onBreathDone" />
 
     <!-- Meditation toast: 'generating' (non-clickable, spinner) →
