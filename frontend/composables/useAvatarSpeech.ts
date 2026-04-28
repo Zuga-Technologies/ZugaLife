@@ -20,12 +20,17 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
   let ctx: AudioContext | null = null
   let analyser: AnalyserNode | null = null
   let rafId = 0
+  let currentObjectUrl: string | null = null
 
   function stop() {
     cancelAnimationFrame(rafId)
     audio?.pause()
     if (audio) audio.src = ''
     audio = null
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl)
+      currentObjectUrl = null
+    }
     setMouthOpen(0)
     speaking.value = false
   }
@@ -68,8 +73,8 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
       return null
     }
 
-    const url = URL.createObjectURL(blob)
-    audio = new Audio(url)
+    currentObjectUrl = URL.createObjectURL(blob)
+    audio = new Audio(currentObjectUrl)
     audio.crossOrigin = 'anonymous'
 
     const audioCtx = ensureCtx()
@@ -99,7 +104,10 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
       cancelAnimationFrame(rafId)
       setMouthOpen(0)
       speaking.value = false
-      URL.revokeObjectURL(url)
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl)
+        currentObjectUrl = null
+      }
     }
 
     speaking.value = true
@@ -111,7 +119,6 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
     } catch (_e) {
       lastError.value = 'autoplay-blocked'
       stop()
-      URL.revokeObjectURL(url)
       return null
     }
 
