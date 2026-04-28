@@ -70,6 +70,15 @@ function isTherapistActive(): boolean {
   return !!(t?.therapistSessionActive && t?.therapistMessages?.length >= 2)
 }
 
+// Broadcast wellness focus to ZugaApp shell so the global Zugabot FAB can
+// slide aside while the wellness bot has focus. Listened for in App.vue.
+function broadcastWellnessFocus(active: boolean) {
+  window.dispatchEvent(new CustomEvent('wellness:focus', { detail: active }))
+}
+function onTherapistSessionActive(active: boolean) {
+  broadcastWellnessFocus(active)
+}
+
 function navigateTo(tab: Tab) {
   if (tab !== 'therapist' && isTherapistActive()) {
     pendingTab.value = tab
@@ -218,6 +227,9 @@ function handleThemeNavigate(e: Event) {
 onMounted(() => window.addEventListener('zugatheme:navigate', handleThemeNavigate as EventListener))
 onUnmounted(() => window.removeEventListener('zugatheme:navigate', handleThemeNavigate as EventListener))
 
+// Always clear wellness focus on unmount — covers nav-away mid-session.
+onUnmounted(() => broadcastWellnessFocus(false))
+
 // ── Init ───────────────────────────────────────────────────────
 onMounted(async () => {
   notif.init()
@@ -320,6 +332,7 @@ onMounted(async () => {
       <TherapistTab
         v-if="activeTab === 'therapist'"
         ref="therapistRef"
+        @session-active="onTherapistSessionActive"
       />
     </div>
 
