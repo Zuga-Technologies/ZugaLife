@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { getToken } from '@core/api/client'
 
 export interface SpeakResult {
   cost: number
@@ -58,10 +59,14 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
     const durationMs = 0
     let resolvedVoice = voice
     try {
+      // Auth: ZugaApp uses Bearer-token-from-localStorage, not cookies.
+      // Match @core/api/client so we don't 401.
+      const token = getToken()
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
       const res = await fetch('/api/life/therapist/speak', {
         method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ text, voice }),
       })
       if (!res.ok) {

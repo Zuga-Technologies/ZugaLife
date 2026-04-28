@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { getToken } from '@core/api/client'
 
 /**
  * Browser MediaRecorder wrapper for Whisper-bound voice input.
@@ -128,9 +129,15 @@ export async function transcribeBlob(blob: Blob): Promise<{ result: TranscribeRe
 
   let res: Response
   try {
+    // Auth: ZugaApp uses Bearer-token-from-localStorage, not cookies — match
+    // the api client (`@core/api/client`) so we don't 401. Don't set
+    // Content-Type; the browser must add the multipart boundary itself.
+    const token = getToken()
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
     res = await fetch('/api/life/therapist/transcribe', {
       method: 'POST',
-      credentials: 'include',
+      headers,
       body: form,
     })
   } catch (e) {
