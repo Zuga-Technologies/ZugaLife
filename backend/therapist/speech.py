@@ -74,11 +74,10 @@ async def therapist_speak(
     )
 
     return Response(
-        content=tts.audio,
+        content=tts.audio_bytes,
         media_type="audio/mpeg",
         headers={
             "x-tts-cost-usd": f"{tts.cost_usd:.4f}",
-            "x-tts-duration-ms": str(tts.duration_ms),
             "x-tts-voice": body.voice,
         },
     )

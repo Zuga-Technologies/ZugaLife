@@ -5,9 +5,11 @@ sys.path strategy:
   which has symlinks to ZugaCore for auth/, credits/, and gateway/.
   The local backend/ is appended after so plugin.py and therapist/ are findable.
 
-core.ai.providers is injected synthetically — it does not exist in ZugaLife/core
-(that package only has auth/credits/gateway). The injected module exposes TTSResponse
-and call_cartesia_tts stubs that match what speech.py and the tests expect.
+core.ai.providers is injected with the REAL TTSResponse shape from ZugaApp's
+core.ai.providers (audio_bytes, model, cost_usd). ZugaLife/core/ai/providers.py
+is Venice-only and has no TTSResponse; the real provider is the shared ZugaApp
+core layer used on Railway. The injection here mirrors that shape exactly so
+tests exercise the same contract as production.
 """
 
 import sys
@@ -24,7 +26,7 @@ import pytest
 _BACKEND_DIR = str(Path(__file__).parent.parent)          # .../ZugaLife-wellness-avatar/backend
 _ZUGALIFE_BACKEND = str(Path(__file__).parent.parent.parent.parent / "ZugaLife" / "backend")
 
-# ZugaLife/backend first so core = ZugaLife/core (has auth/credits/gateway symlinks)
+# ZugaLife/backend first so core = ZugaLife/core (has auth/credits/gateway/ai)
 if _ZUGALIFE_BACKEND not in sys.path:
     sys.path.insert(0, _ZUGALIFE_BACKEND)
 # Local backend second so plugin.py / therapist/ are importable
@@ -32,28 +34,31 @@ if _BACKEND_DIR not in sys.path:
     sys.path.append(_BACKEND_DIR)
 
 # ── Inject core.ai.providers ─────────────────────────────────────────────────
-# ZugaLife/core has no ai/ subpackage. We create a synthetic module so that:
-#   from core.ai.providers import TTSResponse, call_cartesia_tts
-# resolves consistently across speech.py and the test mocks.
+# ZugaLife/core/ai/providers.py is Venice-only — no TTSResponse or call_cartesia_tts.
+# On Railway, speech.py imports from the shared ZugaApp core layer. We inject a
+# module here that matches the REAL ZugaApp TTSResponse shape (audio_bytes, model,
+# cost_usd) so tests exercise the same contract as production.
 
 @dataclass
 class TTSResponse:
-    """Buffered TTS result — used by the therapist speak endpoint."""
-    audio: bytes
+    """Mirrors ZugaApp core.ai.providers.TTSResponse exactly."""
+    audio_bytes: bytes
+    model: str
     cost_usd: float
-    duration_ms: int
 
 
-async def call_cartesia_tts(text: str, voice_id: str = "", speed: float = 1.0, emotion: str = "warm") -> TTSResponse:
-    """Stub — always replaced by test mocks; never called in production tests."""
+async def _call_cartesia_tts_stub(
+    text: str, voice_id: str = "", speed: float = 1.0, emotion: str = "warm"
+) -> TTSResponse:
+    """Stub — always replaced by test mocks; never called in tests."""
     raise RuntimeError("call_cartesia_tts stub should be mocked in tests")
 
 
 _ai_providers_mod = types.ModuleType("core.ai.providers")
 _ai_providers_mod.TTSResponse = TTSResponse
-_ai_providers_mod.call_cartesia_tts = call_cartesia_tts
+_ai_providers_mod.call_cartesia_tts = _call_cartesia_tts_stub
 
-# Register as core.ai.providers AND ensure core.ai package exists
+# Ensure core.ai package exists before registering the submodule
 if "core.ai" not in sys.modules:
     _ai_pkg = types.ModuleType("core.ai")
     _ai_pkg.__path__ = []

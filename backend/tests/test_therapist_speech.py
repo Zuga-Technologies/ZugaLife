@@ -19,7 +19,7 @@ def test_speak_returns_mp3_for_valid_text(client: TestClient, mock_user):
     from core.ai.providers import TTSResponse
 
     fake_audio = b"\xff\xfb\x90\x00" + b"\x00" * 1024  # mp3 frame header + padding
-    fake_resp = TTSResponse(audio=fake_audio, cost_usd=0.0042, duration_ms=1500)
+    fake_resp = TTSResponse(audio_bytes=fake_audio, model="cartesia/sonic-3", cost_usd=0.0042)
 
     with patch(
         "core.ai.providers.call_cartesia_tts",
@@ -39,6 +39,7 @@ def test_speak_returns_mp3_for_valid_text(client: TestClient, mock_user):
     assert r.headers["content-type"] == "audio/mpeg"
     assert r.headers["x-tts-cost-usd"] == "0.0042"
     assert r.headers["x-tts-voice"] == "calm-female"
+    assert "x-tts-duration-ms" not in r.headers   # not exposed; provider doesn't return duration
     assert r.content == fake_audio
 
 
