@@ -12,7 +12,7 @@
 **Tech Stack:**
 - Frontend: Vue 3, TypeScript, Vite, Three.js (`three@^0.169.0`), `@pixiv/three-vrm@^3.4.0`, Web Audio API
 - Backend: FastAPI, existing `core.ai.providers.call_cartesia_tts`, existing `core.credits.client`
-- Avatar source: Ready Player Me — user generates a VRM file at https://readyplayer.me/ and exports as `.vrm`
+- Avatar source: VRoid Hub (https://hub.vroid.com/) — user picks or builds a VRM and downloads it as `.vrm` (native VRM export; no GLB→VRM conversion needed). VRoid Studio (free desktop app) is the alternative for from-scratch designs.
 
 **Out of scope (do NOT implement, even if tempting):**
 - Streaming TTS / WebSocket transport
@@ -334,14 +334,24 @@ Create `ZugaLife/frontend/public/avatars/README.md`:
 
 The wellness bot loads a VRM avatar from `/avatars/wellness.vrm`.
 
-## Generating a VRM
+## Getting a VRM
 
-1. Visit https://readyplayer.me/ and create a half-body avatar (no clothing
-   restrictions for MVP — use any preset).
-2. After the avatar is ready, in the "Download" or "Customize" view choose
-   the **VRM 1.0** export.
-3. Save the downloaded file as `wellness.vrm` and place it at this exact path:
-   `ZugaLife/frontend/public/avatars/wellness.vrm`.
+Two options — both produce a `.vrm` file natively, no conversion.
+
+**A. VRoid Hub (browse + download an existing avatar)**
+1. Visit https://hub.vroid.com/ and browse community avatars. Filter for
+   ones with a "Download permitted" / "Use license" tag that allows
+   embedding. A calm/wellness vibe is recommended for the bot.
+2. Click the avatar → **Download** → save as `.vrm`.
+
+**B. VRoid Studio (build your own — desktop app)**
+1. Install VRoid Studio (free) from https://vroid.com/en/studio
+2. Customize a half-body or full-body model.
+3. **Export → VRM** (the app produces `.vrm` directly).
+
+After either path:
+- Rename the downloaded file to `wellness.vrm`.
+- Place it at `ZugaLife/frontend/public/avatars/wellness.vrm`.
 
 The file is git-ignored — each environment supplies its own. The frontend
 will render a "Loading avatar..." card if the file is missing, then fall
