@@ -50,7 +50,7 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
     return ctx
   }
 
-  async function speak(text: string, voice = 'calm-female'): Promise<SpeakResult | null> {
+  async function speak(text: string, voice = ''): Promise<SpeakResult | null> {
     stop()
     lastError.value = null
 
