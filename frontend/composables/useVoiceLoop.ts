@@ -79,6 +79,9 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
       return false
     }
 
+    // Some browsers (older Safari, some Android WebViews) reject the rich
+    // constraint object with OverconstrainedError. Fall back to bare
+    // `audio: true` so the mic still works without DSP niceties.
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -88,13 +91,32 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
         },
       })
     } catch (e) {
-      lastError.value = e instanceof Error ? e.name : 'getUserMedia-failed'
-      return false
+      const name = e instanceof Error ? e.name : ''
+      if (name === 'OverconstrainedError' || name === 'NotReadableError' || name === 'TypeError') {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        } catch (e2) {
+          lastError.value = e2 instanceof Error ? e2.name : 'getUserMedia-failed'
+          console.warn('[voice-loop] getUserMedia (fallback) failed:', e2)
+          return false
+        }
+      } else {
+        lastError.value = name || 'getUserMedia-failed'
+        console.warn('[voice-loop] getUserMedia failed:', e)
+        return false
+      }
     }
 
     try {
       const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
       ctx = new Ctor()
+      // Safari / iOS create AudioContexts in the 'suspended' state and the
+      // analyser returns silent buffers until resume() runs inside the same
+      // user-gesture chain. Without this, unmute appears to "succeed" but
+      // the volume meter never moves and no utterance is ever segmented.
+      if (ctx.state === 'suspended') {
+        try { await ctx.resume() } catch { /* best-effort */ }
+      }
       const src = ctx.createMediaStreamSource(stream)
       analyser = ctx.createAnalyser()
       analyser.fftSize = 1024
@@ -107,6 +129,7 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
       recorder.onstop = handleUtteranceComplete
     } catch (e) {
       lastError.value = e instanceof Error ? e.name : 'audio-init-failed'
+      console.warn('[voice-loop] audio init failed:', e)
       teardownAudio()
       return false
     }

@@ -223,16 +223,12 @@ function deniedHint(): string {
 async function toggleVoice() {
   therapistError.value = null
 
-  // Going from muted → unmuted: pre-check permission so we can give a useful
-  // recovery hint instead of the bare NotAllowedError. Going the other way
-  // (unmute → mute) is a no-op for permissions.
   if (voiceMuted.value) {
+    // Mute the avatar so she's not still talking when the user starts to
+    // listen for herself. Note: we DON'T early-return on a Permissions API
+    // 'denied' state — some browsers report stale denials that getUserMedia
+    // would actually re-prompt on. Let getUserMedia be the source of truth.
     avatarStop()
-    const state = await micPermissionState()
-    if (state === 'denied') {
-      therapistError.value = deniedHint()
-      return
-    }
   }
 
   await voiceToggle()
