@@ -383,7 +383,7 @@ async function startTherapistSession() {
     // sent their first message, which felt like the bot "wasn't talking."
     // The greeting is the bot's first turn, so it should get the same
     // voice treatment as every subsequent reply.
-    if (avatarEnabled.value) {
+    if (avatarEnabled.value && !document.hidden) {
       avatarSpeak(therapistGreeting.value).catch(() => { /* silent — text already showing */ })
     }
   }
@@ -406,7 +406,7 @@ async function sendTherapistMessage() {
       { messages: apiMessages },
     )
     therapistMessages.value.push({ role: 'assistant', content: res.content })
-    if (avatarEnabled.value) {
+    if (avatarEnabled.value && !document.hidden) {
       avatarSpeak(res.content).catch(() => { /* silent — chat still works */ })
     }
     therapistMessagesRemaining.value = res.session_messages_remaining
@@ -552,7 +552,15 @@ async function deleteTherapistNote(id: number) {
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────
+// Stop voice the moment the tab loses visibility — the avatar shouldn't
+// keep talking into an empty room. A reply that lands while we're hidden
+// also stays silent (see avatarEnabled && !document.hidden guards above).
+function onVisibilityChange() {
+  if (document.hidden) avatarStop()
+}
+
 onMounted(async () => {
+  document.addEventListener('visibilitychange', onVisibilityChange)
   await Promise.all([
     fetchTherapistStatus(),
     fetchTherapistNotes(),
@@ -561,6 +569,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange)
   avatarStop()
 })
 
