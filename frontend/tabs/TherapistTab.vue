@@ -145,7 +145,7 @@ const chatContainer = ref<HTMLElement | null>(null)
 // ── Avatar + speech ───────────────────────────────────────────
 const avatarRef = ref<InstanceType<typeof WellnessAvatar> | null>(null)
 const avatarEnabled = ref(localStorage.getItem('zugalife_avatar_enabled') !== '0')
-const { speak: avatarSpeak, stop: avatarStop, speaking: avatarSpeaking } = useAvatarSpeech((v) => {
+const { speak: avatarSpeak, stop: avatarStop, prewarm: avatarPrewarm, speaking: avatarSpeaking } = useAvatarSpeech((v) => {
   avatarRef.value?.setMouthOpen(v)
 })
 
@@ -154,7 +154,13 @@ const { speak: avatarSpeak, stop: avatarStop, speaking: avatarSpeaking } = useAv
 // Settings tab and the inline bottom-right toggle stay in sync.
 watch(avatarEnabled, (enabled) => {
   localStorage.setItem('zugalife_avatar_enabled', enabled ? '1' : '0')
-  if (!enabled) avatarStop()
+  if (!enabled) {
+    avatarStop()
+  } else {
+    // Re-enabling counts as a user gesture in the same tick — prewarm the
+    // AudioContext so the next reply plays without an extra resume() wait.
+    avatarPrewarm().catch(() => { /* best-effort */ })
+  }
 })
 
 // Pick up changes from the Settings tab while a chat session is open.
@@ -322,6 +328,9 @@ async function fetchTherapistGreeting() {
   } catch (e) {
     if (e instanceof ApiError && e.status === 402) {
       therapistError.value = handleInsufficientTokens('Wellness Bot')
+    } else if (e instanceof ApiError && e.status === 429) {
+      const detail = (e.body as Record<string, string> | undefined)?.detail
+      therapistError.value = handleServiceError('Wellness Bot Busy', detail ?? 'The Wellness Bot is busy right now. Try again in a moment.')
     } else if (e instanceof ApiError && e.status >= 500) {
       therapistError.value = handleServiceError('Wellness Bot Unavailable', 'The AI service is temporarily down. Please try again in a few minutes.')
     }
@@ -349,6 +358,13 @@ async function startTherapistSession() {
   therapistRating.value = null
   therapistShowEndMood.value = false
   therapistSending.value = true
+
+  // The Start button click is a definite user gesture — pre-warm the
+  // AudioContext now so the first greeting plays the instant the audio
+  // bytes arrive, instead of waiting on AudioContext.resume() at that point.
+  if (avatarEnabled.value) {
+    avatarPrewarm().catch(() => { /* prewarm is best-effort */ })
+  }
 
   // Pick a fresh tip for this session
   cycleTip()
@@ -408,7 +424,14 @@ async function sendTherapistMessage() {
       if (e.status === 402) {
         therapistError.value = handleInsufficientTokens('Wellness Bot')
       } else if (e.status === 429) {
-        therapistError.value = handleServiceError('Session Limit Reached', detail ?? 'You\'ve reached the session limit for today. Come back tomorrow!')
+        // 429 covers two cases: daily session limit reached (detail mentions "session limit"),
+        // or upstream Venice rate-limit ("busy right now"). Distinguish by detail text.
+        const isSessionLimit = detail?.toLowerCase().includes('session limit')
+        if (isSessionLimit) {
+          therapistError.value = handleServiceError('Session Limit Reached', detail ?? 'You\'ve reached the session limit for today. Come back tomorrow!')
+        } else {
+          therapistError.value = handleServiceError('Wellness Bot Busy', detail ?? 'The Wellness Bot is busy right now. Your tokens were not charged. Try again in a moment.')
+        }
       } else if (e.status === 503 || e.status >= 500) {
         therapistError.value = handleServiceError('Wellness Bot Unavailable', 'The AI service is temporarily down. Your tokens were not charged. Please try again in a few minutes.')
         therapistAvailable.value = false

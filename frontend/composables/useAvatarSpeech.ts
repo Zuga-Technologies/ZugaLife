@@ -50,6 +50,19 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
     return ctx
   }
 
+  /**
+   * Create+resume the AudioContext during a known user gesture (Start Session,
+   * first Send, etc). Browsers suspend AudioContext until a gesture, and that
+   * resume can add ~100ms to the first utterance — paying it up-front means the
+   * first reply plays as soon as the audio bytes land.
+   */
+  async function prewarm(): Promise<void> {
+    const c = ensureCtx()
+    if (c.state === 'suspended') {
+      try { await c.resume() } catch { /* swallow — we'll retry inside speak() */ }
+    }
+  }
+
   async function speak(text: string, voice = ''): Promise<SpeakResult | null> {
     stop()
     lastError.value = null
@@ -135,5 +148,5 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
     return { cost, durationMs, voice: resolvedVoice }
   }
 
-  return { speak, stop, speaking, lastError }
+  return { speak, stop, prewarm, speaking, lastError }
 }

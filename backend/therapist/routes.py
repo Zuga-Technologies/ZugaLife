@@ -81,7 +81,7 @@ async def therapist_greeting(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Get a context-aware greeting for starting a new session."""
-    from core.ai.gateway import BudgetExhaustedError, CreditBlockedError
+    from core.ai.gateway import BudgetExhaustedError, CreditBlockedError, RateLimitError
 
     first = await _context.is_first_session(user.id)
     context_summary = await _context.build_user_context(user.id)
@@ -94,6 +94,8 @@ async def therapist_greeting(
             greeting = await _generate_returning_greeting(user.id, user.email, context_summary)
     except (CreditBlockedError, BudgetExhaustedError):
         raise HTTPException(status_code=402, detail="You're out of tokens. Add more to continue using the Wellness Bot.")
+    except RateLimitError:
+        raise HTTPException(status_code=429, detail="Wellness Bot is busy right now. Try again in a moment.")
     except Exception as e:
         if type(e).__name__ == "InsufficientTokensError":
             raise HTTPException(status_code=402, detail=str(e))
@@ -282,7 +284,7 @@ async def therapist_chat(
     ]
 
     # Call Venice via gateway (task="therapist" enforces Venice-only routing)
-    from core.ai.gateway import BudgetExhaustedError, CreditBlockedError, PromptBlockedError, ai_call
+    from core.ai.gateway import BudgetExhaustedError, CreditBlockedError, PromptBlockedError, RateLimitError, ai_call
 
     try:
         response = await ai_call(
@@ -297,6 +299,8 @@ async def therapist_chat(
         raise HTTPException(status_code=402, detail="You're out of tokens. Add more to continue using the Wellness Bot.")
     except PromptBlockedError:
         raise HTTPException(status_code=400, detail="Content blocked by security filter")
+    except RateLimitError:
+        raise HTTPException(status_code=429, detail="Wellness Bot is busy right now. Try again in a moment.")
     except RuntimeError:
         raise HTTPException(status_code=503, detail="Wellness Bot is temporarily unavailable")
     except Exception as e:

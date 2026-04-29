@@ -12,7 +12,7 @@ Credit tracking in standalone mode:
 
 import logging
 
-from core.ai.providers import AIResponse, call_venice
+from core.ai.providers import AIResponse, RateLimitError, call_venice  # noqa: F401  (RateLimitError re-exported for route handlers)
 
 logger = logging.getLogger(__name__)
 
