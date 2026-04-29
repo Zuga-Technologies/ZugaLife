@@ -5,8 +5,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm'
 
 const props = defineProps<{
-  vrmUrl?: string  // default: /avatars/wellness.vrm
-  height?: number  // px; default 320
+  vrmUrl?: string
+  height?: number
 }>()
 
 const canvasEl = ref<HTMLCanvasElement | null>(null)
@@ -19,10 +19,15 @@ let camera: THREE.PerspectiveCamera | null = null
 let vrm: VRM | null = null
 let clock: THREE.Clock | null = null
 let rafId = 0
+let resizeObs: ResizeObserver | null = null
 
-// Lip-sync state — driven by parent via setMouthOpen(0..1)
 let mouthOpenTarget = 0
 let mouthOpenSmoothed = 0
+
+// Blink schedule — closes the eyes briefly every few seconds. Stored as a
+// running cycle so animate() can interpolate without allocating per frame.
+let nextBlinkAt = 2 + Math.random() * 3
+let blinkPhase = 0
 
 function setMouthOpen(value: number) {
   mouthOpenTarget = Math.max(0, Math.min(1, value))
@@ -30,25 +35,52 @@ function setMouthOpen(value: number) {
 
 defineExpose({ setMouthOpen })
 
+function fit() {
+  if (!renderer || !camera || !canvasEl.value) return
+  const w = canvasEl.value.clientWidth || 320
+  const h = canvasEl.value.clientHeight || (props.height ?? 420)
+  renderer.setSize(w, h, false)
+  camera.aspect = w / h
+  camera.updateProjectionMatrix()
+}
+
 onMounted(async () => {
   if (!canvasEl.value) return
 
-  const width = canvasEl.value.clientWidth || 320
-  const height = props.height ?? 320
+  const height = props.height ?? 420
 
   scene = new THREE.Scene()
-  camera = new THREE.PerspectiveCamera(28, width / height, 0.1, 20)
-  camera.position.set(0, 1.4, 1.2)
-  camera.lookAt(0, 1.4, 0)
+  // Full-body framing: camera further back, slight downward tilt so feet
+  // land near the bottom of the canvas without cropping.
+  camera = new THREE.PerspectiveCamera(32, 1, 0.1, 20)
+  camera.position.set(0, 1.05, 3.2)
+  camera.lookAt(0, 0.95, 0)
 
   renderer = new THREE.WebGLRenderer({ canvas: canvasEl.value, alpha: true, antialias: true })
-  renderer.setSize(width, height, false)
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.setSize(canvasEl.value.clientWidth || 320, height, false)
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.7)
-  const dir = new THREE.DirectionalLight(0xffffff, 0.9)
-  dir.position.set(1, 2, 2)
-  scene.add(ambient, dir)
+  // Soft three-point lighting — ambient fill + key from camera-right + rim
+  // from behind/above on the opposite side. Gives the model gentle depth
+  // without making it look like a video game.
+  const ambient = new THREE.AmbientLight(0xfff5e8, 0.55)
+  const key = new THREE.DirectionalLight(0xfff1da, 0.85)
+  key.position.set(2, 2.5, 2)
+  const rim = new THREE.DirectionalLight(0xc9d4ff, 0.45)
+  rim.position.set(-2, 3, -1.5)
+  scene.add(ambient, key, rim)
+
+  // Floor disc — soft round shadow catcher so she doesn't appear to float.
+  const floorGeo = new THREE.CircleGeometry(0.9, 48)
+  const floorMat = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    transparent: true,
+    opacity: 0.18,
+  })
+  const floor = new THREE.Mesh(floorGeo, floorMat)
+  floor.rotation.x = -Math.PI / 2
+  floor.position.y = 0.001
+  scene.add(floor)
 
   const loader = new GLTFLoader()
   loader.register((parser) => new VRMLoaderPlugin(parser))
@@ -59,19 +91,12 @@ onMounted(async () => {
     vrm = gltf.userData.vrm as VRM
     VRMUtils.removeUnnecessaryVertices(gltf.scene)
     VRMUtils.removeUnnecessaryJoints(gltf.scene)
-    // VRM 1.0 spec: model "front" is -Z. Camera sits at +Z, so without
-    // this rotation we'd see the back of the head. 180° on Y flips the
-    // model to face the camera.
     vrm.scene.rotation.y = Math.PI
-    // Break out of T-pose into a relaxed idle stance. VRM rest pose has
-    // arms extended outward; rotating the upper-arm Z axis brings them
-    // down to the sides. Sign is opposite per side because of the
-    // mirrored arm chain.
+
     const leftUpperArm = vrm.humanoid?.getNormalizedBoneNode('leftUpperArm')
     const rightUpperArm = vrm.humanoid?.getNormalizedBoneNode('rightUpperArm')
-    if (leftUpperArm) leftUpperArm.rotation.z = 1.3   // ~75° down
+    if (leftUpperArm) leftUpperArm.rotation.z = 1.3
     if (rightUpperArm) rightUpperArm.rotation.z = -1.3
-    // Slight forearm bend for a natural standing pose
     const leftLowerArm = vrm.humanoid?.getNormalizedBoneNode('leftLowerArm')
     const rightLowerArm = vrm.humanoid?.getNormalizedBoneNode('rightLowerArm')
     if (leftLowerArm) leftLowerArm.rotation.y = 0.2
@@ -84,6 +109,10 @@ onMounted(async () => {
     return
   }
 
+  fit()
+  resizeObs = new ResizeObserver(fit)
+  resizeObs.observe(canvasEl.value)
+
   clock = new THREE.Clock()
   const animate = () => {
     rafId = requestAnimationFrame(animate)
@@ -91,13 +120,57 @@ onMounted(async () => {
     const t = clock!.elapsedTime
 
     if (vrm) {
-      // Idle breathing — sine on spine
-      const spine = vrm.humanoid?.getNormalizedBoneNode('spine')
-      if (spine) spine.rotation.x = Math.sin(t * 1.4) * 0.02
+      const hum = vrm.humanoid
+      const spine = hum?.getNormalizedBoneNode('spine')
+      const chest = hum?.getNormalizedBoneNode('chest')
+      const neck = hum?.getNormalizedBoneNode('neck')
+      const head = hum?.getNormalizedBoneNode('head')
+      const hips = hum?.getNormalizedBoneNode('hips')
+      const lUA = hum?.getNormalizedBoneNode('leftUpperArm')
+      const rUA = hum?.getNormalizedBoneNode('rightUpperArm')
 
-      // Lip sync: smooth toward target, drive 'aa' blendshape
+      // Breathing — slow sine on chest+spine, ~14 cycles/min.
+      const breath = Math.sin(t * 1.4) * 0.018
+      if (spine) spine.rotation.x = breath
+      if (chest) chest.rotation.x = breath * 0.6
+
+      // Weight shift — slow lateral hip sway over ~6s. Gives her a natural
+      // standing presence instead of a stock-still T-pose feel.
+      const sway = Math.sin(t * 0.55)
+      if (hips) {
+        hips.rotation.z = sway * 0.025
+        hips.position.x = sway * 0.015
+      }
+
+      // Head + neck — subtle counter-sway and a shallower vertical drift so
+      // her gaze doesn't lock onto a single point.
+      if (neck) neck.rotation.y = -sway * 0.04
+      if (head) {
+        head.rotation.y = -sway * 0.05
+        head.rotation.x = Math.sin(t * 0.9) * 0.025
+      }
+
+      // Arm idle — very small inward/outward swing, layered on top of the
+      // resting Z rotation set above. Magnitudes are intentionally tiny.
+      if (lUA) lUA.rotation.x = Math.sin(t * 0.7) * 0.04
+      if (rUA) rUA.rotation.x = Math.sin(t * 0.7 + 0.6) * 0.04
+
+      // Blink — every 2-5s, close the eyes for ~140ms. blinkPhase ramps
+      // 0→1→0; expressionManager.blink takes that directly.
+      if (t >= nextBlinkAt) {
+        blinkPhase += dt * 12
+        if (blinkPhase >= 2) {
+          blinkPhase = 0
+          nextBlinkAt = t + 2 + Math.random() * 3
+        }
+      }
+      const blinkVal = blinkPhase < 1 ? blinkPhase : Math.max(0, 2 - blinkPhase)
+      vrm.expressionManager?.setValue('blink', blinkVal)
+
+      // Mouth — smooth toward target driven by the analyser in the parent.
       mouthOpenSmoothed += (mouthOpenTarget - mouthOpenSmoothed) * Math.min(1, dt * 18)
       vrm.expressionManager?.setValue('aa', mouthOpenSmoothed)
+
       vrm.update(dt)
     }
 
@@ -108,6 +181,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(rafId)
+  resizeObs?.disconnect()
   renderer?.dispose()
   if (vrm) VRMUtils.deepDispose(vrm.scene)
   scene = null
@@ -117,8 +191,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="wellness-avatar relative" :style="{ height: (props.height ?? 320) + 'px' }">
-    <canvas ref="canvasEl" class="w-full h-full block"></canvas>
+  <div class="wellness-avatar relative" :style="{ height: (props.height ?? 420) + 'px' }">
+    <div class="avatar-bg absolute inset-0 pointer-events-none" aria-hidden="true">
+      <div class="bg-glow"></div>
+    </div>
+    <canvas ref="canvasEl" class="relative w-full h-full block"></canvas>
     <div
       v-if="status === 'loading'"
       class="absolute inset-0 flex items-center justify-center text-xs text-txt-muted"
@@ -133,3 +210,26 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.avatar-bg {
+  /* Warm dawn → dusk vertical gradient. Subtle enough not to compete with
+     the model, distinct enough that the canvas no longer looks like a
+     transparent rectangle floating on the page. */
+  background:
+    radial-gradient(ellipse at 50% 110%, rgba(168, 85, 247, 0.12), transparent 65%),
+    linear-gradient(180deg, #1a1530 0%, #2a1f4a 45%, #3a2a5a 100%);
+  border-radius: inherit;
+  overflow: hidden;
+}
+.bg-glow {
+  position: absolute;
+  left: 50%;
+  top: 65%;
+  width: 70%;
+  height: 60%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse, rgba(255, 200, 150, 0.18), transparent 70%);
+  filter: blur(12px);
+}
+</style>

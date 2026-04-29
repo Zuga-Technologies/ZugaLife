@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Lightbulb,
   Loader2,
+  Lock,
   MessageCircleHeart,
   Mic,
   MicOff,
@@ -14,6 +15,8 @@ import {
   Send,
   Trash2,
   Pencil,
+  User,
+  X,
 } from 'lucide-vue-next'
 import WellnessAvatar from '../components/WellnessAvatar.vue'
 import { useAvatarSpeech } from '../composables/useAvatarSpeech'
@@ -146,12 +149,19 @@ const { speak: avatarSpeak, stop: avatarStop, speaking: avatarSpeaking } = useAv
   avatarRef.value?.setMouthOpen(v)
 })
 
-// Avatar visibility AND voice are one concept now. When avatarEnabled is on,
-// the user sees the 3D character AND hears the bot speak its replies — there
-// is no separate "mute voice" mode. Toggling avatarEnabled off mid-utterance
-// stops any in-flight speech immediately.
+// Avatar visibility AND voice are one concept. Toggling off mid-utterance
+// stops any in-flight speech immediately. Persisted to localStorage so the
+// Settings tab and the inline bottom-right toggle stay in sync.
 watch(avatarEnabled, (enabled) => {
+  localStorage.setItem('zugalife_avatar_enabled', enabled ? '1' : '0')
   if (!enabled) avatarStop()
+})
+
+// Pick up changes from the Settings tab while a chat session is open.
+window.addEventListener('storage', (e) => {
+  if (e.key === 'zugalife_avatar_enabled') {
+    avatarEnabled.value = e.newValue !== '0'
+  }
 })
 
 // ── Voice input (Whisper STT) ─────────────────────────────────
@@ -162,13 +172,55 @@ const voiceInputEnabled = ref(localStorage.getItem('zugalife_voice_input_enabled
 const { recording: voiceRecording, lastError: voiceInputError, isSupported: voiceInputSupported, start: voiceStart, stop: voiceStop, cancel: voiceCancel } = useVoiceInput()
 const transcribing = ref(false)
 
+// Surface a per-platform hint when the browser has previously denied mic
+// access — at that point getUserMedia rejects without re-prompting and the
+// user has to flip a setting manually. The hint is best-effort: not every
+// browser exposes the Permissions API for "microphone".
+async function micPermissionState(): Promise<'granted' | 'denied' | 'prompt' | 'unknown'> {
+  try {
+    const perms = (navigator as Navigator & { permissions?: { query: (q: { name: PermissionName }) => Promise<PermissionStatus> } }).permissions
+    if (!perms) return 'unknown'
+    const res = await perms.query({ name: 'microphone' as PermissionName })
+    return res.state as 'granted' | 'denied' | 'prompt'
+  } catch {
+    return 'unknown'
+  }
+}
+
+function deniedHint(): string {
+  const ua = navigator.userAgent.toLowerCase()
+  const isMobile = /iphone|ipad|android/.test(ua)
+  if (isMobile) {
+    if (/iphone|ipad/.test(ua)) {
+      return 'Microphone blocked. Open iOS Settings → Safari → Microphone → Allow, then reload this page.'
+    }
+    return 'Microphone blocked. Open browser site settings (lock icon → permissions) and allow microphone, then reload.'
+  }
+  return 'Microphone blocked. Click the lock icon in the address bar → Site settings → Microphone → Allow, then reload.'
+}
+
 async function startVoiceCapture() {
   if (transcribing.value || voiceRecording.value) return
   therapistError.value = null
+
+  // Mute the avatar the moment the user reaches for the mic — having both
+  // talking at once is jarring and the user usually wants quiet to think.
+  // No-op if she isn't currently speaking.
+  avatarStop()
+
+  // Pre-check: if the browser already knows mic is denied, surface the
+  // platform-specific recovery instructions instead of letting getUserMedia
+  // fail silently with the generic NotAllowedError.
+  const state = await micPermissionState()
+  if (state === 'denied') {
+    therapistError.value = deniedHint()
+    return
+  }
+
   const ok = await voiceStart()
   if (!ok) {
     if (voiceInputError.value === 'NotAllowedError') {
-      therapistError.value = 'Microphone permission denied. Allow mic access in your browser to use voice input.'
+      therapistError.value = deniedHint()
     } else if (voiceInputError.value === 'unsupported') {
       therapistError.value = 'Voice input not supported on this browser. Type your message instead.'
     } else if (voiceInputError.value) {
@@ -176,6 +228,7 @@ async function startVoiceCapture() {
     }
   }
 }
+
 
 async function stopVoiceCaptureAndTranscribe() {
   if (!voiceRecording.value) return
@@ -597,14 +650,55 @@ defineExpose({ therapistSessionActive, therapistMessages })
              padding (rough but stable enough for both mobile and desktop). -->
       <div v-else class="flex flex-col h-[calc(100dvh-220px)] min-h-[320px] max-h-[calc(100dvh-220px)]">
         <!-- Avatar — when on, she's both visible AND speaks the replies.
-             No separate mute toggle: the avatar is the wellness bot. To go
-             text-only, disable the avatar in Settings. -->
-        <div v-if="avatarEnabled" class="mb-3 rounded-xl overflow-hidden bg-surface-2/40 border border-bdr/40">
-          <WellnessAvatar ref="avatarRef" :height="280" />
-          <div class="px-3 py-1.5 text-xs text-txt-muted border-t border-bdr/40">
-            <span>{{ avatarSpeaking ? 'Speaking…' : 'Listening' }}</span>
+             The bottom-right toggle hides her without leaving the session,
+             same key as the Settings tab so both surfaces stay in sync. -->
+        <div v-if="avatarEnabled" class="mb-3 rounded-2xl overflow-hidden border border-bdr/40 relative">
+          <WellnessAvatar ref="avatarRef" :height="380" />
+          <!-- Status pill (top-left): "Speaking…" while audio plays, otherwise
+               quiet. Floats over the gradient backdrop. -->
+          <div
+            class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/35 backdrop-blur-sm text-[11px] text-white/90 flex items-center gap-1.5 transition-opacity"
+            :class="avatarSpeaking ? 'opacity-100' : 'opacity-60'"
+          >
+            <span
+              class="w-1.5 h-1.5 rounded-full"
+              :class="avatarSpeaking ? 'bg-emerald-400 animate-pulse' : 'bg-white/40'"
+            ></span>
+            {{ avatarSpeaking ? 'Speaking' : 'Listening' }}
           </div>
+          <!-- Privacy line (top-right): keeps the Venice-private framing
+               visible — chat content never leaves Venice; voice in/out is
+               processed by Whisper / Cartesia for audio bytes only. -->
+          <div
+            class="absolute top-3 right-12 px-2.5 py-1 rounded-full bg-black/35 backdrop-blur-sm text-[10px] text-white/75 flex items-center gap-1"
+            title="Conversation stays in Venice (private). Voice audio bytes are processed by Whisper (STT) and Cartesia (TTS)."
+          >
+            <Lock :size="10" />
+            <span class="hidden sm:inline">Venice-private chat</span>
+            <span class="sm:hidden">Private</span>
+          </div>
+          <!-- Avatar on/off toggle (bottom-right). Closes back to text-only
+               wellness chat without leaving the session. -->
+          <button
+            @click="avatarEnabled = false"
+            class="absolute bottom-3 right-3 w-9 h-9 rounded-full bg-black/45 hover:bg-black/65 backdrop-blur-sm text-white/90 flex items-center justify-center transition-colors"
+            :title="'Hide avatar (chat continues without voice)'"
+            :aria-label="'Hide avatar'"
+          >
+            <X :size="16" />
+          </button>
         </div>
+        <!-- Floating "show avatar" pill when she's off. Inline so the user
+             doesn't have to leave chat for Settings to bring her back. -->
+        <button
+          v-else
+          @click="avatarEnabled = true"
+          class="mb-3 self-end inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-2 hover:bg-surface-3 border border-bdr/60 text-xs text-txt-secondary transition-colors"
+          title="Show avatar &amp; speak replies"
+        >
+          <User :size="14" />
+          Show avatar
+        </button>
         <!-- Messages -->
         <div class="flex-1 overflow-y-auto space-y-4 mb-4 pr-1" ref="chatContainer">
           <div
