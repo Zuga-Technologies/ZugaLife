@@ -177,6 +177,7 @@ const {
   phase: voicePhase,
   volume: voiceVolume,
   lastError: voiceLastError,
+  interimTranscript: voiceInterim,
   toggle: voiceToggle,
   mute: voiceMute,
 } = useVoiceLoop({
@@ -668,6 +669,18 @@ defineExpose({ therapistSessionActive, therapistMessages })
           >
             <X :size="16" />
           </button>
+          <!-- Live caption strip (bottom-center). Visible only while the user
+               is actively speaking and we have interim text from the Web Speech
+               API. Whisper still produces the canonical transcript that ends
+               up as the chat bubble — this is purely visual feedback so the
+               user sees motion as they talk. Empty on browsers without
+               SpeechRecognition (Safari/iOS); the volume meter handles those. -->
+          <div
+            v-if="!voiceMuted && voiceInterim"
+            class="absolute left-1/2 -translate-x-1/2 bottom-14 max-w-[80%] px-3 py-1.5 rounded-lg bg-black/55 backdrop-blur-sm text-white/90 text-sm text-center leading-snug pointer-events-none animate-fade-in"
+          >
+            {{ voiceInterim }}
+          </div>
         </div>
         <!-- Floating "show avatar" pill when she's off. Inline so the user
              doesn't have to leave chat for Settings to bring her back. -->

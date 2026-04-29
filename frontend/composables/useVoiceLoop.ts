@@ -39,11 +39,35 @@ interface UseVoiceLoopOptions {
   voiceFramesRequired?: number // consecutive frames above threshold before we trust it's voice
 }
 
+// Web Speech API — non-standard, ambient-typed below so TS doesn't whine.
+// We use it purely for live captions (interim results while the user is
+// speaking). The canonical transcript still comes from Whisper-on-blob.
+type SR = {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  onresult: ((e: { resultIndex: number; results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean; length: number }> }) => void) | null
+  onerror: ((e: unknown) => void) | null
+  onend: (() => void) | null
+  start: () => void
+  stop: () => void
+  abort: () => void
+}
+type SRCtor = new () => SR
+function getSpeechRecognitionCtor(): SRCtor | null {
+  const w = window as unknown as { SpeechRecognition?: SRCtor; webkitSpeechRecognition?: SRCtor }
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
+}
+
 export function useVoiceLoop(opts: UseVoiceLoopOptions) {
   const muted = ref(true)
   const phase = ref<VoicePhase>('idle')
   const volume = ref(0)
   const lastError = ref<string | null>(null)
+  // Live caption: in-progress recognition text. Empty when nothing is being
+  // heard. Updates frame-by-frame as the user speaks; cleared once the
+  // utterance is finalised and handed off to Whisper.
+  const interimTranscript = ref('')
 
   const VAD_THRESHOLD = opts.vadThreshold ?? 0.025
   const SILENCE_MS = opts.silenceMs ?? 1300
@@ -62,6 +86,11 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
   let utteranceStartedAt = 0
   let utteranceCapAt = 0
   let speaking = false
+  let recognition: SR | null = null
+  // Chrome's SpeechRecognition stops itself after a few seconds of silence
+  // even with continuous=true. We restart it from `onend` while the loop is
+  // still unmuted so captions resume on the next utterance.
+  let recognitionRestartPending = false
 
   function clearSilenceTimer() {
     if (silenceTimer) {
@@ -134,6 +163,8 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
       return false
     }
 
+    startRecognition()
+
     muted.value = false
     phase.value = 'listening'
     smoothedVol = 0
@@ -141,6 +172,61 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
     speaking = false
     monitorTick()
     return true
+  }
+
+  function startRecognition() {
+    const Ctor = getSpeechRecognitionCtor()
+    if (!Ctor) return // Safari/iOS: no Web Speech API. Captions silently disabled.
+    try {
+      const r = new Ctor()
+      r.continuous = true
+      r.interimResults = true
+      r.lang = 'en-US'
+      r.onresult = (e) => {
+        let finalText = ''
+        let interim = ''
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const res = e.results[i]
+          const text = res[0].transcript
+          if (res.isFinal) finalText += text
+          else interim += text
+        }
+        // Whichever is freshest wins as the caption. We don't keep finals
+        // around — Whisper is the canonical source — so the caption clears
+        // naturally when the user finishes speaking.
+        interimTranscript.value = (finalText + interim).trim()
+      }
+      r.onerror = (e) => {
+        // 'no-speech' / 'aborted' are routine; just let onend restart us.
+        console.warn('[voice-loop] SpeechRecognition error', e)
+      }
+      r.onend = () => {
+        if (!muted.value && !recognitionRestartPending) {
+          recognitionRestartPending = true
+          setTimeout(() => {
+            recognitionRestartPending = false
+            if (!muted.value && recognition) {
+              try { recognition.start() } catch { /* already running */ }
+            }
+          }, 250)
+        }
+      }
+      recognition = r
+      r.start()
+    } catch (e) {
+      console.warn('[voice-loop] SpeechRecognition init failed:', e)
+      recognition = null
+    }
+  }
+
+  function stopRecognition() {
+    if (!recognition) return
+    try { recognition.abort() } catch { /* ignore */ }
+    recognition.onresult = null
+    recognition.onerror = null
+    recognition.onend = null
+    recognition = null
+    interimTranscript.value = ''
   }
 
   function mute() {
@@ -153,6 +239,7 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
       chunks = []
       try { recorder.stop() } catch { /* ignore */ }
     }
+    stopRecognition()
     teardownAudio()
     phase.value = 'idle'
     volume.value = 0
@@ -268,6 +355,9 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
     } catch (e) {
       lastError.value = e instanceof Error ? e.message : 'transcribe-failed'
     } finally {
+      // Caption was the in-flight live preview; the canonical text is now
+      // committed (or sent), so wipe it before the next utterance starts.
+      interimTranscript.value = ''
       phase.value = muted.value ? 'idle' : 'listening'
     }
   }
@@ -279,5 +369,5 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
 
   onBeforeUnmount(() => mute())
 
-  return { muted, phase, volume, lastError, toggle, unmute, mute }
+  return { muted, phase, volume, lastError, interimTranscript, toggle, unmute, mute }
 }
