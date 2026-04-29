@@ -20,7 +20,7 @@ import {
 } from 'lucide-vue-next'
 import WellnessAvatar from '../components/WellnessAvatar.vue'
 import { useAvatarSpeech } from '../composables/useAvatarSpeech'
-import { useVoiceInput, transcribeBlob } from '../composables/useVoiceInput'
+import { useVoiceLoop } from '../composables/useVoiceLoop'
 
 // ── Shared composable ──────────────────────────────────────────
 const {
@@ -164,18 +164,39 @@ window.addEventListener('storage', (e) => {
   }
 })
 
-// ── Voice input (Whisper STT) ─────────────────────────────────
-// Available in BOTH text-mode and avatar-mode sessions; toggled separately
-// from voice OUTPUT (avatar speech). Cost is metered in ZugaTokens via the
-// /api/life/therapist/transcribe BE — same ledger as chat + TTS.
+// ── Voice loop (continuous mute/unmute) ───────────────────────
+// Pattern lifted from ZugaGamerOverlay's voice service: client-side VAD +
+// silence-segmentation. Unmuted = the bot is actively listening; an
+// utterance ends on silence and is auto-transcribed and auto-sent. No more
+// 2-stage tap-record-tap-stop-tap-send dance.
+const voiceInputSupported = !!(typeof window !== 'undefined' && window.MediaRecorder && navigator.mediaDevices?.getUserMedia)
 const voiceInputEnabled = ref(localStorage.getItem('zugalife_voice_input_enabled') !== '0')
-const { recording: voiceRecording, lastError: voiceInputError, isSupported: voiceInputSupported, start: voiceStart, stop: voiceStop, cancel: voiceCancel } = useVoiceInput()
-const transcribing = ref(false)
+
+const {
+  muted: voiceMuted,
+  phase: voicePhase,
+  volume: voiceVolume,
+  lastError: voiceLastError,
+  toggle: voiceToggle,
+  mute: voiceMute,
+} = useVoiceLoop({
+  onTranscript: handleVoiceTranscript,
+  isOutputSpeaking: () => avatarSpeaking.value,
+})
+
+async function handleVoiceTranscript(text: string) {
+  if (!text) return
+  // Briefly drop the heard text into the input so the user sees what landed,
+  // then sendTherapistMessage() reads it back, clears, and ships it.
+  const existing = therapistInput.value.trim()
+  therapistInput.value = existing ? `${existing} ${text}` : text
+  notifyTokenSpend()
+  await sendTherapistMessage()
+}
 
 // Surface a per-platform hint when the browser has previously denied mic
 // access — at that point getUserMedia rejects without re-prompting and the
-// user has to flip a setting manually. The hint is best-effort: not every
-// browser exposes the Permissions API for "microphone".
+// user has to flip a setting manually.
 async function micPermissionState(): Promise<'granted' | 'denied' | 'prompt' | 'unknown'> {
   try {
     const perms = (navigator as Navigator & { permissions?: { query: (q: { name: PermissionName }) => Promise<PermissionStatus> } }).permissions
@@ -199,79 +220,43 @@ function deniedHint(): string {
   return 'Microphone blocked. Click the lock icon in the address bar → Site settings → Microphone → Allow, then reload.'
 }
 
-async function startVoiceCapture() {
-  if (transcribing.value || voiceRecording.value) return
+async function toggleVoice() {
   therapistError.value = null
 
-  // Mute the avatar the moment the user reaches for the mic — having both
-  // talking at once is jarring and the user usually wants quiet to think.
-  // No-op if she isn't currently speaking.
-  avatarStop()
-
-  // Pre-check: if the browser already knows mic is denied, surface the
-  // platform-specific recovery instructions instead of letting getUserMedia
-  // fail silently with the generic NotAllowedError.
-  const state = await micPermissionState()
-  if (state === 'denied') {
-    therapistError.value = deniedHint()
-    return
-  }
-
-  const ok = await voiceStart()
-  if (!ok) {
-    if (voiceInputError.value === 'NotAllowedError') {
+  // Going from muted → unmuted: pre-check permission so we can give a useful
+  // recovery hint instead of the bare NotAllowedError. Going the other way
+  // (unmute → mute) is a no-op for permissions.
+  if (voiceMuted.value) {
+    avatarStop()
+    const state = await micPermissionState()
+    if (state === 'denied') {
       therapistError.value = deniedHint()
-    } else if (voiceInputError.value === 'unsupported') {
-      therapistError.value = 'Voice input not supported on this browser. Type your message instead.'
-    } else if (voiceInputError.value) {
-      therapistError.value = `Mic error: ${voiceInputError.value}. Type your message instead.`
-    }
-  }
-}
-
-
-async function stopVoiceCaptureAndTranscribe() {
-  if (!voiceRecording.value) return
-  transcribing.value = true
-  try {
-    const blob = await voiceStop()
-    if (!blob) {
-      therapistError.value = 'No audio captured. Try again.'
       return
     }
-    const { result, error } = await transcribeBlob(blob)
-    if (error === 'no-credits') {
-      therapistError.value = handleInsufficientTokens('Voice Input')
-    } else if (error === 'too-large') {
-      therapistError.value = 'Recording too long. Keep it under ~10 minutes.'
-    } else if (error === 'provider-down') {
-      therapistError.value = handleServiceError('Transcription Unavailable', 'The voice service is temporarily down. Type your message instead.')
-    } else if (error) {
-      therapistError.value = handleServiceError('Transcription Failed', `Could not transcribe (${error}). Type your message instead.`)
-    } else if (result) {
-      // Append (don't overwrite) so users can mix typed + spoken without losing
-      // text they were already drafting.
-      therapistInput.value = therapistInput.value
-        ? `${therapistInput.value} ${result.text}`.trim()
-        : result.text
-      notifyTokenSpend()
-    }
-  } finally {
-    transcribing.value = false
+  }
+
+  await voiceToggle()
+
+  if (voiceLastError.value === 'NotAllowedError') {
+    therapistError.value = deniedHint()
+  } else if (voiceLastError.value === 'unsupported') {
+    therapistError.value = 'Voice input not supported on this browser. Type your message instead.'
+  } else if (voiceLastError.value && voiceLastError.value !== 'no-credits') {
+    // no-credits surfaces via notifyTokenSpend / chat path — no need to double-up.
+    therapistError.value = `Mic error: ${voiceLastError.value}. Type your message instead.`
   }
 }
 
-// If the user disables voice input mid-recording (toggled from settings tab
-// while a session is open), abort the in-flight recording cleanly.
+// If the user disables voice input from Settings while a session is open,
+// kill the loop so the mic releases.
 watch(voiceInputEnabled, (v) => {
-  if (!v && voiceRecording.value) voiceCancel()
+  if (!v && !voiceMuted.value) voiceMute()
 })
 
-// Keep voiceInputEnabled in sync with the settings panel — the panel writes
-// localStorage; this picks up the change when the user comes back to chat.
 window.addEventListener('storage', (e) => {
   if (e.key === 'zugalife_voice_input_enabled') {
     voiceInputEnabled.value = e.newValue !== '0'
+    if (e.newValue === '0' && !voiceMuted.value) voiceMute()
   }
 })
 
@@ -794,64 +779,84 @@ defineExpose({ therapistSessionActive, therapistMessages })
               {{ therapistEndingSession ? 'Saving...' : 'End Session' }}
             </button>
           </div>
-          <!-- Recording status banner — sits above the input so the user
-               can't miss the "tap mic again to send" affordance. The mic
-               button alone wasn't a strong enough signal: users were
-               tapping once and waiting, expecting the bot to pick up. -->
+          <!-- Voice status — only renders when the loop is doing something.
+               Muted = no banner; the mic button itself signals state. -->
           <div
-            v-if="voiceRecording"
-            class="flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 animate-fade-in"
+            v-if="!voiceMuted"
+            class="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg border animate-fade-in"
+            :class="{
+              'bg-red-500/10 border-red-500/30 text-red-300': voicePhase === 'capturing',
+              'bg-accent/10 border-accent/30 text-accent': voicePhase === 'transcribing',
+              'bg-surface-2/60 border-bdr/60 text-txt-muted': voicePhase === 'listening' || voicePhase === 'paused',
+            }"
           >
-            <div class="flex items-center gap-2">
-              <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-              <span class="text-xs text-red-300">Recording — tap the mic again to stop &amp; transcribe</span>
+            <span
+              class="w-2 h-2 rounded-full"
+              :class="{
+                'bg-red-500 animate-pulse': voicePhase === 'capturing',
+                'bg-accent animate-pulse': voicePhase === 'transcribing',
+                'bg-emerald-400 animate-pulse': voicePhase === 'listening',
+                'bg-txt-muted/60': voicePhase === 'paused',
+              }"
+            ></span>
+            <span class="text-xs flex-1">
+              <template v-if="voicePhase === 'capturing'">Capturing — pause to send</template>
+              <template v-else-if="voicePhase === 'transcribing'">Transcribing…</template>
+              <template v-else-if="voicePhase === 'paused'">Paused while she's speaking</template>
+              <template v-else>Listening — just talk</template>
+            </span>
+            <!-- Volume meter — visible feedback that her ears are open. -->
+            <div class="w-16 h-1.5 rounded-full bg-surface-3 overflow-hidden">
+              <div
+                class="h-full transition-[width] duration-75"
+                :class="voicePhase === 'capturing' ? 'bg-red-500' : 'bg-emerald-400'"
+                :style="{ width: Math.round(voiceVolume * 100) + '%' }"
+              ></div>
             </div>
-            <button
-              @click="voiceCancel()"
-              class="text-xs text-txt-muted hover:text-txt-primary transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-          <div
-            v-else-if="transcribing"
-            class="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/30 animate-fade-in"
-          >
-            <Loader2 :size="14" class="text-accent animate-spin" />
-            <span class="text-xs text-accent">Transcribing your voice...</span>
           </div>
           <div class="flex gap-2">
             <textarea
               v-model="therapistInput"
               @keydown.enter.exact.prevent="sendTherapistMessage()"
-              :placeholder="voiceRecording ? 'Recording…' : (transcribing ? 'Transcribing…' : 'What\'s on your mind...')"
+              :placeholder="voiceMuted ? 'What\'s on your mind...' : (voicePhase === 'transcribing' ? 'Transcribing…' : 'Speak — or type instead')"
               rows="2"
               class="flex-1 bg-surface-2 border border-bdr rounded-xl px-4 py-3 text-sm text-txt-primary placeholder-txt-muted resize-none focus:outline-none focus:ring-1 focus:ring-accent/50"
-              :disabled="therapistSending || therapistMessagesRemaining <= 0 || transcribing"
+              :disabled="therapistSending || therapistMessagesRemaining <= 0 || voicePhase === 'transcribing'"
             ></textarea>
-            <!-- Voice input mic — visible only when the setting is on AND the
-                 browser supports MediaRecorder. Tap to start, tap to stop +
-                 transcribe. Spinner replaces the icon while Whisper runs. -->
+            <!-- Voice mute/unmute — single source of truth. Muted = mic off
+                 entirely. Unmuted = continuous VAD-segmented voice loop. -->
             <button
               v-if="voiceInputEnabled && voiceInputSupported"
-              @click="voiceRecording ? stopVoiceCaptureAndTranscribe() : startVoiceCapture()"
-              :disabled="therapistSending || therapistMessagesRemaining <= 0 || transcribing"
+              @click="toggleVoice()"
+              :disabled="therapistSending || therapistMessagesRemaining <= 0"
               :class="[
-                'self-end px-4 py-3 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed',
-                voiceRecording
-                  ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
-                  : 'bg-surface-3 text-txt-secondary hover:bg-surface-4 border border-bdr',
+                'self-end relative px-4 py-3 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed',
+                voiceMuted
+                  ? 'bg-surface-3 text-txt-secondary hover:bg-surface-4 border border-bdr'
+                  : voicePhase === 'capturing'
+                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    : voicePhase === 'transcribing'
+                      ? 'bg-accent text-white'
+                      : 'bg-emerald-500 text-white hover:bg-emerald-600',
               ]"
-              :title="voiceRecording ? 'Stop and transcribe' : 'Hold-free voice input — tap to start, tap to send'"
-              :aria-label="voiceRecording ? 'Stop recording' : 'Start voice input'"
+              :title="voiceMuted ? 'Unmute mic — talk to her' : 'Mute mic'"
+              :aria-label="voiceMuted ? 'Unmute microphone' : 'Mute microphone'"
+              :aria-pressed="!voiceMuted"
             >
-              <Loader2 v-if="transcribing" :size="18" class="animate-spin" />
-              <MicOff v-else-if="voiceRecording" :size="18" />
+              <Loader2 v-if="voicePhase === 'transcribing'" :size="18" class="animate-spin" />
+              <MicOff v-else-if="voiceMuted" :size="18" />
               <Mic v-else :size="18" />
+              <!-- Pulse ring when actively listening, so even at a glance the
+                   user can tell she's hearing them. -->
+              <span
+                v-if="!voiceMuted && voicePhase !== 'transcribing'"
+                class="absolute -inset-0.5 rounded-xl ring-2 pointer-events-none animate-ping"
+                :class="voicePhase === 'capturing' ? 'ring-red-400/60' : 'ring-emerald-400/60'"
+              ></span>
             </button>
             <button
               @click="sendTherapistMessage()"
-              :disabled="!therapistInput.trim() || therapistSending || therapistMessagesRemaining <= 0 || transcribing"
+              :disabled="!therapistInput.trim() || therapistSending || therapistMessagesRemaining <= 0 || voicePhase === 'transcribing'"
               class="self-end px-4 py-3 rounded-xl bg-accent text-white hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Send :size="18" />

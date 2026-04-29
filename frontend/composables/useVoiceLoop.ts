@@ -1,0 +1,260 @@
+import { ref, onBeforeUnmount } from 'vue'
+import { transcribeBlob } from './useVoiceInput'
+
+/**
+ * Continuous voice loop — the "unmute and just talk" pattern.
+ *
+ * Pattern lifted from ZugaGamerOverlay's voice service (src/services/voice.ts):
+ * client-side VAD via AnalyserNode RMS + silence-timeout segmentation. When
+ * silence persists for SILENCE_MS after the user has been speaking, the
+ * MediaRecorder stops, the blob goes to Whisper, and the resulting text is
+ * handed back to the caller so the wellness chat can auto-send it.
+ *
+ * UX contract:
+ *   - muted=true: mic is fully off (no stream, no recorder, no analyser).
+ *     This is the calm default — privacy + power.
+ *   - muted=false: mic is live, the loop is actively segmenting utterances.
+ *
+ * Differences vs the gamer overlay:
+ *   - No wake word — wellness chat is intentional, not ambient.
+ *   - Whisper-on-blob, not streaming STT (cost + simplicity).
+ *   - Listening is paused while the avatar is speaking (no echo bleed).
+ */
+
+export type VoicePhase =
+  | 'idle'        // muted, nothing running
+  | 'listening'   // mic open, waiting for the user to say something
+  | 'capturing'   // user is currently speaking, MediaRecorder is recording
+  | 'transcribing' // utterance handed to Whisper
+  | 'paused'      // muted-by-output (avatar speaking)
+
+interface UseVoiceLoopOptions {
+  onTranscript: (text: string) => Promise<void> | void
+  isOutputSpeaking: () => boolean
+  // Configurable for future tuning. Defaults are empirically tuned for a
+  // medium-quiet room with normal speech volume.
+  vadThreshold?: number      // RMS at which we count a frame as speech
+  silenceMs?: number          // ms of silence after speech before we end an utterance
+  maxUtteranceMs?: number     // hard cap so a held button or hum can't run forever
+  voiceFramesRequired?: number // consecutive frames above threshold before we trust it's voice
+}
+
+export function useVoiceLoop(opts: UseVoiceLoopOptions) {
+  const muted = ref(true)
+  const phase = ref<VoicePhase>('idle')
+  const volume = ref(0)
+  const lastError = ref<string | null>(null)
+
+  const VAD_THRESHOLD = opts.vadThreshold ?? 0.025
+  const SILENCE_MS = opts.silenceMs ?? 1300
+  const MAX_UTTERANCE_MS = opts.maxUtteranceMs ?? 30_000
+  const VOICE_FRAMES_REQ = opts.voiceFramesRequired ?? 3
+
+  let stream: MediaStream | null = null
+  let ctx: AudioContext | null = null
+  let analyser: AnalyserNode | null = null
+  let recorder: MediaRecorder | null = null
+  let chunks: Blob[] = []
+  let rafId = 0
+  let smoothedVol = 0
+  let voiceFrames = 0
+  let silenceTimer: ReturnType<typeof setTimeout> | null = null
+  let utteranceStartedAt = 0
+  let utteranceCapAt = 0
+  let speaking = false
+
+  function clearSilenceTimer() {
+    if (silenceTimer) {
+      clearTimeout(silenceTimer)
+      silenceTimer = null
+    }
+  }
+
+  async function unmute(): Promise<boolean> {
+    if (!muted.value) return true
+    lastError.value = null
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      lastError.value = 'unsupported'
+      return false
+    }
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
+    } catch (e) {
+      lastError.value = e instanceof Error ? e.name : 'getUserMedia-failed'
+      return false
+    }
+
+    try {
+      const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      ctx = new Ctor()
+      const src = ctx.createMediaStreamSource(stream)
+      analyser = ctx.createAnalyser()
+      analyser.fftSize = 1024
+      src.connect(analyser)
+
+      recorder = new MediaRecorder(stream)
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data)
+      }
+      recorder.onstop = handleUtteranceComplete
+    } catch (e) {
+      lastError.value = e instanceof Error ? e.name : 'audio-init-failed'
+      teardownAudio()
+      return false
+    }
+
+    muted.value = false
+    phase.value = 'listening'
+    smoothedVol = 0
+    voiceFrames = 0
+    speaking = false
+    monitorTick()
+    return true
+  }
+
+  function mute() {
+    if (muted.value) return
+    muted.value = true
+    clearSilenceTimer()
+    cancelAnimationFrame(rafId)
+    if (recorder?.state === 'recording') {
+      // Drop the in-flight chunk — user explicitly muted, don't send.
+      chunks = []
+      try { recorder.stop() } catch { /* ignore */ }
+    }
+    teardownAudio()
+    phase.value = 'idle'
+    volume.value = 0
+    speaking = false
+  }
+
+  function teardownAudio() {
+    stream?.getTracks().forEach(t => t.stop())
+    try { ctx?.close() } catch { /* ignore */ }
+    stream = null
+    ctx = null
+    analyser = null
+    recorder = null
+  }
+
+  function monitorTick() {
+    if (!analyser || muted.value) return
+    rafId = requestAnimationFrame(monitorTick)
+
+    const buf = new Uint8Array(analyser.fftSize)
+    analyser.getByteTimeDomainData(buf)
+    let sum = 0
+    for (let i = 0; i < buf.length; i++) {
+      const v = (buf[i] - 128) / 128
+      sum += v * v
+    }
+    const rms = Math.sqrt(sum / buf.length)
+    // Light EMA — fast enough to track speech, smoothed enough that single
+    // loud frames (mouse click, keyboard) don't false-trigger.
+    smoothedVol += (rms - smoothedVol) * 0.3
+    volume.value = Math.min(1, smoothedVol / 0.15)
+
+    // Echo guard: while the avatar is speaking, pause segmentation. Without
+    // this, TTS bleed through the mic gets picked up as user speech and
+    // creates a feedback loop.
+    if (opts.isOutputSpeaking()) {
+      phase.value = 'paused'
+      voiceFrames = 0
+      clearSilenceTimer()
+      // Don't capture or stop here; just wait it out.
+      return
+    }
+
+    if (phase.value === 'transcribing') return
+
+    if (phase.value === 'paused') phase.value = 'listening'
+
+    if (smoothedVol > VAD_THRESHOLD) {
+      voiceFrames++
+      clearSilenceTimer()
+
+      // Voice has crossed the trust threshold and we're not already
+      // capturing — open a fresh utterance.
+      if (voiceFrames >= VOICE_FRAMES_REQ && !speaking) {
+        speaking = true
+        chunks = []
+        utteranceStartedAt = Date.now()
+        utteranceCapAt = utteranceStartedAt + MAX_UTTERANCE_MS
+        try {
+          recorder?.start()
+          phase.value = 'capturing'
+        } catch (e) {
+          lastError.value = e instanceof Error ? e.name : 'recorder-start-failed'
+          speaking = false
+        }
+      }
+
+      // Hard cap — a hum / continuous noise can't run forever.
+      if (speaking && Date.now() > utteranceCapAt) {
+        finishUtterance('max-utterance')
+      }
+    } else {
+      voiceFrames = Math.max(0, voiceFrames - 1)
+      if (speaking && !silenceTimer) {
+        silenceTimer = setTimeout(() => finishUtterance('silence'), SILENCE_MS)
+      }
+    }
+  }
+
+  function finishUtterance(_reason: 'silence' | 'max-utterance') {
+    clearSilenceTimer()
+    if (recorder?.state === 'recording') {
+      try { recorder.stop() } catch { /* ignore */ }
+    }
+  }
+
+  async function handleUtteranceComplete() {
+    speaking = false
+    const utteranceMs = Date.now() - utteranceStartedAt
+    if (chunks.length === 0 || muted.value) {
+      chunks = []
+      return
+    }
+
+    const mime = recorder?.mimeType || 'audio/webm'
+    const blob = new Blob(chunks, { type: mime })
+    chunks = []
+
+    // Filter junk: anything < 400ms is almost certainly cough/click/noise.
+    if (utteranceMs < 400 || blob.size < 1500) {
+      phase.value = muted.value ? 'idle' : 'listening'
+      return
+    }
+
+    phase.value = 'transcribing'
+    try {
+      const { result, error } = await transcribeBlob(blob)
+      if (result?.text?.trim()) {
+        await opts.onTranscript(result.text.trim())
+      } else if (error) {
+        lastError.value = error
+      }
+    } catch (e) {
+      lastError.value = e instanceof Error ? e.message : 'transcribe-failed'
+    } finally {
+      phase.value = muted.value ? 'idle' : 'listening'
+    }
+  }
+
+  async function toggle() {
+    if (muted.value) await unmute()
+    else mute()
+  }
+
+  onBeforeUnmount(() => mute())
+
+  return { muted, phase, volume, lastError, toggle, unmute, mute }
+}
