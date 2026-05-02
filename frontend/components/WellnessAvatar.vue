@@ -108,14 +108,18 @@ onMounted(async () => {
     VRMUtils.removeUnnecessaryJoints(gltf.scene)
     vrm.scene.rotation.y = Math.PI
 
+    // Rest pose: drop arms from T-pose binding pose (VRM 1.0 spec) to sides.
+    // Sign convention is OPPOSITE of the original anime VRM because that
+    // model shipped with arms-down bind; ours ships with proper T-pose bind,
+    // and three-vrm's normalized rotation.z flips meaning across the two.
     const leftUpperArm = vrm.humanoid?.getNormalizedBoneNode('leftUpperArm')
     const rightUpperArm = vrm.humanoid?.getNormalizedBoneNode('rightUpperArm')
-    if (leftUpperArm) leftUpperArm.rotation.z = 1.3
-    if (rightUpperArm) rightUpperArm.rotation.z = -1.3
+    if (leftUpperArm) leftUpperArm.rotation.z = -1.3
+    if (rightUpperArm) rightUpperArm.rotation.z = 1.3
     const leftLowerArm = vrm.humanoid?.getNormalizedBoneNode('leftLowerArm')
     const rightLowerArm = vrm.humanoid?.getNormalizedBoneNode('rightLowerArm')
-    if (leftLowerArm) leftLowerArm.rotation.y = 0.2
-    if (rightLowerArm) rightLowerArm.rotation.y = -0.2
+    if (leftLowerArm) leftLowerArm.rotation.y = -0.2
+    if (rightLowerArm) rightLowerArm.rotation.y = 0.2
     scene.add(vrm.scene)
     status.value = 'ready'
   } catch (e) {
