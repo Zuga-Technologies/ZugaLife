@@ -16,6 +16,8 @@ import {
   Trash2,
   Pencil,
   User,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-vue-next'
 import WellnessAvatar from '../components/WellnessAvatar.vue'
@@ -145,20 +147,32 @@ const chatContainer = ref<HTMLElement | null>(null)
 // ── Avatar + speech ───────────────────────────────────────────
 const avatarRef = ref<InstanceType<typeof WellnessAvatar> | null>(null)
 const avatarEnabled = ref(localStorage.getItem('zugalife_avatar_enabled') !== '0')
+// Voice is decoupled from avatar visibility: users can keep the avatar on
+// screen but mute her, or hide her entirely. Default = on (matches prior
+// behaviour where the only way to silence was to hide the avatar).
+const avatarVoiceEnabled = ref(localStorage.getItem('zugalife_avatar_voice_enabled') !== '0')
 const { speak: avatarSpeak, stop: avatarStop, prewarm: avatarPrewarm, speaking: avatarSpeaking } = useAvatarSpeech((v) => {
   avatarRef.value?.setMouthOpen(v)
 })
 
-// Avatar visibility AND voice are one concept. Toggling off mid-utterance
-// stops any in-flight speech immediately. Persisted to localStorage so the
-// Settings tab and the inline bottom-right toggle stay in sync.
+// Hiding the avatar always stops in-flight speech. Showing the avatar
+// re-warms the AudioContext (counts as a user gesture in the same tick).
 watch(avatarEnabled, (enabled) => {
   localStorage.setItem('zugalife_avatar_enabled', enabled ? '1' : '0')
   if (!enabled) {
     avatarStop()
-  } else {
-    // Re-enabling counts as a user gesture in the same tick — prewarm the
-    // AudioContext so the next reply plays without an extra resume() wait.
+  } else if (avatarVoiceEnabled.value) {
+    avatarPrewarm().catch(() => { /* best-effort */ })
+  }
+})
+
+// Mute toggle — independent of avatar visibility. Off = stop any in-flight
+// utterance immediately and skip future TTS calls (no Cartesia spend).
+watch(avatarVoiceEnabled, (enabled) => {
+  localStorage.setItem('zugalife_avatar_voice_enabled', enabled ? '1' : '0')
+  if (!enabled) {
+    avatarStop()
+  } else if (avatarEnabled.value) {
     avatarPrewarm().catch(() => { /* best-effort */ })
   }
 })
@@ -167,6 +181,8 @@ watch(avatarEnabled, (enabled) => {
 window.addEventListener('storage', (e) => {
   if (e.key === 'zugalife_avatar_enabled') {
     avatarEnabled.value = e.newValue !== '0'
+  } else if (e.key === 'zugalife_avatar_voice_enabled') {
+    avatarVoiceEnabled.value = e.newValue !== '0'
   }
 })
 
@@ -367,7 +383,7 @@ async function startTherapistSession() {
   // The Start button click is a definite user gesture — pre-warm the
   // AudioContext now so the first greeting plays the instant the audio
   // bytes arrive, instead of waiting on AudioContext.resume() at that point.
-  if (avatarEnabled.value) {
+  if (avatarEnabled.value && avatarVoiceEnabled.value) {
     avatarPrewarm().catch(() => { /* prewarm is best-effort */ })
   }
 
@@ -388,7 +404,7 @@ async function startTherapistSession() {
     // sent their first message, which felt like the bot "wasn't talking."
     // The greeting is the bot's first turn, so it should get the same
     // voice treatment as every subsequent reply.
-    if (avatarEnabled.value && !document.hidden) {
+    if (avatarEnabled.value && avatarVoiceEnabled.value && !document.hidden) {
       avatarSpeak(therapistGreeting.value).catch(() => { /* silent — text already showing */ })
     }
   }
@@ -411,7 +427,7 @@ async function sendTherapistMessage() {
       { messages: apiMessages },
     )
     therapistMessages.value.push({ role: 'assistant', content: res.content })
-    if (avatarEnabled.value && !document.hidden) {
+    if (avatarEnabled.value && avatarVoiceEnabled.value && !document.hidden) {
       avatarSpeak(res.content).catch(() => { /* silent — chat still works */ })
     }
     therapistMessagesRemaining.value = res.session_messages_remaining
@@ -688,9 +704,9 @@ defineExpose({ therapistSessionActive, therapistMessages })
           >
             <span
               class="w-1.5 h-1.5 rounded-full"
-              :class="avatarSpeaking ? 'bg-emerald-400 animate-pulse' : 'bg-white/40'"
+              :class="!avatarVoiceEnabled ? 'bg-red-400' : avatarSpeaking ? 'bg-emerald-400 animate-pulse' : 'bg-white/40'"
             ></span>
-            {{ avatarSpeaking ? 'Speaking' : 'Listening' }}
+            {{ !avatarVoiceEnabled ? 'Muted' : avatarSpeaking ? 'Speaking' : 'Listening' }}
           </div>
           <!-- Privacy line (top-right): keeps the Venice-private framing
                visible — chat content never leaves Venice; voice in/out is
@@ -703,6 +719,18 @@ defineExpose({ therapistSessionActive, therapistMessages })
             <span class="hidden sm:inline">Venice-private chat</span>
             <span class="sm:hidden">Private</span>
           </div>
+          <!-- Mute toggle (bottom-right, next to the close button). Decoupled
+               from avatar visibility — keeps her on screen but silences TTS
+               (and skips the Cartesia spend). -->
+          <button
+            @click="avatarVoiceEnabled = !avatarVoiceEnabled"
+            class="absolute bottom-3 right-14 w-9 h-9 rounded-full bg-black/45 hover:bg-black/65 backdrop-blur-sm text-white/90 flex items-center justify-center transition-colors"
+            :title="avatarVoiceEnabled ? 'Mute voice (avatar stays visible)' : 'Unmute voice'"
+            :aria-label="avatarVoiceEnabled ? 'Mute voice' : 'Unmute voice'"
+          >
+            <Volume2 v-if="avatarVoiceEnabled" :size="16" />
+            <VolumeX v-else :size="16" class="text-red-300" />
+          </button>
           <!-- Avatar on/off toggle (bottom-right). Closes back to text-only
                wellness chat without leaving the session. -->
           <button
