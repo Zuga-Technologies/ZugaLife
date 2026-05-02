@@ -23,8 +23,20 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
   let analyser: AnalyserNode | null = null
   let rafId = 0
   let currentObjectUrl: string | null = null
+  // Generation counter — incremented on every stop(). speak() captures its
+  // gen before the network round-trip and abandons the playback if the gen
+  // changed (i.e. stop() ran or another speak() superseded it). Without
+  // this, two speak() calls overlapping their fetch windows both produce
+  // Audio elements and play simultaneously — "voices duplicated over each
+  // other" — and a stop() during a fetch produces zombie audio that plays
+  // after the component is gone ("still talking after tabbed out").
+  let gen = 0
+  let pendingAbort: AbortController | null = null
 
   function stop() {
+    gen++
+    pendingAbort?.abort()
+    pendingAbort = null
     cancelAnimationFrame(rafId)
     audio?.pause()
     if (audio) audio.src = ''
@@ -66,6 +78,9 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
   async function speak(text: string, voice = ''): Promise<SpeakResult | null> {
     stop()
     lastError.value = null
+    const myGen = gen
+    const ac = new AbortController()
+    pendingAbort = ac
 
     let blob: Blob
     let cost = 0
@@ -81,6 +96,7 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
         method: 'POST',
         headers,
         body: JSON.stringify({ text, voice }),
+        signal: ac.signal,
       })
       if (!res.ok) {
         if (res.status === 402) lastError.value = 'no-credits'
@@ -92,9 +108,15 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
       cost = parseFloat(res.headers.get('x-tts-cost-usd') ?? '0')
       resolvedVoice = res.headers.get('x-tts-voice') ?? voice
     } catch (e) {
+      // AbortError = caller superseded us; silent return — nothing to surface.
+      if (e instanceof Error && e.name === 'AbortError') return null
       lastError.value = e instanceof Error ? e.message : 'fetch-failed'
       return null
     }
+
+    // Race guard: if stop() (or a fresh speak()) ran while we were awaiting
+    // the network, this generation is stale. Abandon — don't play.
+    if (myGen !== gen) return null
 
     currentObjectUrl = URL.createObjectURL(blob)
     audio = new Audio(currentObjectUrl)
@@ -137,6 +159,13 @@ export function useAvatarSpeech(setMouthOpen: (v: number) => void) {
     try {
       // resume() handles browsers that suspend AudioContext until user gesture
       if (audioCtx.state === 'suspended') await audioCtx.resume()
+      // resume() yields to the event loop — re-check the gen one more time
+      // before play(). If a stop() snuck in during the resume await, drop this
+      // utterance silently rather than playing it after the user has left.
+      if (myGen !== gen) {
+        if (audio) audio.src = ''
+        return null
+      }
       await audio.play()
       tick()
     } catch (_e) {

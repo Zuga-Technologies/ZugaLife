@@ -308,6 +308,11 @@ watch(therapistMessages, () => {
 
 watch(therapistSessionActive, (val) => {
   emit('session-active', val)
+  // The cross-studio leave-warning forces sessionActive=false directly via
+  // the parent's defineExpose handle (skipping endTherapistSession). Without
+  // an avatar-stop here, an in-flight TTS fetch resolves AFTER the warning
+  // is dismissed and starts playing while the user is on a different tab.
+  if (!val) avatarStop()
 })
 
 // ── API functions ─────────────────────────────────────────────
