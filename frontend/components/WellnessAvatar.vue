@@ -179,6 +179,21 @@ onMounted(async () => {
       if (lUA) lUA.rotation.x = Math.sin(t * 0.7) * 0.04
       if (rUA) rUA.rotation.x = Math.sin(t * 0.7 + 0.6) * 0.04
 
+      // Hand idle — subtle wrist rotation + finger-curl analogue. Robot
+      // doesn't have finger bones, so the hand mesh itself rotates around
+      // the wrist on different axes. Slightly different phase L vs R so the
+      // motion doesn't look mechanical-mirrored.
+      const lHand = hum?.getNormalizedBoneNode('leftHand')
+      const rHand = hum?.getNormalizedBoneNode('rightHand')
+      if (lHand) {
+        lHand.rotation.x = Math.sin(t * 1.1) * 0.08         // wrist nod
+        lHand.rotation.z = Math.sin(t * 0.6 + 0.4) * 0.05   // wrist tilt
+      }
+      if (rHand) {
+        rHand.rotation.x = Math.sin(t * 1.1 + 1.2) * 0.08
+        rHand.rotation.z = Math.sin(t * 0.6 + 1.0) * 0.05
+      }
+
       // Blink — every 2-5s, close the eyes for ~140ms. blinkPhase ramps
       // 0→1→0; expressionManager.blink takes that directly.
       if (t >= nextBlinkAt) {
