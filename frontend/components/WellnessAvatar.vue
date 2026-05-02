@@ -70,7 +70,9 @@ onMounted(async () => {
   rim.position.set(-2, 3, -1.5)
   scene.add(ambient, key, rim)
 
-  // Floor disc — soft round shadow catcher so she doesn't appear to float.
+  // Floor disc — soft round shadow catcher so the robot doesn't appear to
+  // float. Removed below if the garage GLB loads successfully (the garage
+  // ships its own floor; keeping both causes z-fighting).
   const floorGeo = new THREE.CircleGeometry(0.9, 48)
   const floorMat = new THREE.MeshBasicMaterial({
     color: 0x000000,
@@ -82,10 +84,23 @@ onMounted(async () => {
   floor.position.y = 0.001
   scene.add(floor)
 
+  // Cyberpunk garage scene — static GLB loaded around the robot. Failure is
+  // non-fatal: the robot still renders against the gradient background.
+  const sceneLoader = new GLTFLoader()
+  sceneLoader
+    .loadAsync('/scenes/cyberpunk-garage.glb')
+    .then((gltf) => {
+      scene!.remove(floor)
+      scene!.add(gltf.scene)
+    })
+    .catch((e) => {
+      console.warn('[WellnessAvatar] garage scene unavailable:', e)
+    })
+
   const loader = new GLTFLoader()
   loader.register((parser) => new VRMLoaderPlugin(parser))
 
-  const url = props.vrmUrl ?? '/avatars/wellness.vrm'
+  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm'
   try {
     const gltf = await loader.loadAsync(url)
     vrm = gltf.userData.vrm as VRM
@@ -168,7 +183,13 @@ onMounted(async () => {
       vrm.expressionManager?.setValue('blink', blinkVal)
 
       // Mouth — smooth toward target driven by the analyser in the parent.
+      // Robot has no `aa` blendshape; lip-sync drives the jaw bone hinge
+      // (range 0..0.5 rad mapped from mouth-open 0..1). The setValue('aa')
+      // call is kept as a no-op fallback in case a non-robot VRM is loaded
+      // via the vrmUrl prop and that VRM exposes a real `aa` shape.
       mouthOpenSmoothed += (mouthOpenTarget - mouthOpenSmoothed) * Math.min(1, dt * 18)
+      const jaw = hum?.getNormalizedBoneNode('jaw')
+      if (jaw) jaw.rotation.x = mouthOpenSmoothed * 0.5
       vrm.expressionManager?.setValue('aa', mouthOpenSmoothed)
 
       vrm.update(dt)
