@@ -566,6 +566,20 @@ onMounted(async () => {
     fetchTherapistNotes(),
   ])
   loadingTherapist.value = false
+
+  // Auto-open the session: skip the old "Start Session" gate so the user
+  // lands straight on the avatar + chat. Daily-quota enforcement still
+  // happens server-side on the chat endpoint, so opening the session
+  // without a message doesn't burn quota.
+  if (
+    therapistAvailable.value &&
+    therapistView.value === 'chat' &&
+    !therapistSessionActive.value &&
+    therapistStatus.value &&
+    therapistStatus.value.sessions_remaining > 0
+  ) {
+    startTherapistSession()
+  }
 })
 
 onBeforeUnmount(() => {
@@ -614,46 +628,11 @@ defineExpose({ therapistSessionActive, therapistMessages })
 
     <!-- ===== CHAT VIEW ===== -->
     <template v-if="therapistView === 'chat'">
-      <!-- Pre-session: start button -->
-      <div v-if="!therapistSessionActive" class="space-y-4">
-        <!-- Disclaimer -->
-        <div v-if="therapistDisclaimer" class="glass-card p-4 border border-accent/20">
-          <div class="flex items-start gap-2">
-            <AlertTriangle :size="16" class="text-accent mt-0.5 shrink-0" />
-            <p class="text-xs text-txt-muted leading-relaxed">{{ therapistDisclaimer }}</p>
-          </div>
-        </div>
-
-        <div class="glass-card p-8 text-center">
-          <MessageCircleHeart :size="40" class="mx-auto mb-4 text-accent" />
-          <h3 class="text-lg font-semibold text-txt-primary mb-2">Ready to talk?</h3>
-          <p class="text-sm text-txt-muted mb-4 max-w-md mx-auto">
-            A private space to reflect, process, and explore what's on your mind.
-            Powered by Venice AI — your data stays private.
-          </p>
-          <!-- Mood before session -->
-          <div class="mb-4">
-            <p class="text-xs text-txt-muted mb-2">How are you feeling right now?</p>
-            <div class="flex flex-wrap justify-center gap-1.5">
-              <button
-                v-for="mood in moods.slice(0, 6)"
-                :key="mood.emoji"
-                @click="therapistMoodBefore = therapistMoodBefore === mood.emoji ? null : mood.emoji"
-                class="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150"
-                :class="therapistMoodBefore === mood.emoji ? 'bg-accent/15 ring-1 ring-accent/50' : 'text-txt-muted hover:bg-surface-3'"
-              >
-                <component :is="moodIcons[mood.emoji]" :size="18" v-if="moodIcons[mood.emoji]" />
-              </button>
-            </div>
-          </div>
-          <button
-            @click="startTherapistSession()"
-            :disabled="therapistStatus?.sessions_remaining === 0"
-            class="px-6 py-3 rounded-lg bg-accent text-white font-medium text-sm hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {{ therapistStatus?.sessions_remaining === 0 ? 'No sessions left today' : 'Start Session' }}
-          </button>
-        </div>
+      <!-- Quota-exhausted banner: the only path that doesn't render the chat. -->
+      <div v-if="therapistStatus?.sessions_remaining === 0" class="glass-card p-8 text-center">
+        <MessageCircleHeart :size="32" class="mx-auto mb-3 text-txt-muted" />
+        <h3 class="text-base font-semibold text-txt-primary mb-1">No sessions left today</h3>
+        <p class="text-sm text-txt-muted">Come back tomorrow to continue talking.</p>
       </div>
 
       <!-- Active session: chat. Fit to visible viewport so the input is
@@ -661,8 +640,36 @@ defineExpose({ therapistSessionActive, therapistMessages })
            - 100dvh (dynamic) tracks mobile URL bar + soft keyboard so the
              input doesn't fall below the fold on iOS Safari.
            - 220px ≈ TopNav + page top padding + back-nav row + bottom
-             padding (rough but stable enough for both mobile and desktop). -->
+             padding (rough but stable enough for both mobile and desktop).
+           No more "Start Session" gate — the session auto-opens on mount
+           (see onMounted). The compact disclaimer + mood-before strip below
+           preserves the legal copy and pre-session sentiment capture that
+           used to live on the old start screen. -->
       <div v-else class="flex flex-col h-[calc(100dvh-220px)] min-h-[320px] max-h-[calc(100dvh-220px)]">
+        <!-- Compact disclaimer + mood-before. Mood strip auto-collapses once
+             a mood is picked or the conversation is underway. -->
+        <div class="mb-3 space-y-2 text-xs">
+          <div v-if="therapistDisclaimer" class="flex items-start gap-2 text-txt-muted leading-snug">
+            <AlertTriangle :size="12" class="text-accent/80 mt-0.5 shrink-0" />
+            <p>{{ therapistDisclaimer }}</p>
+          </div>
+          <div
+            v-if="!therapistMoodBefore && therapistMessages.length <= 1"
+            class="flex items-center gap-2 flex-wrap"
+          >
+            <span class="text-txt-muted">How are you feeling?</span>
+            <div class="flex gap-1">
+              <button
+                v-for="mood in moods.slice(0, 6)"
+                :key="mood.emoji"
+                @click="therapistMoodBefore = mood.emoji"
+                class="w-7 h-7 rounded-md flex items-center justify-center text-txt-muted hover:bg-surface-3 transition-colors"
+              >
+                <component :is="moodIcons[mood.emoji]" :size="15" v-if="moodIcons[mood.emoji]" />
+              </button>
+            </div>
+          </div>
+        </div>
         <!-- Avatar — when on, she's both visible AND speaks the replies.
              The bottom-right toggle hides her without leaving the session,
              same key as the Settings tab so both surfaces stay in sync. -->
