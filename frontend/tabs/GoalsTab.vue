@@ -459,7 +459,7 @@ function deadlineLabel(deadline: string | null): string {
   if (days === 1) return 'Due tomorrow'
   if (days <= 7) return `${days}d left`
   if (days <= 30) return `${Math.ceil(days / 7)}w left`
-  return `${Math.ceil(days / 30)}mo left`
+  return `${Math.round(days / 30)}mo left`
 }
 
 function projectedCompletion(goal: Goal): string | null {
