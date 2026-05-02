@@ -265,8 +265,10 @@ onMounted(async () => {
 
 <template>
   <div>
-    <!-- Animated background layer -->
-    <BackgroundTheme />
+    <!-- Animated background layer — only when standalone; ZugaApp shell renders its own
+         global instance, so rendering a second one here would remount (and reset scenes/
+         particles) on every /life entry. -->
+    <BackgroundTheme v-if="!embedded" />
     <!-- Celebration overlay (toasts, confetti, modals) -->
     <CelebrationOverlay />
     <!-- Studio onboarding (first visit only) -->
