@@ -23,6 +23,7 @@ let resizeObs: ResizeObserver | null = null
 
 let mouthOpenTarget = 0
 let mouthOpenSmoothed = 0
+let mouthMesh: THREE.Object3D | null = null
 
 // Blink schedule — closes the eyes briefly every few seconds. Stored as a
 // running cycle so animate() can interpolate without allocating per frame.
@@ -125,6 +126,13 @@ onMounted(async () => {
     const rightLowerArm = vrm.humanoid?.getNormalizedBoneNode('rightLowerArm')
     if (leftLowerArm) leftLowerArm.rotation.y = -0.2
     if (rightLowerArm) rightLowerArm.rotation.y = 0.2
+
+    // Find the digital mouth mesh — Vue scales its Y axis from
+    // mouthOpenSmoothed each frame so the mouth glyph 'pulses' with TTS audio.
+    // Glyph is intentionally bound to the cranium head bone (not jaw) so it
+    // stays flush with the visor; the audio-driven scale gives the digital
+    // monitor-face the speaking effect.
+    mouthMesh = vrm.scene.getObjectByName('mesh_mouth') ?? null
     scene.add(vrm.scene)
     status.value = 'ready'
   } catch (e) {
@@ -212,8 +220,15 @@ onMounted(async () => {
       // call is kept as a no-op fallback in case a non-robot VRM is loaded
       // via the vrmUrl prop and that VRM exposes a real `aa` shape.
       mouthOpenSmoothed += (mouthOpenTarget - mouthOpenSmoothed) * Math.min(1, dt * 18)
+      // Digital monitor face: scale the mouth glyph's Y axis with audio.
+      // 1.0 idle → up to ~4x when speaking. Reads as a pulsing waveform on
+      // the visor screen, matching the "digitized" face aesthetic.
+      if (mouthMesh) {
+        mouthMesh.scale.y = 1 + mouthOpenSmoothed * 3.0
+      }
+      // Also still drive the jaw bone so the cable_jaw_l SpringBone swings.
       const jaw = hum?.getNormalizedBoneNode('jaw')
-      if (jaw) jaw.rotation.x = mouthOpenSmoothed * 0.5
+      if (jaw) jaw.rotation.x = mouthOpenSmoothed * 0.4
       vrm.expressionManager?.setValue('aa', mouthOpenSmoothed)
 
       vrm.update(dt)
@@ -232,6 +247,7 @@ onBeforeUnmount(() => {
   scene = null
   camera = null
   vrm = null
+  mouthMesh = null
 })
 </script>
 
