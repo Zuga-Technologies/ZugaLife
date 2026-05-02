@@ -91,6 +91,11 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
   // even with continuous=true. We restart it from `onend` while the loop is
   // still unmuted so captions resume on the next utterance.
   let recognitionRestartPending = false
+  // Accumulator for Web Speech finalised text within the current utterance.
+  // This is the canonical transcript when available — what the user sees on
+  // screen IS what gets sent. Whisper is now the fallback (Safari/iOS, or
+  // when Web Speech returned nothing).
+  let utteranceFinalText = ''
 
   function clearSilenceTimer() {
     if (silenceTimer) {
@@ -183,18 +188,17 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
       r.interimResults = true
       r.lang = 'en-US'
       r.onresult = (e) => {
-        let finalText = ''
         let interim = ''
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const res = e.results[i]
           const text = res[0].transcript
-          if (res.isFinal) finalText += text
+          if (res.isFinal) utteranceFinalText += text
           else interim += text
         }
-        // Whichever is freshest wins as the caption. We don't keep finals
-        // around — Whisper is the canonical source — so the caption clears
-        // naturally when the user finishes speaking.
-        interimTranscript.value = (finalText + interim).trim()
+        // Caption shows finals accumulated for THIS utterance + the live
+        // interim tail. utteranceFinalText is reset when a new utterance
+        // starts (see monitorTick) and consumed in handleUtteranceComplete.
+        interimTranscript.value = (utteranceFinalText + ' ' + interim).replace(/\s+/g, ' ').trim()
       }
       r.onerror = (e) => {
         // 'no-speech' / 'aborted' are routine; just let onend restart us.
@@ -296,6 +300,7 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
       if (voiceFrames >= VOICE_FRAMES_REQ && !speaking) {
         speaking = true
         chunks = []
+        utteranceFinalText = ''
         utteranceStartedAt = Date.now()
         utteranceCapAt = utteranceStartedAt + MAX_UTTERANCE_MS
         try {
@@ -331,6 +336,8 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
     const utteranceMs = Date.now() - utteranceStartedAt
     if (chunks.length === 0 || muted.value) {
       chunks = []
+      utteranceFinalText = ''
+      interimTranscript.value = ''
       return
     }
 
@@ -340,23 +347,37 @@ export function useVoiceLoop(opts: UseVoiceLoopOptions) {
 
     // Filter junk: anything < 400ms is almost certainly cough/click/noise.
     if (utteranceMs < 400 || blob.size < 1500) {
+      utteranceFinalText = ''
+      interimTranscript.value = ''
       phase.value = muted.value ? 'idle' : 'listening'
       return
     }
 
     phase.value = 'transcribing'
+
+    // Prefer Web Speech: matches what the user sees on the caption strip,
+    // which is the source of the "I said X but it sent Y" bug. Use the
+    // finalised accumulator first; fall back to the in-flight interim if
+    // Web Speech hadn't finalised before VAD silence (rare but possible);
+    // fall back to Whisper only if both are empty (Safari/iOS where the
+    // Web Speech API doesn't exist).
+    const webSpeechText = utteranceFinalText.trim() || interimTranscript.value.trim()
+
     try {
-      const { result, error } = await transcribeBlob(blob)
-      if (result?.text?.trim()) {
-        await opts.onTranscript(result.text.trim())
-      } else if (error) {
-        lastError.value = error
+      if (webSpeechText) {
+        await opts.onTranscript(webSpeechText)
+      } else {
+        const { result, error } = await transcribeBlob(blob)
+        if (result?.text?.trim()) {
+          await opts.onTranscript(result.text.trim())
+        } else if (error) {
+          lastError.value = error
+        }
       }
     } catch (e) {
       lastError.value = e instanceof Error ? e.message : 'transcribe-failed'
     } finally {
-      // Caption was the in-flight live preview; the canonical text is now
-      // committed (or sent), so wipe it before the next utterance starts.
+      utteranceFinalText = ''
       interimTranscript.value = ''
       phase.value = muted.value ? 'idle' : 'listening'
     }
