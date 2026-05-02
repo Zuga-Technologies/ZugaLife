@@ -106,7 +106,12 @@ onMounted(async () => {
     vrm = gltf.userData.vrm as VRM
     VRMUtils.removeUnnecessaryVertices(gltf.scene)
     VRMUtils.removeUnnecessaryJoints(gltf.scene)
-    vrm.scene.rotation.y = Math.PI
+    // No Math.PI flip needed — wellness-robot.vrm was authored facing -Y in
+    // Blender, which converts to +Z (toward three.js camera) on glTF Y-up
+    // export. The original anime VRM faced -Z and needed the 180° flip; ours
+    // doesn't. Leaving this commented as a marker in case a future
+    // vrmUrl-prop override loads a -Z-facing VRM and visibly turns its back.
+    // vrm.scene.rotation.y = Math.PI
 
     // Rest pose: drop arms from T-pose binding pose (VRM 1.0 spec) to sides.
     // Sign convention is OPPOSITE of the original anime VRM because that
