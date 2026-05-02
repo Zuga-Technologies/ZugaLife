@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, defineAsyncComponent, onMounted, onUnmounted } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { useLifeShared } from './composables/useLifeShared'
 import { useOnboardingStore } from '@zugaapp/stores/onboarding'
 import { useNotifications } from './composables/useNotifications'
@@ -111,11 +111,17 @@ function cancelTherapistLeave() {
   pendingRouteLeave.value = null
 }
 
-// Guard: leaving ZugaLife entirely (router navigation to another studio)
-onBeforeRouteLeave((_to, _from, next) => {
+// Guard: leaving ZugaLife entirely (router navigation to another studio).
+// We can't reuse `next()` after calling `next(false)` — vue-router 4 treats
+// the navigation as fully cancelled once the guard returns, so the cached
+// `next` is dead. Instead capture the target's fullPath and re-issue the
+// navigation via router.push when the user confirms.
+const router = useRouter()
+onBeforeRouteLeave((to, _from, next) => {
   if (isTherapistActive()) {
+    const target = to.fullPath
     pendingTab.value = null
-    pendingRouteLeave.value = () => next()
+    pendingRouteLeave.value = () => { router.push(target) }
     showTherapistLeaveWarning.value = true
     next(false)
   } else {
