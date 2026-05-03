@@ -23,7 +23,7 @@ let resizeObs: ResizeObserver | null = null
 
 let mouthOpenTarget = 0
 let mouthOpenSmoothed = 0
-let mouthBars: (THREE.Object3D | null)[] = [null, null, null]
+let mouthBars: (THREE.Object3D | null)[] = [null, null, null, null, null]
 
 // Blink schedule — closes the eyes briefly every few seconds. Stored as a
 // running cycle so animate() can interpolate without allocating per frame.
@@ -104,7 +104,7 @@ onMounted(async () => {
   // Cache-bust query string forces SW + CF + browser to fetch the latest VRM
   // whenever its bytes change (avatar revisions). The version tag bumps with
   // each material/geometry edit on the asset.
-  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=808-acid-mark'
+  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=809-5bar-eq'
   try {
     const gltf = await loader.loadAsync(url)
     vrm = gltf.userData.vrm as VRM
@@ -130,15 +130,17 @@ onMounted(async () => {
     if (leftLowerArm) leftLowerArm.rotation.y = -0.2
     if (rightLowerArm) rightLowerArm.rotation.y = 0.2
 
-    // Find the 3 digital mouth segments — Vue scales each one's Y axis
-    // from mouthOpenSmoothed with a phase-offset sine each frame, so the
-    // bars dance in a waveform when the bot speaks. Reads as different
-    // mouth shapes for different phonemes without needing actual viseme
-    // detection from the TTS provider.
+    // Find the 5 digital mouth segments — Vue scales each one's Y axis
+    // from mouthOpenSmoothed with phase-offset sines each frame, so the
+    // bars dance as a richer waveform across the bottom of the visor.
+    // 5-bar EQ gives more visual variety per word than 3, simulating
+    // different mouth shapes for different phonemes without viseme data.
     mouthBars = [
-      vrm.scene.getObjectByName('mesh_mouth_l') ?? null,
-      vrm.scene.getObjectByName('mesh_mouth_c') ?? null,
-      vrm.scene.getObjectByName('mesh_mouth_r') ?? null,
+      vrm.scene.getObjectByName('mesh_mouth_0') ?? null,
+      vrm.scene.getObjectByName('mesh_mouth_1') ?? null,
+      vrm.scene.getObjectByName('mesh_mouth_2') ?? null,
+      vrm.scene.getObjectByName('mesh_mouth_3') ?? null,
+      vrm.scene.getObjectByName('mesh_mouth_4') ?? null,
     ]
     scene.add(vrm.scene)
     status.value = 'ready'
@@ -237,18 +239,19 @@ onMounted(async () => {
       // Idle (mouthOpenSmoothed ~= 0): all bars sit at scale 1.0 (flat line).
       // Loud peaks: bars wave up to ~6x with offsets so middle/sides spike
       // at different times.
-      if (mouthBars[0] || mouthBars[1] || mouthBars[2]) {
-        const amp = mouthOpenSmoothed
-        // Random-phase wobbles so bars don't repeat too obviously
-        const phaseSpeed = 14  // hz of the per-bar oscillation
-        const baseScale = 1 + amp * 1.5  // floor that rises smoothly with volume
-        const peakScale = amp * 4.0      // additional spike on the wave peak
-        const wave0 = 0.5 + 0.5 * Math.sin(t * phaseSpeed + 0.0)
-        const wave1 = 0.5 + 0.5 * Math.sin(t * phaseSpeed + 1.7)
-        const wave2 = 0.5 + 0.5 * Math.sin(t * phaseSpeed + 3.3)
-        if (mouthBars[0]) mouthBars[0].scale.y = baseScale + peakScale * wave0
-        if (mouthBars[1]) mouthBars[1].scale.y = baseScale + peakScale * wave1
-        if (mouthBars[2]) mouthBars[2].scale.y = baseScale + peakScale * wave2
+      // 5-bar EQ display: each bar dances at a different phase so the
+      // mouth row constantly shifts shape during speech. Phase offsets
+      // span 0→2π evenly across 5 bars for left-to-right wave sweep.
+      const amp = mouthOpenSmoothed
+      const phaseSpeed = 14
+      const baseScale = 1 + amp * 1.2
+      const peakScale = amp * 4.5
+      for (let i = 0; i < 5; i++) {
+        const bar = mouthBars[i]
+        if (!bar) continue
+        const phase = (i / 5) * Math.PI * 2  // 0, 1.26, 2.51, 3.77, 5.03
+        const wave = 0.5 + 0.5 * Math.sin(t * phaseSpeed + phase)
+        bar.scale.y = baseScale + peakScale * wave
       }
       const jaw = hum?.getNormalizedBoneNode('jaw')
       if (jaw) jaw.rotation.x = 0  // mandible stays closed; talking is on-visor
@@ -270,7 +273,7 @@ onBeforeUnmount(() => {
   scene = null
   camera = null
   vrm = null
-  mouthBars = [null, null, null]
+  mouthBars = [null, null, null, null, null]
 })
 </script>
 
