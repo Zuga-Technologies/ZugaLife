@@ -108,7 +108,7 @@ onMounted(async () => {
   // Cache-bust query string forces SW + CF + browser to fetch the latest VRM
   // whenever its bytes change (avatar revisions). The version tag bumps with
   // each material/geometry edit on the asset.
-  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=815-body-refined'
+  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=816-arms-clear-talkbody'
   try {
     const gltf = await loader.loadAsync(url)
     vrm = gltf.userData.vrm as VRM
@@ -174,10 +174,14 @@ onMounted(async () => {
       const lUA = hum?.getNormalizedBoneNode('leftUpperArm')
       const rUA = hum?.getNormalizedBoneNode('rightUpperArm')
 
-      // Breathing — slow sine on chest+spine, ~14 cycles/min.
-      const breath = Math.sin(t * 1.4) * 0.018
+      // Breathing — slow sine on chest+spine, ~14 cycles/min. Bumps when
+      // talking so the body 'breathes harder' as it speaks.
+      const ampForBody = isFinite(mouthOpenSmoothed) ? mouthOpenSmoothed : 0
+      const breath = Math.sin(t * 1.4) * (0.018 + ampForBody * 0.025)
       if (spine) spine.rotation.x = breath
-      if (chest) chest.rotation.x = breath * 0.6
+      if (chest) chest.rotation.x = breath * 0.6 + ampForBody * 0.04
+      // Subtle forward chest lean during speech — emphasis on talking
+      if (spine) spine.rotation.x += ampForBody * 0.03
 
       // Weight shift — slow lateral hip sway over ~6s. Gives her a natural
       // standing presence instead of a stock-still T-pose feel.
@@ -187,20 +191,22 @@ onMounted(async () => {
         hips.position.x = sway * 0.015
       }
 
-      // Head — subtle gaze drift only. Neck is intentionally NOT rotated
-      // (Buga: 'neck still moves, get rid of it') — the segmented robot
-      // neck reads better as a rigid piston, with the head doing the look-
-      // around motion instead.
+      // Head — subtle gaze drift + a small nod when speaking, so the body
+      // visibly engages with the voice (not just the mouth).
       if (neck) neck.rotation.y = 0
       if (head) {
         head.rotation.y = -sway * 0.04
-        head.rotation.x = Math.sin(t * 0.9) * 0.02
+        // Nod: high-frequency micro-bob (3 Hz) scaled by amp + slow drift
+        const nod = ampForBody * 0.06 * Math.sin(t * 3)
+        head.rotation.x = Math.sin(t * 0.9) * 0.02 + nod
       }
 
-      // Arm idle — very small inward/outward swing, layered on top of the
-      // resting Z rotation set above. Magnitudes are intentionally tiny.
-      if (lUA) lUA.rotation.x = Math.sin(t * 0.7) * 0.04
-      if (rUA) rUA.rotation.x = Math.sin(t * 0.7 + 0.6) * 0.04
+      // Arm idle — small inward/outward swing baseline, plus when talking
+      // the arms gesture slightly (more visible motion = more 'engaged'
+      // robot speaking).
+      const armGesture = ampForBody * 0.10
+      if (lUA) lUA.rotation.x = Math.sin(t * 0.7) * 0.04 + Math.sin(t * 4) * armGesture
+      if (rUA) rUA.rotation.x = Math.sin(t * 0.7 + 0.6) * 0.04 + Math.sin(t * 4 + 1.5) * armGesture
 
       // Hand idle — subtle wrist rotation + finger-curl analogue. Robot
       // doesn't have finger bones, so the hand mesh itself rotates around
