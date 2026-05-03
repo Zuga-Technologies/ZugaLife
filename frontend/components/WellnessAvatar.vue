@@ -23,7 +23,8 @@ let resizeObs: ResizeObserver | null = null
 
 let mouthOpenTarget = 0
 let mouthOpenSmoothed = 0
-let mouthMesh: THREE.Object3D | null = null
+let mouthMesh: THREE.SkinnedMesh | null = null
+let mouthOpenMorphIndex = -1
 
 // Blink schedule — closes the eyes briefly every few seconds. Stored as a
 // running cycle so animate() can interpolate without allocating per frame.
@@ -107,7 +108,7 @@ onMounted(async () => {
   // Cache-bust query string forces SW + CF + browser to fetch the latest VRM
   // whenever its bytes change (avatar revisions). The version tag bumps with
   // each material/geometry edit on the asset.
-  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=811-pill-mouth'
+  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=812-mouth-morph'
   try {
     const gltf = await loader.loadAsync(url)
     vrm = gltf.userData.vrm as VRM
@@ -133,10 +134,18 @@ onMounted(async () => {
     if (leftLowerArm) leftLowerArm.rotation.y = -0.2
     if (rightLowerArm) rightLowerArm.rotation.y = 0.2
 
-    // Find the single pill mouth mesh — Vue scales its Y axis with audio
-    // amplitude so the mouth visibly opens (thin line → tall oval) while
-    // the bot talks. Always visible (idle = 1.0× thin line, peak = ~5×).
-    mouthMesh = vrm.scene.getObjectByName('mesh_mouth') ?? null
+    // Find the pill mouth mesh + its 'open' morph target index.
+    // SkinnedMesh.scale doesn't reliably animate (skin pulls verts back to
+    // bone-driven positions); morph targets ARE applied after skinning, so
+    // they actually show. Drive morphTargetInfluences[index] from audio.
+    const found = vrm.scene.getObjectByName('mesh_mouth')
+    if (found && (found as THREE.SkinnedMesh).morphTargetInfluences) {
+      mouthMesh = found as THREE.SkinnedMesh
+      const dict = mouthMesh.morphTargetDictionary
+      if (dict && 'open' in dict) {
+        mouthOpenMorphIndex = dict['open']
+      }
+    }
     scene.add(vrm.scene)
     status.value = 'ready'
   } catch (e) {
@@ -234,16 +243,15 @@ onMounted(async () => {
       // Idle (mouthOpenSmoothed ~= 0): all bars sit at scale 1.0 (flat line).
       // Loud peaks: bars wave up to ~6x with offsets so middle/sides spike
       // at different times.
-      // Single pill mouth that visibly opens with the voice.
-      // Idle: scale.y = 1.0 (thin horizontal line, like a closed mouth)
-      // Loud: scale.y up to ~5.0 (tall oval, like an open mouth)
-      // A small high-frequency wobble adds 'speaking' liveness so the mouth
-      // doesn't just bob smoothly with envelope; it has phoneme-rate
-      // micro-jitter that reads as syllables.
-      if (mouthMesh) {
+      // Drive the 'open' morph target on mesh_mouth from audio amplitude.
+      // Morph weight 0 = thin closed line; weight 1 = tall oval (5× height,
+      // baked into the shape key). Plus a high-frequency syllable wobble
+      // so the mouth has phoneme-rate jitter, not just smooth envelope.
+      if (mouthMesh && mouthOpenMorphIndex >= 0 && mouthMesh.morphTargetInfluences) {
         const amp = isFinite(mouthOpenSmoothed) ? mouthOpenSmoothed : 0
-        const wobble = amp * 0.4 * Math.sin(t * 22)  // ±0.4× at full volume
-        mouthMesh.scale.y = Math.max(1.0, 1.0 + amp * 4.0 + wobble)
+        const wobble = amp * 0.15 * Math.sin(t * 22)
+        const w = Math.max(0, Math.min(1, amp + wobble))
+        mouthMesh.morphTargetInfluences[mouthOpenMorphIndex] = w
       }
       const jaw = hum?.getNormalizedBoneNode('jaw')
       if (jaw) jaw.rotation.x = 0  // mandible stays closed; talking is on-visor
@@ -266,6 +274,7 @@ onBeforeUnmount(() => {
   camera = null
   vrm = null
   mouthMesh = null
+  mouthOpenMorphIndex = -1
 })
 </script>
 
