@@ -56,15 +56,12 @@ async function logFirstMood() {
       emoji: selectedMood.value,
       note: `First mood during onboarding — goal: ${selectedGoal.value || 'not set'}`,
     })
-    moodLogged.value = true
-    // Auto-advance after a brief pause
-    setTimeout(() => next(), 800)
   } catch {
-    // Still advance even if mood log fails (rate limit, etc)
-    moodLogged.value = true
-    setTimeout(() => next(), 800)
+    // Best-effort — advance even if mood log fails (rate limit, etc)
   } finally {
     moodLogging.value = false
+    moodLogged.value = true
+    next()
   }
 }
 
@@ -112,6 +109,8 @@ async function generateInsight() {
 }
 
 // ── Step 4: Feature recommendations ──────────────────────
+const chosenFeature = ref<string | null>(null)
+
 const recommendedFeature = computed(() => {
   const map: Record<string, string> = {
     clarity: 'journal',
@@ -174,6 +173,10 @@ function next() {
     if (currentStep.value === 2) {
       generateInsight()
     }
+    // Default toolkit choice to recommendation when entering step 4
+    if (currentStep.value === 3 && !chosenFeature.value) {
+      chosenFeature.value = recommendedFeature.value
+    }
   }
 }
 
@@ -186,7 +189,7 @@ function skip() {
 }
 
 function finish(tab?: string) {
-  emit('complete', tab || recommendedFeature.value)
+  emit('complete', tab || chosenFeature.value || recommendedFeature.value)
 }
 </script>
 
@@ -254,20 +257,18 @@ function finish(tab?: string) {
               <h2 class="text-xl font-bold text-txt-primary mb-2">
                 How are you feeling right now?
               </h2>
-              <p class="text-sm text-txt-muted mb-8">Tap one — this logs your first mood.</p>
+              <p class="text-sm text-txt-muted mb-8">Pick one. You can change your mind before continuing.</p>
 
               <div class="grid grid-cols-3 gap-3 w-full max-w-xs mb-6">
                 <button
                   v-for="mood in moodOptions"
                   :key="mood.emoji"
-                  @click="selectedMood = mood.emoji; logFirstMood()"
-                  :disabled="moodLogging || moodLogged"
+                  @click="selectedMood = mood.emoji"
+                  :disabled="moodLogging"
                   class="flex flex-col items-center gap-1.5 p-4 rounded-xl border transition-all duration-200"
                   :class="selectedMood === mood.emoji
                     ? 'bg-accent/15 border-accent/40 ring-1 ring-accent/20 scale-105'
-                    : moodLogged
-                      ? 'bg-surface-2/30 border-bdr/30 opacity-40'
-                      : 'bg-surface-2/50 border-bdr/50 hover:border-bdr-hover hover:bg-surface-2 hover:scale-105'"
+                    : 'bg-surface-2/50 border-bdr/50 hover:border-bdr-hover hover:bg-surface-2 hover:scale-105'"
                 >
                   <span class="text-2xl">{{ mood.emoji }}</span>
                   <span class="text-xs" :class="selectedMood === mood.emoji ? 'text-accent font-medium' : 'text-txt-muted'">
@@ -276,13 +277,6 @@ function finish(tab?: string) {
                 </button>
               </div>
 
-              <!-- Success feedback -->
-              <transition name="fade">
-                <div v-if="moodLogged" class="flex items-center gap-2 text-success text-sm font-medium">
-                  <Check :size="16" />
-                  First mood logged!
-                </div>
-              </transition>
             </div>
           </template>
 
@@ -315,26 +309,27 @@ function finish(tab?: string) {
           <template v-else-if="currentStep === 3">
             <div class="flex-1 flex flex-col">
               <h2 class="text-lg font-bold text-txt-primary mb-1 text-center">Your toolkit</h2>
-              <p class="text-xs text-txt-muted text-center mb-4">We recommend starting with the highlighted one.</p>
+              <p class="text-xs text-txt-muted text-center mb-4">Pick where you want to start. We pre-selected one based on your goal.</p>
 
               <div class="space-y-2 flex-1">
-                <div
+                <button
                   v-for="feature in features"
                   :key="feature.id"
-                  class="flex items-center gap-3 p-3 rounded-xl border transition-colors"
-                  :class="feature.recommended
-                    ? 'bg-accent/10 border-accent/30'
-                    : 'bg-surface-2/50 border-bdr/50'"
+                  @click="chosenFeature = feature.id"
+                  class="w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-colors"
+                  :class="chosenFeature === feature.id
+                    ? 'bg-accent/15 border-accent/40 ring-1 ring-accent/20'
+                    : 'bg-surface-2/50 border-bdr/50 hover:border-bdr-hover hover:bg-surface-2'"
                 >
                   <div
                     class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                    :class="feature.recommended ? 'bg-accent/20' : 'bg-surface-3'"
+                    :class="chosenFeature === feature.id ? 'bg-accent/20' : 'bg-surface-3'"
                   >
-                    <component :is="feature.icon" :size="16" :class="feature.recommended ? 'text-accent' : 'text-txt-muted'" />
+                    <component :is="feature.icon" :size="16" :class="chosenFeature === feature.id ? 'text-accent' : 'text-txt-muted'" />
                   </div>
                   <div class="flex-1">
                     <div class="flex items-center gap-2">
-                      <p class="text-sm font-medium" :class="feature.recommended ? 'text-accent' : 'text-txt-primary'">
+                      <p class="text-sm font-medium" :class="chosenFeature === feature.id ? 'text-accent' : 'text-txt-primary'">
                         {{ feature.label }}
                       </p>
                       <span v-if="feature.recommended" class="text-[10px] font-semibold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
@@ -343,7 +338,7 @@ function finish(tab?: string) {
                     </div>
                     <p class="text-xs text-txt-muted">{{ feature.desc }}</p>
                   </div>
-                </div>
+                </button>
               </div>
             </div>
           </template>
@@ -403,11 +398,13 @@ function finish(tab?: string) {
             Next <ArrowRight :size="14" />
           </button>
           <button
-            v-else-if="currentStep === 1 && moodLogged"
-            @click="next"
-            class="flex items-center gap-1.5 text-sm font-medium text-accent hover:text-accent/80 transition-colors px-3 py-2"
+            v-else-if="currentStep === 1"
+            @click="logFirstMood"
+            :disabled="!selectedMood || moodLogging"
+            class="flex items-center gap-1.5 text-sm font-medium transition-colors px-3 py-2"
+            :class="selectedMood && !moodLogging ? 'text-accent hover:text-accent/80' : 'text-txt-muted cursor-not-allowed'"
           >
-            Next <ArrowRight :size="14" />
+            {{ moodLogging ? 'Saving…' : 'Next' }} <ArrowRight :size="14" />
           </button>
           <button
             v-else-if="currentStep > 1 && currentStep < TOTAL_STEPS - 1"

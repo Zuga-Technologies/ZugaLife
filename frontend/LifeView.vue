@@ -216,6 +216,7 @@ function onLifeOnboardingComplete(recommendedTab?: string) {
     journal: 'journal',
     habits: 'habits',
     meditate: 'meditate',
+    challenges: 'dashboard',
   }
   if (recommendedTab && tabMap[recommendedTab]) {
     activeTab.value = tabMap[recommendedTab]
