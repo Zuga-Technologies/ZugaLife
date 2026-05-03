@@ -23,7 +23,7 @@ let resizeObs: ResizeObserver | null = null
 
 let mouthOpenTarget = 0
 let mouthOpenSmoothed = 0
-let mouthMesh: THREE.Object3D | null = null
+let mouthBars: (THREE.Object3D | null)[] = [null, null, null]
 
 // Blink schedule — closes the eyes briefly every few seconds. Stored as a
 // running cycle so animate() can interpolate without allocating per frame.
@@ -104,7 +104,7 @@ onMounted(async () => {
   // Cache-bust query string forces SW + CF + browser to fetch the latest VRM
   // whenever its bytes change (avatar revisions). The version tag bumps with
   // each material/geometry edit on the asset.
-  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=802-crt-terminal'
+  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=803-eq-mouth'
   try {
     const gltf = await loader.loadAsync(url)
     vrm = gltf.userData.vrm as VRM
@@ -130,12 +130,16 @@ onMounted(async () => {
     if (leftLowerArm) leftLowerArm.rotation.y = -0.2
     if (rightLowerArm) rightLowerArm.rotation.y = 0.2
 
-    // Find the digital mouth mesh — Vue scales its Y axis from
-    // mouthOpenSmoothed each frame so the mouth glyph 'pulses' with TTS audio.
-    // Glyph is intentionally bound to the cranium head bone (not jaw) so it
-    // stays flush with the visor; the audio-driven scale gives the digital
-    // monitor-face the speaking effect.
-    mouthMesh = vrm.scene.getObjectByName('mesh_mouth') ?? null
+    // Find the 3 digital mouth segments — Vue scales each one's Y axis
+    // from mouthOpenSmoothed with a phase-offset sine each frame, so the
+    // bars dance in a waveform when the bot speaks. Reads as different
+    // mouth shapes for different phonemes without needing actual viseme
+    // detection from the TTS provider.
+    mouthBars = [
+      vrm.scene.getObjectByName('mesh_mouth_l') ?? null,
+      vrm.scene.getObjectByName('mesh_mouth_c') ?? null,
+      vrm.scene.getObjectByName('mesh_mouth_r') ?? null,
+    ]
     scene.add(vrm.scene)
     status.value = 'ready'
   } catch (e) {
@@ -225,16 +229,26 @@ onMounted(async () => {
       // call is kept as a no-op fallback in case a non-robot VRM is loaded
       // via the vrmUrl prop and that VRM exposes a real `aa` shape.
       mouthOpenSmoothed += (mouthOpenTarget - mouthOpenSmoothed) * Math.min(1, dt * 18)
-      // Digital monitor face: lip-sync drives the mouth GLYPH on the visor,
-      // NOT the jaw bone. Previously the jaw bone rotation also dropped the
-      // mandible piece (making it look like a separate physical mouth was
-      // talking instead of the digital readout). Jaw bone is now held at 0
-      // so the talking is visibly on-visor only.
-      if (mouthMesh) {
-        // Y scale grows tall (mouth opens), X scale grows slightly wider
-        // (more audio amplitude → wider waveform glyph)
-        mouthMesh.scale.y = 1 + mouthOpenSmoothed * 5.0
-        mouthMesh.scale.x = 1 + mouthOpenSmoothed * 0.4
+      // Digital monitor face: 3 mouth segments dance in a waveform pattern
+      // driven by audio amplitude with phase-offset sines. Each bar peaks
+      // at a different moment, creating visual variety that reads as the
+      // mouth forming different shapes for different phonemes — without
+      // needing actual viseme/phoneme data from the TTS provider.
+      // Idle (mouthOpenSmoothed ~= 0): all bars sit at scale 1.0 (flat line).
+      // Loud peaks: bars wave up to ~6x with offsets so middle/sides spike
+      // at different times.
+      if (mouthBars[0] || mouthBars[1] || mouthBars[2]) {
+        const amp = mouthOpenSmoothed
+        // Random-phase wobbles so bars don't repeat too obviously
+        const phaseSpeed = 14  // hz of the per-bar oscillation
+        const baseScale = 1 + amp * 1.5  // floor that rises smoothly with volume
+        const peakScale = amp * 4.0      // additional spike on the wave peak
+        const wave0 = 0.5 + 0.5 * Math.sin(t * phaseSpeed + 0.0)
+        const wave1 = 0.5 + 0.5 * Math.sin(t * phaseSpeed + 1.7)
+        const wave2 = 0.5 + 0.5 * Math.sin(t * phaseSpeed + 3.3)
+        if (mouthBars[0]) mouthBars[0].scale.y = baseScale + peakScale * wave0
+        if (mouthBars[1]) mouthBars[1].scale.y = baseScale + peakScale * wave1
+        if (mouthBars[2]) mouthBars[2].scale.y = baseScale + peakScale * wave2
       }
       const jaw = hum?.getNormalizedBoneNode('jaw')
       if (jaw) jaw.rotation.x = 0  // mandible stays closed; talking is on-visor
@@ -256,7 +270,7 @@ onBeforeUnmount(() => {
   scene = null
   camera = null
   vrm = null
-  mouthMesh = null
+  mouthBars = [null, null, null]
 })
 </script>
 
