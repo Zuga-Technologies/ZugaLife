@@ -220,15 +220,19 @@ onMounted(async () => {
       // call is kept as a no-op fallback in case a non-robot VRM is loaded
       // via the vrmUrl prop and that VRM exposes a real `aa` shape.
       mouthOpenSmoothed += (mouthOpenTarget - mouthOpenSmoothed) * Math.min(1, dt * 18)
-      // Digital monitor face: scale the mouth glyph's Y axis with audio.
-      // 1.0 idle → up to ~4x when speaking. Reads as a pulsing waveform on
-      // the visor screen, matching the "digitized" face aesthetic.
+      // Digital monitor face: lip-sync drives the mouth GLYPH on the visor,
+      // NOT the jaw bone. Previously the jaw bone rotation also dropped the
+      // mandible piece (making it look like a separate physical mouth was
+      // talking instead of the digital readout). Jaw bone is now held at 0
+      // so the talking is visibly on-visor only.
       if (mouthMesh) {
-        mouthMesh.scale.y = 1 + mouthOpenSmoothed * 3.0
+        // Y scale grows tall (mouth opens), X scale grows slightly wider
+        // (more audio amplitude → wider waveform glyph)
+        mouthMesh.scale.y = 1 + mouthOpenSmoothed * 5.0
+        mouthMesh.scale.x = 1 + mouthOpenSmoothed * 0.4
       }
-      // Also still drive the jaw bone so the cable_jaw_l SpringBone swings.
       const jaw = hum?.getNormalizedBoneNode('jaw')
-      if (jaw) jaw.rotation.x = mouthOpenSmoothed * 0.4
+      if (jaw) jaw.rotation.x = 0  // mandible stays closed; talking is on-visor
       vrm.expressionManager?.setValue('aa', mouthOpenSmoothed)
 
       vrm.update(dt)
