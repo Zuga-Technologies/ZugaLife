@@ -174,12 +174,14 @@ onMounted(async () => {
         hips.position.x = sway * 0.015
       }
 
-      // Head + neck — subtle counter-sway and a shallower vertical drift so
-      // her gaze doesn't lock onto a single point.
-      if (neck) neck.rotation.y = -sway * 0.04
+      // Head — subtle gaze drift only. Neck is intentionally NOT rotated
+      // (Buga: 'neck still moves, get rid of it') — the segmented robot
+      // neck reads better as a rigid piston, with the head doing the look-
+      // around motion instead.
+      if (neck) neck.rotation.y = 0
       if (head) {
-        head.rotation.y = -sway * 0.05
-        head.rotation.x = Math.sin(t * 0.9) * 0.025
+        head.rotation.y = -sway * 0.04
+        head.rotation.x = Math.sin(t * 0.9) * 0.02
       }
 
       // Arm idle — very small inward/outward swing, layered on top of the
