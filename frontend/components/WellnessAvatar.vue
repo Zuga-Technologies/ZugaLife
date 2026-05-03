@@ -23,7 +23,7 @@ let resizeObs: ResizeObserver | null = null
 
 let mouthOpenTarget = 0
 let mouthOpenSmoothed = 0
-let mouthBars: (THREE.Object3D | null)[] = [null, null, null]
+let mouthMesh: THREE.Object3D | null = null
 
 // Blink schedule — closes the eyes briefly every few seconds. Stored as a
 // running cycle so animate() can interpolate without allocating per frame.
@@ -31,6 +31,9 @@ let nextBlinkAt = 2 + Math.random() * 3
 let blinkPhase = 0
 
 function setMouthOpen(value: number) {
+  // Defensive: NaN/Infinity from a bad audio analyser would propagate
+  // into mouthOpenSmoothed and make scale.y NaN — invisible mesh.
+  if (!isFinite(value)) value = 0
   mouthOpenTarget = Math.max(0, Math.min(1, value))
 }
 
@@ -104,7 +107,7 @@ onMounted(async () => {
   // Cache-bust query string forces SW + CF + browser to fetch the latest VRM
   // whenever its bytes change (avatar revisions). The version tag bumps with
   // each material/geometry edit on the asset.
-  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=810-medium-3bar'
+  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=811-pill-mouth'
   try {
     const gltf = await loader.loadAsync(url)
     vrm = gltf.userData.vrm as VRM
@@ -130,13 +133,10 @@ onMounted(async () => {
     if (leftLowerArm) leftLowerArm.rotation.y = -0.2
     if (rightLowerArm) rightLowerArm.rotation.y = 0.2
 
-    // Find the 3 digital mouth segments — Vue scales each one's Y axis
-    // with phase-offset sines, creating a subtle wave during speech.
-    mouthBars = [
-      vrm.scene.getObjectByName('mesh_mouth_l') ?? null,
-      vrm.scene.getObjectByName('mesh_mouth_c') ?? null,
-      vrm.scene.getObjectByName('mesh_mouth_r') ?? null,
-    ]
+    // Find the single pill mouth mesh — Vue scales its Y axis with audio
+    // amplitude so the mouth visibly opens (thin line → tall oval) while
+    // the bot talks. Always visible (idle = 1.0× thin line, peak = ~5×).
+    mouthMesh = vrm.scene.getObjectByName('mesh_mouth') ?? null
     scene.add(vrm.scene)
     status.value = 'ready'
   } catch (e) {
@@ -234,19 +234,16 @@ onMounted(async () => {
       // Idle (mouthOpenSmoothed ~= 0): all bars sit at scale 1.0 (flat line).
       // Loud peaks: bars wave up to ~6x with offsets so middle/sides spike
       // at different times.
-      // 3-bar EQ display, GENTLE animation: each bar dances at a different
-      // phase. Total max scale ~3x (was 6.7x — too tall). Bars stay within
-      // visor at all amplitudes.
-      const amp = mouthOpenSmoothed
-      const phaseSpeed = 12
-      const baseScale = 1 + amp * 0.6
-      const peakScale = amp * 1.8
-      for (let i = 0; i < 3; i++) {
-        const bar = mouthBars[i]
-        if (!bar) continue
-        const phase = (i / 3) * Math.PI * 2
-        const wave = 0.5 + 0.5 * Math.sin(t * phaseSpeed + phase)
-        bar.scale.y = baseScale + peakScale * wave
+      // Single pill mouth that visibly opens with the voice.
+      // Idle: scale.y = 1.0 (thin horizontal line, like a closed mouth)
+      // Loud: scale.y up to ~5.0 (tall oval, like an open mouth)
+      // A small high-frequency wobble adds 'speaking' liveness so the mouth
+      // doesn't just bob smoothly with envelope; it has phoneme-rate
+      // micro-jitter that reads as syllables.
+      if (mouthMesh) {
+        const amp = isFinite(mouthOpenSmoothed) ? mouthOpenSmoothed : 0
+        const wobble = amp * 0.4 * Math.sin(t * 22)  // ±0.4× at full volume
+        mouthMesh.scale.y = Math.max(1.0, 1.0 + amp * 4.0 + wobble)
       }
       const jaw = hum?.getNormalizedBoneNode('jaw')
       if (jaw) jaw.rotation.x = 0  // mandible stays closed; talking is on-visor
@@ -268,7 +265,7 @@ onBeforeUnmount(() => {
   scene = null
   camera = null
   vrm = null
-  mouthBars = [null, null, null]
+  mouthMesh = null
 })
 </script>
 
