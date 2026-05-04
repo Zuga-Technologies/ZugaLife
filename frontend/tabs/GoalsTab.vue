@@ -223,6 +223,9 @@ async function adoptTemplate(key: string) {
     setTimeout(() => { goalSuccess.value = null }, 2000)
     goalCreateMode.value = 'none'
     await Promise.all([fetchGoals(), fetchGoalTemplates()])
+    // Auto-expand backlog so a newly-adopted template goal is never hidden
+    // when the user already has 3 priority goals.
+    if (backlogGoals.value.length > 0) showBacklogGoals.value = true
     emit('success')
   } catch (e) {
     if (e instanceof ApiError) {
@@ -299,6 +302,7 @@ async function createGoal() {
     goalSuccess.value = 'Goal created!'
     setTimeout(() => { goalSuccess.value = null }, 2000)
     await fetchGoals()
+    if (backlogGoals.value.length > 0) showBacklogGoals.value = true
     emit('success')
   } catch (e) {
     if (e instanceof ApiError) {
@@ -328,6 +332,7 @@ async function createWoopGoal(goalData: {
     goalSuccess.value = 'Goal created with your plan!'
     setTimeout(() => { goalSuccess.value = null }, 3000)
     await fetchGoals()
+    if (backlogGoals.value.length > 0) showBacklogGoals.value = true
     emit('success')
   } catch (e) {
     if (e instanceof ApiError) {
@@ -925,9 +930,10 @@ onMounted(async () => {
       <div v-if="backlogGoals.length > 0" class="mt-4">
         <button
           @click="showBacklogGoals = !showBacklogGoals"
-          class="text-xs text-txt-muted hover:text-txt-primary transition-colors mb-2"
+          class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-accent/10 border border-accent/30 text-accent hover:bg-accent/15 hover:border-accent/50 transition-colors mb-2"
         >
-          {{ showBacklogGoals ? 'Hide' : 'Show' }} {{ backlogGoals.length }} backlog goal{{ backlogGoals.length > 1 ? 's' : '' }}
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+          {{ showBacklogGoals ? 'Hide' : '+' + backlogGoals.length + ' in backlog' }}
         </button>
         <div v-if="showBacklogGoals" class="space-y-2 opacity-60">
           <div
