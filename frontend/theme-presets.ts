@@ -78,6 +78,14 @@ export function getActivePresetId(): string {
   return attr
 }
 
+/** Remove the data-theme attribute so the shell defaults take over.
+ * Call on LifeView unmount — without this, Life's data-theme="life" sticks
+ * after navigating to another studio, leaking coral into shell components
+ * that read --accent / --accent-brand from the active theme cascade. */
+export function clearPreset(): void {
+  document.documentElement.removeAttribute('data-theme')
+}
+
 // --- Internal ---
 
 const loadedFonts = new Set<string>()

@@ -11,7 +11,7 @@ import LifeOnboarding from './components/LifeOnboarding.vue'
 import BreathColdOpen from './components/BreathColdOpen.vue'
 import BottomNavRail from './components/BottomNavRail.vue'
 import SettingsPanel from './SettingsPanel.vue'
-import { applyPreset, getActivePresetId } from './theme-presets'
+import { applyPreset, getActivePresetId, clearPreset } from './theme-presets'
 
 // Ensure the studio identity (data-theme="life" → rose coral accent) is active
 // whenever the studio loads — embedded inside ZugaApp shell OR standalone.
@@ -254,6 +254,10 @@ onUnmounted(() => window.removeEventListener('zugatheme:navigate', handleThemeNa
 
 // Always clear wellness focus on unmount — covers nav-away mid-session.
 onUnmounted(() => broadcastWellnessFocus(false))
+
+// Clear data-theme so coral doesn't bleed into other studios after navigation.
+// Without this, the shell ChatPanel etc. would stay coral on /trader, /code, etc.
+onUnmounted(() => clearPreset())
 
 // ── Init ───────────────────────────────────────────────────────
 onMounted(async () => {
