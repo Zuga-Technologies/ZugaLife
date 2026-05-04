@@ -426,69 +426,154 @@ onMounted(async () => {
     </div>
 
     <template v-else-if="dashboardData">
-      <!-- Greeting + settings gear (hidden when embedded in ZugaApp — dashboard already greets) -->
-      <div class="flex items-start justify-between mb-8 animate-fade-in">
-        <div v-if="!props.embedded" class="inline-block px-5 py-3 rounded-2xl bg-surface-0/80">
-          <p class="text-sm text-txt-muted mb-1">{{ formatDashboardDate(dashboardData.date) }}</p>
-          <h2 class="text-2xl font-bold text-txt-primary tracking-tight">{{ dashboardData.greeting }}</h2>
-          <p class="text-sm text-txt-secondary mt-1.5">Here's your week at a glance.</p>
+      <!-- ============================================================
+           HERO — editorial-weight greeting, eyebrow date, settings gear
+           ============================================================ -->
+      <header v-if="!props.embedded" class="flex items-start justify-between mb-10 md:mb-12 animate-fade-in">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent mb-2">
+            {{ formatDashboardDate(dashboardData.date) }}
+          </p>
+          <h1 class="text-3xl md:text-5xl font-semibold tracking-tight text-txt-primary leading-[1.1]">
+            {{ dashboardData.greeting }}
+          </h1>
+          <p class="text-sm md:text-base text-txt-secondary mt-3">
+            Here's where you are.
+          </p>
         </div>
-        <div v-else></div>
-        <div class="flex items-center gap-2">
-          <button
-            v-if="!props.embedded"
-            @click="emit('open-settings')"
-            class="p-2.5 rounded-xl bg-surface-0/80 border border-bdr text-txt-secondary transition-colors hover:text-txt-primary hover:bg-surface-3/70"
-            title="Settings"
-          >
-            <Settings :size="18" />
-          </button>
+        <button
+          @click="emit('open-settings')"
+          class="p-2.5 rounded-xl bg-surface-1/60 border border-bdr text-txt-secondary transition-all hover:text-txt-primary hover:bg-surface-2 hover:border-bdr-hover active:scale-95"
+          title="Settings"
+          aria-label="Settings"
+        >
+          <Settings :size="18" />
+        </button>
+      </header>
+      <div v-else class="mb-6 md:mb-8"></div>
+
+      <!-- ============================================================
+           BENTO ROW 1 — This Week (col-span 7) + Habits hero (col-span 5)
+           ============================================================ -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6 mb-4 md:mb-6">
+
+      <!-- THIS WEEK (col-span 7) — narrative + last 7 mood logs sparkline -->
+      <section class="lg:col-span-7 glass-card p-6 md:p-8 animate-fade-in flex flex-col">
+        <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-txt-muted mb-4">This week</p>
+        <WeeklyNarrative :api="api" class="flex-1" />
+        <div
+          v-if="dashboardData?.mood.has_data && dashboardData.mood.recent.length > 0"
+          class="flex items-center gap-2 mt-6 pt-5 border-t border-bdr/50"
+        >
+          <template v-for="(entry, i) in dashboardData.mood.recent.slice(0, 7).slice().reverse()" :key="i">
+            <div
+              class="w-9 h-9 rounded-lg bg-surface-2/70 border border-bdr/40 flex items-center justify-center transition-all hover:scale-110 hover:border-accent/40"
+              :title="entry.label + ' — ' + timeAgo(entry.date)"
+            >
+              <component :is="moodIcons[entry.emoji]" :size="16" class="text-accent" v-if="moodIcons[entry.emoji]" />
+              <Meh v-else :size="16" class="text-accent" />
+            </div>
+          </template>
+          <span class="text-[10px] font-semibold uppercase tracking-wider text-txt-muted ml-2">last 7 logs</span>
+          <span class="ml-auto text-xs text-txt-muted tabular-nums">{{ dashboardData.mood.total }} total</span>
         </div>
-      </div>
+      </section>
 
-      <!-- Gamification UI (XP/level/prestige/badges/challenges/quests/recent-XP)
-           was removed 2026-04-26. Re-homing to the ZugaTokens platform layer
-           per project_zugatokens_gamification_migration memory. Domain stats
-           remain in their own cards below. -->
+      <!-- HABITS HERO (col-span 5) — SVG ring + display-weight number -->
+      <button
+        @click="emit('navigate', 'habits')"
+        class="lg:col-span-5 dash-card glass-card p-6 md:p-8 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col min-h-[300px]"
+        style="animation-delay: 50ms"
+      >
+        <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-txt-muted">Habits · this week</p>
 
-      <!-- Main dashboard grid — 2 columns on desktop, stacked on mobile -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <template v-if="dashboardData.habits.has_data">
+          <div class="relative flex items-center justify-center my-auto py-4">
+            <svg viewBox="0 0 120 120" class="w-44 h-44 -rotate-90" aria-hidden="true">
+              <circle cx="60" cy="60" r="52" stroke="rgb(var(--surface-3))" stroke-width="6" fill="none" />
+              <circle
+                cx="60" cy="60" r="52"
+                stroke="rgb(var(--accent))"
+                stroke-width="6"
+                fill="none"
+                stroke-linecap="round"
+                stroke-dasharray="326.7"
+                :stroke-dashoffset="326.7 * (1 - dashboardData.habits.completion_rate)"
+                class="transition-all duration-1000 ease-out drop-shadow-[0_0_8px_rgb(var(--accent)/0.35)]"
+              />
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span class="text-6xl md:text-7xl font-semibold tracking-tighter text-txt-primary tabular-nums leading-none">
+                {{ Math.round(dashboardData.habits.completion_rate * 100) }}<span class="text-3xl md:text-4xl text-txt-muted">%</span>
+              </span>
+              <span class="text-[11px] font-semibold uppercase tracking-wider text-txt-muted mt-2">
+                {{ dashboardData.habits.completed }}/{{ dashboardData.habits.total_possible }} done
+              </span>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            <span
+              v-for="h in dashboardData.habits.top_habits.slice(0, 3)"
+              :key="h.name"
+              class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-secondary"
+            >
+              <component :is="getIcon(h.emoji)" :size="11" v-if="getIcon(h.emoji)" />
+              {{ h.name }}
+              <span class="text-txt-muted">{{ h.completed }}/{{ h.total }}</span>
+            </span>
+          </div>
+        </template>
+        <template v-else>
+          <div class="flex-1 flex flex-col items-center justify-center gap-3 my-8">
+            <span class="text-6xl md:text-7xl font-semibold tracking-tighter text-txt-muted/40 leading-none">—</span>
+            <p class="text-sm text-txt-secondary mt-3">Build consistent routines</p>
+            <p class="text-xs text-txt-muted">Set up your first habits →</p>
+          </div>
+        </template>
+      </button>
 
-      <!-- Mood Check-in (col 1) -->
-      <div class="glass-card p-5 animate-fade-in flex flex-col">
-        <div class="flex items-center gap-2 mb-4">
-          <span class="text-sm font-semibold text-txt-primary">How are you feeling?</span>
-        </div>
+      </div><!-- /bento row 1 -->
 
-        <!-- Mood grid — 3 cols in this narrower card -->
-        <div class="grid grid-cols-3 gap-2 mb-4" :class="dashMoodOnCooldown ? 'opacity-40 pointer-events-none' : ''">
+      <!-- ============================================================
+           BENTO ROW 2 — Mood pulse (col-span 5) + Goals (col-span 7)
+           ============================================================ -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6 mb-4 md:mb-6">
+
+      <!-- MOOD PULSE (col-span 5) — bigger touch areas, lime hover/active -->
+      <section class="lg:col-span-5 glass-card p-6 md:p-8 animate-fade-in flex flex-col">
+        <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-txt-muted mb-2">Today's pulse</p>
+        <h2 class="text-xl md:text-2xl font-semibold tracking-tight text-txt-primary mb-5">
+          How are you feeling?
+        </h2>
+
+        <div
+          class="grid grid-cols-3 gap-2.5"
+          :class="dashMoodOnCooldown ? 'opacity-40 pointer-events-none' : ''"
+        >
           <button
             v-for="m in moods"
             :key="m.emoji"
             @click="logDashMood(m.emoji)"
             :disabled="dashMoodSubmitting"
-            class="flex flex-col items-center gap-1.5 py-3 rounded-xl bg-surface-2/50 border border-bdr/50 hover:bg-surface-3 hover:border-bdr-hover transition-all active:scale-95"
-            :title="m.label"
+            class="flex flex-col items-center gap-2 py-4 rounded-xl bg-surface-2/50 border border-bdr/50 transition-all active:scale-95 hover:bg-accent/10 hover:border-accent/50 hover:-translate-y-0.5"
+            :aria-label="m.label"
           >
-            <component :is="moodIcons[m.emoji]" :size="22" class="text-accent" v-if="moodIcons[m.emoji]" />
-            <Meh v-else :size="22" class="text-accent" />
-            <span class="text-[10px] text-txt-muted">{{ m.label }}</span>
+            <component :is="moodIcons[m.emoji]" :size="26" class="text-accent" v-if="moodIcons[m.emoji]" />
+            <Meh v-else :size="26" class="text-accent" />
+            <span class="text-[11px] font-medium text-txt-secondary">{{ m.label }}</span>
           </button>
         </div>
 
-        <!-- Cooldown notice -->
-        <div v-if="dashMoodOnCooldown" class="text-center">
-          <p class="text-xs text-txt-muted">Next check-in in <span class="text-accent">{{ dashMoodTimeLeft }}</span></p>
+        <div v-if="dashMoodOnCooldown" class="text-center mt-4">
+          <p class="text-xs text-txt-muted">Next check-in in <span class="text-accent font-semibold">{{ dashMoodTimeLeft }}</span></p>
         </div>
 
-        <!-- Success / Error -->
-        <p v-if="dashMoodSuccess" class="text-xs text-success text-center">{{ dashMoodSuccess }}</p>
-        <p v-if="dashMoodError" class="text-xs text-red-400 text-center">{{ dashMoodError }}</p>
+        <p v-if="dashMoodSuccess" class="text-xs text-success text-center mt-3">{{ dashMoodSuccess }}</p>
+        <p v-if="dashMoodError" class="text-xs text-red-400 text-center mt-3">{{ dashMoodError }}</p>
 
-        <!-- Breathwork suggestion (acute intervention for negative moods) -->
         <div
           v-if="dashBreathworkSuggestion"
-          class="mt-3 p-3 rounded-xl bg-info/8 border border-info/15 animate-fade-in relative overflow-hidden"
+          class="mt-4 p-3 rounded-xl bg-info/8 border border-info/15 animate-fade-in relative overflow-hidden"
         >
           <div class="absolute top-0 left-0 bottom-0 w-[3px] bg-gradient-to-b from-info to-info" />
           <div class="pl-3">
@@ -506,30 +591,66 @@ onMounted(async () => {
             </div>
           </div>
         </div>
+      </section>
 
-        <!-- Recent moods sparkline — pushed to bottom -->
-        <div class="flex-1" />
-        <div v-if="dashboardData?.mood.has_data && dashboardData.mood.recent.length > 0" class="flex items-center gap-1.5 mt-3 pt-3 border-t border-bdr/50">
-          <template v-for="(entry, i) in dashboardData.mood.recent.slice(0, 5)" :key="i">
-            <div
-              class="w-7 h-7 rounded-lg bg-surface-3 flex items-center justify-center transition-transform hover:scale-110"
-              :title="entry.label + ' — ' + timeAgo(entry.date)"
-            >
-              <component :is="moodIcons[entry.emoji]" :size="14" class="text-accent" v-if="moodIcons[entry.emoji]" />
-              <Meh v-else :size="14" class="text-accent" />
-            </div>
-          </template>
-          <span class="text-[10px] text-txt-muted ml-1">recent</span>
+      <!-- GOALS (col-span 7) — display-weight number + milestone bar -->
+      <button
+        @click="emit('navigate', 'goals')"
+        class="lg:col-span-7 dash-card glass-card p-6 md:p-8 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
+        style="animation-delay: 100ms"
+      >
+        <div class="flex items-center justify-between mb-4">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-txt-muted">Goals</p>
+          <Target :size="16" class="text-txt-muted group-hover:text-accent transition-colors" />
         </div>
-        <div v-if="dashboardData?.mood.has_data" class="text-[10px] text-txt-muted mt-2">{{ dashboardData.mood.total }} total logs</div>
-      </div>
 
-      <!-- Week in Review (col 2) -->
-      <div class="flex flex-col">
-        <WeeklyNarrative :api="api" class="flex-1" />
-      </div>
+        <template v-if="dashboardData.goals.has_data">
+          <div class="flex items-baseline gap-3 mb-2">
+            <span class="text-5xl md:text-6xl font-semibold tracking-tighter text-txt-primary tabular-nums leading-none">
+              {{ dashboardData.goals.active }}
+            </span>
+            <span class="text-sm text-txt-secondary">active</span>
+            <span v-if="dashboardData.goals.completed > 0" class="text-sm ml-2">
+              <span class="text-success font-semibold tabular-nums">{{ dashboardData.goals.completed }}</span>
+              <span class="text-txt-muted ml-1">done</span>
+            </span>
+          </div>
 
-      </div><!-- /main grid -->
+          <div v-if="dashboardData.goals.milestones_total > 0" class="mt-5">
+            <div class="flex items-center justify-between text-xs text-txt-secondary mb-2">
+              <span class="font-medium uppercase tracking-wider text-[10px] text-txt-muted">Milestones</span>
+              <span class="tabular-nums">{{ dashboardData.goals.milestones_done }} / {{ dashboardData.goals.milestones_total }}</span>
+            </div>
+            <div class="w-full bg-surface-3 rounded-full h-1.5 overflow-hidden">
+              <div
+                class="h-1.5 rounded-full bg-accent transition-all duration-700 ease-out"
+                :style="{ width: Math.round((dashboardData.goals.milestones_done / dashboardData.goals.milestones_total) * 100) + '%' }"
+              ></div>
+            </div>
+          </div>
+
+          <div v-if="dashboardData.goals.nearest_deadline" class="flex items-center gap-2 text-xs text-txt-secondary mt-auto pt-5">
+            <CalendarDays :size="13" class="text-accent" />
+            <span class="font-medium text-txt-primary truncate">{{ dashboardData.goals.nearest_deadline.title }}</span>
+            <span class="text-txt-muted">·</span>
+            <span>{{ formatDeadline(dashboardData.goals.nearest_deadline.date) }}</span>
+          </div>
+        </template>
+        <template v-else>
+          <div class="flex-1 flex flex-col justify-center">
+            <span class="text-5xl md:text-6xl font-semibold tracking-tighter text-txt-muted/40 mb-3 leading-none">—</span>
+            <p class="text-sm text-txt-secondary mb-2">Set meaningful goals</p>
+            <p class="text-xs text-txt-muted mb-4">Choose from templates or create your own</p>
+            <div class="flex flex-wrap gap-1.5">
+              <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-muted">Fitness</span>
+              <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-muted">Learning</span>
+              <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-muted">Career</span>
+            </div>
+          </div>
+        </template>
+      </button>
+
+      </div><!-- /bento row 2 -->
 
       <!-- Contextual Insight Cards (Deepstash-style micro-learning) -->
       <div v-if="insightCards.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -546,13 +667,84 @@ onMounted(async () => {
 
       <!-- Badges + Recent XP card removed 2026-04-26 (gamification migration). -->
 
-      <!-- Analytics Dashboard (main visualization) -->
+      <!-- ============================================================
+           MODULE RAIL — compact secondary tier (different visual register
+           than the bento glass-cards: lighter surface, smaller padding,
+           hover lift). 4 shortcuts for tabs not already promoted in bento.
+           ============================================================ -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+
+        <!-- MEDITATE -->
+        <button
+          @click="emit('navigate', 'meditate')"
+          class="group flex flex-col items-start gap-2 p-4 rounded-xl bg-surface-1/40 border border-bdr/30 transition-all hover:border-accent/40 hover:bg-surface-2/60 hover:-translate-y-0.5 active:translate-y-0"
+        >
+          <div class="flex items-center gap-2 w-full">
+            <BrainIcon :size="14" class="text-txt-muted group-hover:text-accent transition-colors" />
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-txt-muted">Meditate</span>
+          </div>
+          <div v-if="dashboardData.meditation.has_data && dashboardData.meditation.sessions_this_week > 0" class="flex items-baseline gap-1">
+            <span class="text-2xl font-semibold tabular-nums text-txt-primary leading-none">{{ dashboardData.meditation.sessions_this_week }}</span>
+            <span class="text-xs text-txt-muted">this week</span>
+          </div>
+          <span v-else class="text-xs text-txt-secondary">Guided sessions →</span>
+        </button>
+
+        <!-- JOURNAL -->
+        <button
+          @click="emit('navigate', 'journal')"
+          class="group flex flex-col items-start gap-2 p-4 rounded-xl bg-surface-1/40 border border-bdr/30 transition-all hover:border-accent/40 hover:bg-surface-2/60 hover:-translate-y-0.5 active:translate-y-0"
+        >
+          <div class="flex items-center gap-2 w-full">
+            <BookOpen :size="14" class="text-txt-muted group-hover:text-accent transition-colors" />
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-txt-muted">Journal</span>
+          </div>
+          <div v-if="dashboardData.journal.has_data" class="flex items-baseline gap-1">
+            <span class="text-2xl font-semibold tabular-nums text-txt-primary leading-none">{{ dashboardData.journal.entries_this_week }}</span>
+            <span class="text-xs text-txt-muted">entries</span>
+          </div>
+          <span v-else class="text-xs text-txt-secondary">Write to reflect →</span>
+        </button>
+
+        <!-- COMPANION (Wellness Bot / Therapist) -->
+        <button
+          @click="emit('navigate', 'therapist')"
+          class="group flex flex-col items-start gap-2 p-4 rounded-xl bg-surface-1/40 border border-bdr/30 transition-all hover:border-accent/40 hover:bg-surface-2/60 hover:-translate-y-0.5 active:translate-y-0"
+        >
+          <div class="flex items-center gap-2 w-full">
+            <MessageCircleHeart :size="14" class="text-txt-muted group-hover:text-accent transition-colors" />
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-txt-muted">Companion</span>
+          </div>
+          <div v-if="dashboardData.therapist.has_data" class="flex items-baseline gap-1">
+            <span class="text-2xl font-semibold tabular-nums text-txt-primary leading-none">{{ dashboardData.therapist.total_sessions }}</span>
+            <span class="text-xs text-txt-muted">{{ dashboardData.therapist.total_sessions === 1 ? 'session' : 'sessions' }}</span>
+          </div>
+          <span v-else class="text-xs text-txt-secondary">Talk it through →</span>
+        </button>
+
+        <!-- BREATHWORK (external) -->
+        <a
+          href="https://theboxbreather.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="group flex flex-col items-start gap-2 p-4 rounded-xl bg-surface-1/40 border border-bdr/30 transition-all hover:border-accent/40 hover:bg-surface-2/60 hover:-translate-y-0.5 active:translate-y-0"
+        >
+          <div class="flex items-center gap-2 w-full">
+            <Wind :size="14" class="text-txt-muted group-hover:text-accent transition-colors" />
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-txt-muted">Breathwork</span>
+          </div>
+          <span class="text-xs text-txt-secondary">Box breathing →</span>
+        </a>
+
+      </div>
+
+      <!-- ===== ANALYTICS (kept, secondary tier — power-user dive) ===== -->
       <div class="mb-6">
         <AnalyticsDashboard />
       </div>
 
-      <!-- Module Cards Grid -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+      <!-- Module Cards Grid (LEGACY — replaced by bento + module rail above; kept hidden as a safety net during rollout) -->
+      <div v-if="false" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
 
         <!-- HABITS CARD -->
         <button
