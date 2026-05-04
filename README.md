@@ -54,7 +54,7 @@ Open **http://localhost:5174** and log in with any email (dev mode).
 └─────────────────────────────────┘
 ```
 
-**ZugaCore** is the shared foundation layer providing authentication, database management, a Tailwind theme system, and the API client. It lives as a git submodule at `./core/` and is used by both frontend and backend.
+[**ZugaCore**](https://github.com/Zuga-Technologies/ZugaCore) is the shared foundation layer providing authentication, database management, a Tailwind theme system, and the API client. It lives as a git submodule at `./core/` and is used by both frontend and backend.
 
 ## Configuration
 
