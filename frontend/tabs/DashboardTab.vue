@@ -481,7 +481,7 @@ onMounted(async () => {
               class="flex flex-col items-center gap-2 py-4 px-1 rounded-xl border transition-all hover:scale-[1.04] cursor-default"
               :class="i === dashboardData.mood.recent.slice(0, 7).length - 1
                 ? 'bg-accent/8 border-accent/50 shadow-[0_0_24px_rgb(var(--accent)/0.12)]'
-                : 'bg-surface-2/40 border-bdr/40 hover:border-accent/30'"
+                : 'bg-surface-2/40 border-accent/10 hover:border-accent/30'"
               :title="entry.label + ' — ' + timeAgo(entry.date)"
             >
               <span class="text-[10px] font-semibold uppercase tracking-wider text-txt-muted">{{ shortDay(entry.date) }}</span>
@@ -578,7 +578,7 @@ onMounted(async () => {
             :key="m.emoji"
             @click="logDashMood(m.emoji)"
             :disabled="dashMoodSubmitting"
-            class="flex flex-col items-center gap-2 py-4 rounded-xl bg-surface-2/50 border border-bdr/50 transition-all active:scale-95 hover:bg-accent/10 hover:border-accent/50 hover:-translate-y-0.5"
+            class="flex flex-col items-center gap-2 py-4 rounded-xl bg-surface-2/50 border border-accent/10 transition-all active:scale-95 hover:bg-accent/10 hover:border-accent/50 hover:-translate-y-0.5"
             :aria-label="m.label"
           >
             <component :is="moodIcons[m.emoji]" :size="26" class="text-accent" v-if="moodIcons[m.emoji]" />
@@ -693,10 +693,10 @@ onMounted(async () => {
               Pick a direction worth showing up for. Templates below to start fast.
             </p>
             <div class="flex flex-wrap gap-2">
-              <span class="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 border border-bdr/40 text-txt-secondary">Fitness</span>
-              <span class="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 border border-bdr/40 text-txt-secondary">Learning</span>
-              <span class="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 border border-bdr/40 text-txt-secondary">Career</span>
-              <span class="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 border border-bdr/40 text-txt-secondary">Mindfulness</span>
+              <span class="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 border border-accent/10 text-txt-secondary">Fitness</span>
+              <span class="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 border border-accent/10 text-txt-secondary">Learning</span>
+              <span class="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 border border-accent/10 text-txt-secondary">Career</span>
+              <span class="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 border border-accent/10 text-txt-secondary">Mindfulness</span>
             </div>
           </div>
         </template>
@@ -729,7 +729,7 @@ onMounted(async () => {
         <!-- MEDITATE -->
         <button
           @click="emit('navigate', 'meditate')"
-          class="group flex flex-col items-start gap-2 p-4 rounded-xl bg-surface-1/40 border border-bdr/30 transition-all hover:border-accent/40 hover:bg-surface-2/60 hover:-translate-y-0.5 active:translate-y-0"
+          class="group flex flex-col items-start gap-2 p-4 rounded-xl bg-surface-1/40 border border-accent/10 transition-all hover:border-accent/40 hover:bg-surface-2/60 hover:-translate-y-0.5 active:translate-y-0"
         >
           <div class="flex items-center gap-2 w-full">
             <BrainIcon :size="14" class="text-txt-muted group-hover:text-accent transition-colors" />
@@ -745,7 +745,7 @@ onMounted(async () => {
         <!-- JOURNAL -->
         <button
           @click="emit('navigate', 'journal')"
-          class="group flex flex-col items-start gap-2 p-4 rounded-xl bg-surface-1/40 border border-bdr/30 transition-all hover:border-accent/40 hover:bg-surface-2/60 hover:-translate-y-0.5 active:translate-y-0"
+          class="group flex flex-col items-start gap-2 p-4 rounded-xl bg-surface-1/40 border border-accent/10 transition-all hover:border-accent/40 hover:bg-surface-2/60 hover:-translate-y-0.5 active:translate-y-0"
         >
           <div class="flex items-center gap-2 w-full">
             <BookOpen :size="14" class="text-txt-muted group-hover:text-accent transition-colors" />
@@ -761,7 +761,7 @@ onMounted(async () => {
         <!-- COMPANION (Wellness Bot / Therapist) -->
         <button
           @click="emit('navigate', 'therapist')"
-          class="group flex flex-col items-start gap-2 p-4 rounded-xl bg-surface-1/40 border border-bdr/30 transition-all hover:border-accent/40 hover:bg-surface-2/60 hover:-translate-y-0.5 active:translate-y-0"
+          class="group flex flex-col items-start gap-2 p-4 rounded-xl bg-surface-1/40 border border-accent/10 transition-all hover:border-accent/40 hover:bg-surface-2/60 hover:-translate-y-0.5 active:translate-y-0"
         >
           <div class="flex items-center gap-2 w-full">
             <MessageCircleHeart :size="14" class="text-txt-muted group-hover:text-accent transition-colors" />
@@ -779,7 +779,7 @@ onMounted(async () => {
           href="https://theboxbreather.com"
           target="_blank"
           rel="noopener noreferrer"
-          class="group flex flex-col items-start gap-2 p-4 rounded-xl bg-surface-1/40 border border-bdr/30 transition-all hover:border-accent/40 hover:bg-surface-2/60 hover:-translate-y-0.5 active:translate-y-0"
+          class="group flex flex-col items-start gap-2 p-4 rounded-xl bg-surface-1/40 border border-accent/10 transition-all hover:border-accent/40 hover:bg-surface-2/60 hover:-translate-y-0.5 active:translate-y-0"
         >
           <div class="flex items-center gap-2 w-full">
             <Wind :size="14" class="text-txt-muted group-hover:text-accent transition-colors" />
