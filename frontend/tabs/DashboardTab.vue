@@ -7,9 +7,7 @@ import {
 } from 'lucide-vue-next'
 import { moodIcons, getIcon } from '../icons'
 import { playZugabotJingle } from '../composables/useCelebrationSounds'
-import AnalyticsDashboard from '../AnalyticsDashboard.vue'
 import InsightCard from '../components/InsightCard.vue'
-import WeeklyNarrative from '../components/WeeklyNarrative.vue'
 import ThemeRenderer from '../components/themes/ThemeRenderer.vue'
 import { applyPreset } from '../theme-presets'
 import { useLifeShared } from '../composables/useLifeShared'
@@ -337,6 +335,15 @@ async function logDashMood(emoji: string) {
 }
 
 // ============================
+// FORMATTING HELPERS
+// ============================
+
+function shortDay(dateStr: string): string {
+  const d = new Date(dateStr)
+  return ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][d.getDay()]
+}
+
+// ============================
 // LIFECYCLE
 // ============================
 
@@ -457,26 +464,43 @@ onMounted(async () => {
            ============================================================ -->
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6 mb-4 md:mb-6">
 
-      <!-- THIS WEEK (col-span 7) — narrative + last 7 mood logs sparkline -->
-      <section class="lg:col-span-7 glass-card p-6 md:p-8 animate-fade-in flex flex-col">
-        <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-txt-muted mb-4">This week</p>
-        <WeeklyNarrative :api="api" class="flex-1" />
-        <div
-          v-if="dashboardData?.mood.has_data && dashboardData.mood.recent.length > 0"
-          class="flex items-center gap-2 mt-6 pt-5 border-t border-bdr/50"
-        >
-          <template v-for="(entry, i) in dashboardData.mood.recent.slice(0, 7).slice().reverse()" :key="i">
+      <!-- RECENT MOODS (col-span 7) — hero 7-day strip, replaces WeeklyNarrative -->
+      <section class="lg:col-span-7 glass-card p-6 md:p-8 animate-fade-in flex flex-col min-h-[300px]">
+        <div class="flex items-center justify-between mb-6">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-txt-muted">Recent moods</p>
+          <span v-if="dashboardData?.mood.has_data" class="text-xs text-txt-muted tabular-nums">
+            {{ dashboardData.mood.total }} total logs
+          </span>
+        </div>
+
+        <template v-if="dashboardData?.mood.has_data && dashboardData.mood.recent.length > 0">
+          <div class="grid grid-cols-7 gap-2 md:gap-3 my-auto">
             <div
-              class="w-9 h-9 rounded-lg bg-surface-2/70 border border-bdr/40 flex items-center justify-center transition-all hover:scale-110 hover:border-accent/40"
+              v-for="(entry, i) in dashboardData.mood.recent.slice(0, 7).slice().reverse()"
+              :key="i"
+              class="flex flex-col items-center gap-2 py-4 px-1 rounded-xl border transition-all hover:scale-[1.04] cursor-default"
+              :class="i === dashboardData.mood.recent.slice(0, 7).length - 1
+                ? 'bg-accent/8 border-accent/50 shadow-[0_0_24px_rgb(var(--accent)/0.12)]'
+                : 'bg-surface-2/40 border-bdr/40 hover:border-accent/30'"
               :title="entry.label + ' — ' + timeAgo(entry.date)"
             >
-              <component :is="moodIcons[entry.emoji]" :size="16" class="text-accent" v-if="moodIcons[entry.emoji]" />
-              <Meh v-else :size="16" class="text-accent" />
+              <span class="text-[10px] font-semibold uppercase tracking-wider text-txt-muted">{{ shortDay(entry.date) }}</span>
+              <component :is="moodIcons[entry.emoji]" :size="28" class="text-accent" v-if="moodIcons[entry.emoji]" />
+              <Meh v-else :size="28" class="text-accent" />
+              <span class="text-[10px] text-txt-secondary truncate max-w-full px-1">{{ entry.label }}</span>
             </div>
-          </template>
-          <span class="text-[10px] font-semibold uppercase tracking-wider text-txt-muted ml-2">last 7 logs</span>
-          <span class="ml-auto text-xs text-txt-muted tabular-nums">{{ dashboardData.mood.total }} total</span>
-        </div>
+          </div>
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-txt-muted text-center mt-6">
+            most recent →
+          </p>
+        </template>
+        <template v-else>
+          <div class="flex-1 flex flex-col items-center justify-center gap-3 py-12">
+            <span class="text-5xl md:text-6xl font-semibold tracking-tighter text-txt-muted/40 leading-none">—</span>
+            <p class="text-sm text-txt-secondary mt-3">No mood logs yet</p>
+            <p class="text-xs text-txt-muted">Tap a feeling in the pulse below to start →</p>
+          </div>
+        </template>
       </section>
 
       <!-- HABITS HERO (col-span 5) — SVG ring + display-weight number -->
@@ -593,58 +617,87 @@ onMounted(async () => {
         </div>
       </section>
 
-      <!-- GOALS (col-span 7) — display-weight number + milestone bar -->
+      <!-- GOALS (col-span 7) — title-led hero with at-a-glance milestone segments -->
       <button
         @click="emit('navigate', 'goals')"
-        class="lg:col-span-7 dash-card glass-card p-6 md:p-8 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
+        class="lg:col-span-7 dash-card glass-card p-6 md:p-8 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col min-h-[300px]"
         style="animation-delay: 100ms"
       >
-        <div class="flex items-center justify-between mb-4">
+        <!-- Header: eyebrow + counts pill row + target icon -->
+        <div class="flex items-center justify-between mb-6">
           <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-txt-muted">Goals</p>
-          <Target :size="16" class="text-txt-muted group-hover:text-accent transition-colors" />
-        </div>
-
-        <template v-if="dashboardData.goals.has_data">
-          <div class="flex items-baseline gap-3 mb-2">
-            <span class="text-5xl md:text-6xl font-semibold tracking-tighter text-txt-primary tabular-nums leading-none">
-              {{ dashboardData.goals.active }}
+          <div class="flex items-center gap-3 text-xs">
+            <span class="text-txt-secondary">
+              <span class="text-txt-primary font-semibold tabular-nums">{{ dashboardData.goals.active }}</span>
+              <span class="text-txt-muted ml-1">active</span>
             </span>
-            <span class="text-sm text-txt-secondary">active</span>
-            <span v-if="dashboardData.goals.completed > 0" class="text-sm ml-2">
+            <span v-if="dashboardData.goals.completed > 0" class="text-txt-secondary">
               <span class="text-success font-semibold tabular-nums">{{ dashboardData.goals.completed }}</span>
               <span class="text-txt-muted ml-1">done</span>
             </span>
+            <Target :size="16" class="text-txt-muted group-hover:text-accent transition-colors" />
           </div>
+        </div>
 
-          <div v-if="dashboardData.goals.milestones_total > 0" class="mt-5">
-            <div class="flex items-center justify-between text-xs text-txt-secondary mb-2">
-              <span class="font-medium uppercase tracking-wider text-[10px] text-txt-muted">Milestones</span>
-              <span class="tabular-nums">{{ dashboardData.goals.milestones_done }} / {{ dashboardData.goals.milestones_total }}</span>
+        <template v-if="dashboardData.goals.has_data">
+          <!-- HERO: nearest goal title is the main read of this card -->
+          <template v-if="dashboardData.goals.nearest_deadline">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent mb-3">Next up</p>
+            <h3 class="text-2xl md:text-3xl font-semibold tracking-tight text-txt-primary leading-tight mb-3">
+              {{ dashboardData.goals.nearest_deadline.title }}
+            </h3>
+            <div class="flex items-center gap-2 text-sm text-txt-secondary mb-6">
+              <CalendarDays :size="14" class="text-accent" />
+              <span>{{ formatDeadline(dashboardData.goals.nearest_deadline.date) }}</span>
             </div>
-            <div class="w-full bg-surface-3 rounded-full h-1.5 overflow-hidden">
+          </template>
+          <template v-else-if="dashboardData.goals.active > 0">
+            <h3 class="text-2xl md:text-3xl font-semibold tracking-tight text-txt-primary leading-tight mb-3">
+              {{ dashboardData.goals.active }} {{ dashboardData.goals.active === 1 ? 'goal' : 'goals' }} in motion
+            </h3>
+            <p class="text-sm text-txt-secondary mb-6">No deadlines set yet — open Goals to plan dates.</p>
+          </template>
+
+          <!-- Milestone segments — at-a-glance pill row, fills horizontal space -->
+          <div v-if="dashboardData.goals.milestones_total > 0" class="mt-auto">
+            <div class="flex items-center justify-between mb-2.5">
+              <span class="text-[10px] font-semibold uppercase tracking-wider text-txt-muted">Milestones</span>
+              <span class="text-sm font-semibold text-txt-primary tabular-nums">
+                {{ dashboardData.goals.milestones_done }}<span class="text-txt-muted font-normal"> / {{ dashboardData.goals.milestones_total }}</span>
+              </span>
+            </div>
+            <div class="flex gap-1.5">
               <div
-                class="h-1.5 rounded-full bg-accent transition-all duration-700 ease-out"
-                :style="{ width: Math.round((dashboardData.goals.milestones_done / dashboardData.goals.milestones_total) * 100) + '%' }"
-              ></div>
+                v-for="i in Math.min(dashboardData.goals.milestones_total, 24)"
+                :key="i"
+                class="h-2 flex-1 rounded-full transition-all duration-500"
+                :class="i <= dashboardData.goals.milestones_done
+                  ? 'bg-accent shadow-[0_0_6px_rgb(var(--accent)/0.5)]'
+                  : 'bg-surface-3'"
+                :style="{ transitionDelay: (i * 30) + 'ms' }"
+              />
             </div>
-          </div>
-
-          <div v-if="dashboardData.goals.nearest_deadline" class="flex items-center gap-2 text-xs text-txt-secondary mt-auto pt-5">
-            <CalendarDays :size="13" class="text-accent" />
-            <span class="font-medium text-txt-primary truncate">{{ dashboardData.goals.nearest_deadline.title }}</span>
-            <span class="text-txt-muted">·</span>
-            <span>{{ formatDeadline(dashboardData.goals.nearest_deadline.date) }}</span>
+            <p
+              v-if="dashboardData.goals.milestones_total > 24"
+              class="text-[10px] text-txt-muted mt-2 tabular-nums"
+            >
+              showing 24 of {{ dashboardData.goals.milestones_total }}
+            </p>
           </div>
         </template>
         <template v-else>
           <div class="flex-1 flex flex-col justify-center">
-            <span class="text-5xl md:text-6xl font-semibold tracking-tighter text-txt-muted/40 mb-3 leading-none">—</span>
-            <p class="text-sm text-txt-secondary mb-2">Set meaningful goals</p>
-            <p class="text-xs text-txt-muted mb-4">Choose from templates or create your own</p>
-            <div class="flex flex-wrap gap-1.5">
-              <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-muted">Fitness</span>
-              <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-muted">Learning</span>
-              <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-muted">Career</span>
+            <h3 class="text-2xl md:text-3xl font-semibold tracking-tight text-txt-primary leading-tight mb-3">
+              Set a meaningful goal
+            </h3>
+            <p class="text-base text-txt-secondary mb-6">
+              Pick a direction worth showing up for. Templates below to start fast.
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <span class="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 border border-bdr/40 text-txt-secondary">Fitness</span>
+              <span class="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 border border-bdr/40 text-txt-secondary">Learning</span>
+              <span class="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 border border-bdr/40 text-txt-secondary">Career</span>
+              <span class="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 border border-bdr/40 text-txt-secondary">Mindfulness</span>
             </div>
           </div>
         </template>
@@ -738,260 +791,6 @@ onMounted(async () => {
 
       </div>
 
-      <!-- ===== ANALYTICS (kept, secondary tier — power-user dive) ===== -->
-      <div class="mb-6">
-        <AnalyticsDashboard />
-      </div>
-
-      <!-- Module Cards Grid (LEGACY — replaced by bento + module rail above; kept hidden as a safety net during rollout) -->
-      <div v-if="false" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-
-        <!-- HABITS CARD -->
-        <button
-          @click="emit('navigate', 'habits')"
-          class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
-          style="animation-delay: 50ms"
-        >
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2.5">
-              <div class="w-9 h-9 rounded-xl bg-success/10 flex items-center justify-center">
-                <TrendingUp :size="18" class="text-success" />
-              </div>
-              <span class="text-sm font-semibold text-txt-primary">Habits</span>
-            </div>
-          </div>
-          <template v-if="dashboardData.habits.has_data">
-            <!-- Progress bar -->
-            <div class="mb-3">
-              <div class="flex items-baseline justify-between mb-1.5">
-                <span class="text-2xl font-bold text-txt-primary">{{ Math.round(dashboardData.habits.completion_rate * 100) }}<span class="text-sm font-normal text-txt-muted">%</span></span>
-                <span class="text-xs text-txt-muted">{{ dashboardData.habits.completed }}/{{ dashboardData.habits.total_possible }}</span>
-              </div>
-              <div class="w-full bg-surface-3 rounded-full h-2">
-                <div
-                  class="h-2 rounded-full transition-all duration-700 ease-out"
-                  :class="dashboardData.habits.completion_rate >= 0.8 ? 'bg-success' : dashboardData.habits.completion_rate >= 0.5 ? 'bg-accent' : 'bg-surface-4'"
-                  :style="{ width: Math.round(dashboardData.habits.completion_rate * 100) + '%' }"
-                ></div>
-              </div>
-            </div>
-            <!-- Top habits preview -->
-            <div class="flex flex-wrap gap-1.5">
-              <span
-                v-for="h in dashboardData.habits.top_habits.slice(0, 3)"
-                :key="h.name"
-                class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-secondary"
-              >
-                <component :is="getIcon(h.emoji)" :size="11" v-if="getIcon(h.emoji)" />
-                {{ h.name }}
-                <span class="text-txt-muted">{{ h.completed }}/{{ h.total }}</span>
-              </span>
-            </div>
-          </template>
-          <template v-else>
-            <p class="text-sm text-txt-muted">Build consistent routines</p>
-            <p class="text-xs text-txt-muted mt-1">Set up your first habits</p>
-          </template>
-        </button>
-
-        <!-- GOALS CARD -->
-        <button
-          @click="emit('navigate', 'goals')"
-          class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
-          style="animation-delay: 100ms"
-        >
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2.5">
-              <div class="w-9 h-9 rounded-xl bg-sky-500/10 flex items-center justify-center">
-                <Target :size="18" class="text-sky-400" />
-              </div>
-              <span class="text-sm font-semibold text-txt-primary">Goals</span>
-            </div>
-          </div>
-          <template v-if="dashboardData.goals.has_data">
-            <div class="flex-1 flex flex-col">
-              <div class="flex items-baseline gap-4 mb-3">
-                <div>
-                  <span class="text-2xl font-bold text-txt-primary">{{ dashboardData.goals.active }}</span>
-                  <span class="text-xs text-txt-muted ml-1">active</span>
-                </div>
-                <div v-if="dashboardData.goals.completed > 0">
-                  <span class="text-lg font-semibold text-success">{{ dashboardData.goals.completed }}</span>
-                  <span class="text-xs text-txt-muted ml-1">done</span>
-                </div>
-              </div>
-              <div v-if="dashboardData.goals.milestones_total > 0" class="mb-2">
-                <div class="flex items-center justify-between text-xs text-txt-muted mb-1">
-                  <span>Milestones</span>
-                  <span>{{ dashboardData.goals.milestones_done }}/{{ dashboardData.goals.milestones_total }}</span>
-                </div>
-                <div class="w-full bg-surface-3 rounded-full h-2">
-                  <div
-                    class="h-2 rounded-full bg-sky-500 transition-all duration-500"
-                    :style="{ width: Math.round((dashboardData.goals.milestones_done / dashboardData.goals.milestones_total) * 100) + '%' }"
-                  ></div>
-                </div>
-              </div>
-              <div v-if="dashboardData.goals.nearest_deadline" class="flex items-center gap-1.5 text-xs text-txt-muted mt-auto">
-                <CalendarDays :size="12" />
-                <span>{{ dashboardData.goals.nearest_deadline.title }}</span>
-                <span class="text-txt-muted">·</span>
-                <span>{{ formatDeadline(dashboardData.goals.nearest_deadline.date) }}</span>
-              </div>
-            </div>
-          </template>
-          <template v-else>
-            <div class="flex-1 flex flex-col justify-center">
-              <p class="text-sm text-txt-muted mb-2">Set meaningful goals</p>
-              <p class="text-xs text-txt-muted mb-3">Choose from templates or create your own</p>
-              <div class="flex flex-wrap gap-1.5">
-                <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-muted">Fitness</span>
-                <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-muted">Learning</span>
-                <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-surface-3 text-txt-muted">Career</span>
-              </div>
-            </div>
-          </template>
-        </button>
-
-        <!-- MEDITATION CARD -->
-        <button
-          @click="emit('navigate', 'meditate')"
-          class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
-          style="animation-delay: 150ms"
-        >
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2.5">
-              <div class="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center">
-                <BrainIcon :size="18" class="text-violet-400" />
-              </div>
-              <span class="text-sm font-semibold text-txt-primary">Meditation</span>
-            </div>
-          </div>
-          <template v-if="dashboardData.meditation.has_data && dashboardData.meditation.sessions_this_week > 0">
-            <div class="flex items-baseline gap-4 mb-2">
-              <div>
-                <span class="text-2xl font-bold text-txt-primary">{{ dashboardData.meditation.sessions_this_week }}</span>
-                <span class="text-xs text-txt-muted ml-1">this week</span>
-              </div>
-              <div>
-                <span class="text-lg font-semibold text-txt-secondary">{{ dashboardData.meditation.total_minutes }}</span>
-                <span class="text-xs text-txt-muted ml-1">min</span>
-              </div>
-            </div>
-            <p class="text-xs text-txt-muted">{{ dashboardData.meditation.total_sessions }} total sessions · avg {{ dashboardData.meditation.avg_minutes }} min</p>
-          </template>
-          <template v-else-if="dashboardData.meditation.has_data">
-            <p class="text-sm text-txt-secondary">No sessions this week</p>
-            <p class="text-xs text-txt-muted mt-1">{{ dashboardData.meditation.total_sessions }} total sessions</p>
-          </template>
-          <template v-else>
-            <p class="text-sm text-txt-muted">AI-guided meditation</p>
-            <p class="text-xs text-txt-muted mt-1">Breathing, body scan, gratitude & more</p>
-          </template>
-        </button>
-
-        <!-- JOURNAL & MOOD CARD -->
-        <button
-          @click="emit('navigate', 'journal')"
-          class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
-          style="animation-delay: 200ms"
-        >
-          <div class="flex items-center justify-between mb-3">
-            <div class="flex items-center gap-2.5">
-              <div class="w-9 h-9 rounded-xl bg-rose-500/10 flex items-center justify-center">
-                <BookOpen :size="18" class="text-rose-400" />
-              </div>
-              <span class="text-sm font-semibold text-txt-primary">Journal & Mood</span>
-            </div>
-          </div>
-          <template v-if="dashboardData.journal.has_data">
-            <div class="flex items-baseline gap-1 mb-1">
-              <span class="text-2xl font-bold text-txt-primary">{{ dashboardData.journal.entries_this_week }}</span>
-              <span class="text-xs text-txt-muted">entries this week</span>
-            </div>
-            <p v-if="dashboardData.journal.latest_title" class="text-xs text-txt-muted truncate mb-2">
-              Latest: {{ dashboardData.journal.latest_title }}
-            </p>
-            <p class="text-xs text-txt-muted">{{ dashboardData.journal.total }} total entries</p>
-          </template>
-          <template v-else>
-            <p class="text-sm text-txt-muted">Write, reflect, understand</p>
-            <p class="text-xs text-txt-muted mt-1">Start your first journal entry</p>
-          </template>
-          <!-- Mood sparkline -->
-          <div v-if="dashboardData.mood.has_data && dashboardData.mood.recent.length > 0" class="flex items-center gap-1.5 mt-3 pt-3 border-t border-bdr">
-            <template v-for="(entry, i) in dashboardData.mood.recent.slice(0, 5)" :key="i">
-              <div
-                class="w-7 h-7 rounded-lg bg-surface-3 flex items-center justify-center transition-transform hover:scale-110"
-                :title="entry.label + ' — ' + timeAgo(entry.date)"
-              >
-                <component :is="moodIcons[entry.emoji]" :size="14" class="text-accent" v-if="moodIcons[entry.emoji]" />
-                <Meh v-else :size="14" class="text-accent" />
-              </div>
-            </template>
-            <span class="text-xs text-txt-muted ml-1">recent moods</span>
-          </div>
-        </button>
-
-        <!-- THERAPIST CARD -->
-        <button
-          @click="emit('navigate', 'therapist')"
-          class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
-          style="animation-delay: 250ms"
-        >
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2.5">
-              <div class="w-9 h-9 rounded-xl bg-teal-500/10 flex items-center justify-center">
-                <MessageCircleHeart :size="18" class="text-teal-400" />
-              </div>
-              <span class="text-sm font-semibold text-txt-primary">Wellness Bot</span>
-            </div>
-          </div>
-          <template v-if="dashboardData.therapist.has_data">
-            <p class="text-sm text-txt-secondary mb-2 line-clamp-1">{{ dashboardData.therapist.last_themes }}</p>
-            <!-- Mood snapshot now renders as a full-width clamped block instead
-                 of an inline pill — the field grew from a short label into
-                 multi-paragraph narrative summaries, which broke the metadata
-                 flex row (squished session count + timeAgo to a vertical
-                 stack on the right). -->
-            <p
-              v-if="dashboardData.therapist.last_mood"
-              class="text-xs text-teal-400/90 leading-relaxed mb-3 px-3 py-2 rounded-lg bg-teal-500/10 border border-teal-500/20 line-clamp-3"
-            >
-              {{ dashboardData.therapist.last_mood }}
-            </p>
-            <div class="flex items-center gap-2 text-xs text-txt-muted mt-auto">
-              <span>{{ dashboardData.therapist.total_sessions }} {{ dashboardData.therapist.total_sessions === 1 ? 'session' : 'sessions' }}</span>
-              <span v-if="dashboardData.therapist.last_date">· {{ timeAgo(dashboardData.therapist.last_date) }}</span>
-            </div>
-          </template>
-          <template v-else>
-            <p class="text-sm text-txt-muted">AI companion for reflection</p>
-            <p class="text-xs text-txt-muted mt-1">Talk through what's on your mind</p>
-          </template>
-        </button>
-
-        <!-- BREATHWORK CARD -->
-        <a
-          href="https://theboxbreather.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="dash-card glass-card p-5 text-left transition-all duration-200 hover:bg-surface-2 hover:border-bdr-hover group flex flex-col"
-          style="animation-delay: 300ms"
-        >
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2.5">
-              <div class="w-9 h-9 rounded-xl bg-sky-500/10 flex items-center justify-center">
-                <Wind :size="18" class="text-sky-400" />
-              </div>
-              <span class="text-sm font-semibold text-txt-primary">Breathwork</span>
-            </div>
-          </div>
-          <p class="text-sm text-txt-secondary mb-1">Box breathing exercises</p>
-          <p class="text-xs text-txt-muted mt-auto">theboxbreather.com</p>
-        </a>
-
-      </div>
 
       <!-- ===== INSTALLED THEMES ===== -->
       <div v-if="installedThemes.length > 0" class="mt-6">
