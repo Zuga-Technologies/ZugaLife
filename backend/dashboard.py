@@ -226,11 +226,28 @@ async def _goal_metrics(session, user_id: str) -> dict:
         total_milestones += len(ms)
         done_milestones += sum(1 for m in ms if m.is_completed)
 
+    # All active goals (lightweight) — so the dashboard card can list goals
+    # without deadlines (e.g. premade-template adoptions) alongside the
+    # deadline-anchored hero. Sort: deadline-having first (by date), then
+    # the rest by sort_order.
+    def _sort_key(g):
+        return (0, g.deadline) if g.deadline else (1, g.sort_order)
+    active_sorted = sorted(active, key=_sort_key)
+    active_list = [
+        {
+            "title": g.title,
+            "deadline": g.deadline.isoformat() if g.deadline and hasattr(g.deadline, "isoformat") else (str(g.deadline) if g.deadline else None),
+            "is_template": g.template_key is not None,
+        }
+        for g in active_sorted
+    ]
+
     return {
         "has_data": True,
         "active": len(active),
         "completed": len(completed),
         "nearest_deadline": nearest,
+        "active_list": active_list,
         "milestones_done": done_milestones,
         "milestones_total": total_milestones,
     }

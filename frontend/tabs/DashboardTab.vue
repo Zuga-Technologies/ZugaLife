@@ -72,6 +72,7 @@ interface DashboardData {
     active: number
     completed: number
     nearest_deadline: { title: string; date: string } | null
+    active_list: { title: string; deadline: string | null; is_template: boolean }[]
     milestones_done: number
     milestones_total: number
   }
@@ -656,6 +657,33 @@ onMounted(async () => {
             </h3>
             <p class="text-sm text-txt-secondary mb-6">No deadlines set yet — open Goals to plan dates.</p>
           </template>
+
+          <!-- Also in motion — every other active goal (custom OR premade)
+               so they're not invisible just because they lack a deadline. -->
+          <div
+            v-if="dashboardData.goals.active_list && dashboardData.goals.active_list.length > 1"
+            class="mb-6"
+          >
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-txt-muted mb-2">Also in motion</p>
+            <ul class="space-y-1.5">
+              <li
+                v-for="(g, idx) in dashboardData.goals.active_list.filter(g => !dashboardData.goals.nearest_deadline || g.title !== dashboardData.goals.nearest_deadline.title).slice(0, 3)"
+                :key="idx"
+                class="flex items-center gap-2 text-sm"
+              >
+                <span class="w-1 h-1 rounded-full bg-accent/60 flex-shrink-0" />
+                <span class="text-txt-secondary truncate flex-1">{{ g.title }}</span>
+                <span
+                  v-if="g.is_template"
+                  class="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-accent/10 text-accent flex-shrink-0"
+                >preset</span>
+                <span
+                  v-if="g.deadline"
+                  class="text-[10px] text-txt-muted tabular-nums flex-shrink-0"
+                >{{ formatDeadline(g.deadline) }}</span>
+              </li>
+            </ul>
+          </div>
 
           <!-- Milestone segments — at-a-glance pill row, fills horizontal space -->
           <div v-if="dashboardData.goals.milestones_total > 0" class="mt-auto">
