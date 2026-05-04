@@ -9,6 +9,7 @@ import BackgroundTheme from './BackgroundTheme.vue'
 import CelebrationOverlay from './components/CelebrationOverlay.vue'
 import LifeOnboarding from './components/LifeOnboarding.vue'
 import BreathColdOpen from './components/BreathColdOpen.vue'
+import BottomNavRail from './components/BottomNavRail.vue'
 import SettingsPanel from './SettingsPanel.vue'
 import { applyPreset, getActivePresetId } from './theme-presets'
 
@@ -323,14 +324,14 @@ onMounted(async () => {
     </Teleport>
 
     <div
-      class="relative z-10 mx-auto py-10 animate-fade-in"
+      class="relative z-10 mx-auto py-6 md:py-10 pb-24 md:pb-10 animate-fade-in"
       :class="activeTab !== 'dashboard'
-        ? 'max-w-4xl px-6 mx-4 sm:mx-auto rounded-2xl bg-surface-0/80 backdrop-blur-md border border-white/[0.04]'
-        : 'max-w-7xl px-6'"
+        ? 'max-w-2xl px-4 sm:px-6 mx-4 sm:mx-auto md:rounded-2xl md:bg-surface-0/80 md:backdrop-blur-md md:border md:border-white/[0.04]'
+        : 'max-w-6xl px-4 sm:px-6'"
     >
 
-    <!-- Back nav + module label (shown on non-dashboard tabs) -->
-    <div v-if="activeTab !== 'dashboard'" class="flex items-center gap-3 mb-6">
+    <!-- Back nav + module label — desktop only; mobile uses BottomNavRail -->
+    <div v-if="activeTab !== 'dashboard'" class="hidden md:flex items-center gap-3 mb-6">
       <button
         @click="navigateTo('dashboard')"
         class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-txt-muted transition-colors hover:text-txt-primary hover:bg-surface-3/50"
@@ -396,6 +397,10 @@ onMounted(async () => {
       <SettingsPanel v-if="showSettings" @close="showSettings = false" />
     </transition>
     </div>
+
+    <!-- Mobile bottom navigation rail (md:hidden) — primary nav on phones,
+         frees the dashboard from juggling 6 module cards as nav targets. -->
+    <BottomNavRail :active-tab="activeTab" @navigate="navigateTo($event as Tab)" />
 
     <!-- Billing Prompt Modal -->
     <Teleport to="body">
