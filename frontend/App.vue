@@ -80,7 +80,7 @@ function goHome() {
           @click="goHome"
           class="flex items-center gap-2 mr-8 transition-opacity hover:opacity-80"
         >
-          <img src="/zugabot-mark.svg" alt="" class="w-6 h-6" />
+          <img src="/zugabot-mark-life.svg" alt="" class="w-6 h-6" />
           <span class="text-sm font-semibold text-txt-primary tracking-wide">ZugaLife</span>
         </button>
         <div class="flex-1" />
@@ -139,7 +139,7 @@ function goHome() {
         <div class="relative glass-card w-full max-w-sm p-8 animate-slide-up">
           <div class="flex flex-col items-center mb-8">
             <img
-              src="/zugabot-mark.svg"
+              src="/zugabot-mark-life.svg"
               alt=""
               class="w-16 h-16 mb-4 animate-pulse-glow rounded-2xl"
             />

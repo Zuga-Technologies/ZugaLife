@@ -25,9 +25,9 @@ export interface PresetDefinition {
 export const THEME_PRESETS: PresetDefinition[] = [
   {
     id: 'default',
-    name: 'Acid Green',
-    description: 'Acid lime & dark — the ZugaLife studio identity',
-    preview: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #a3e635 100%)',
+    name: 'Rose Coral',
+    description: 'Rose coral & dark — holistic zen, the ZugaLife studio identity',
+    preview: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #fb7185 100%)',
     category: 'default',
   },
   {
@@ -57,7 +57,7 @@ export function getPreset(id: string): PresetDefinition {
 export function applyPreset(id: string): void {
   const preset = getPreset(id)
 
-  // 'default' = the ZugaLife studio identity (data-theme="life", mint accent).
+  // 'default' = the ZugaLife studio identity (data-theme="life", rose coral accent).
   // Other presets override accent/surface/typography on top of the same ZugaCore base.
   document.documentElement.setAttribute(
     'data-theme',

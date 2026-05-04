@@ -13,10 +13,10 @@ import BottomNavRail from './components/BottomNavRail.vue'
 import SettingsPanel from './SettingsPanel.vue'
 import { applyPreset, getActivePresetId } from './theme-presets'
 
-// Ensure the studio identity (data-theme="life" → acid-lime accent) is active
+// Ensure the studio identity (data-theme="life" → rose coral accent) is active
 // whenever the studio loads — embedded inside ZugaApp shell OR standalone.
 // Idempotent: re-applies whatever preset is already active (default→life,
-// tarot→tarot, biblical→biblical) at component-setup time so the lime tokens
+// tarot→tarot, biblical→biblical) at component-setup time so the coral tokens
 // flip on before the first paint of the dashboard.
 applyPreset(getActivePresetId())
 
