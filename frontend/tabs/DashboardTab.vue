@@ -487,7 +487,6 @@ onMounted(async () => {
               <span class="text-[10px] font-semibold uppercase tracking-wider text-txt-muted">{{ shortDay(entry.date) }}</span>
               <component :is="moodIcons[entry.emoji]" :size="28" class="text-accent" v-if="moodIcons[entry.emoji]" />
               <Meh v-else :size="28" class="text-accent" />
-              <span class="text-[10px] text-txt-secondary truncate max-w-full px-1">{{ entry.label }}</span>
             </div>
           </div>
           <p class="text-[10px] font-semibold uppercase tracking-wider text-txt-muted text-center mt-6">
