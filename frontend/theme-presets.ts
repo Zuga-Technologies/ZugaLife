@@ -25,9 +25,9 @@ export interface PresetDefinition {
 export const THEME_PRESETS: PresetDefinition[] = [
   {
     id: 'default',
-    name: 'Default',
-    description: 'Clean amber & dark — the original ZugaLife look',
-    preview: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #f59e0b 100%)',
+    name: 'Acid Green',
+    description: 'Acid lime & dark — the ZugaLife studio identity',
+    preview: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #a3e635 100%)',
     category: 'default',
   },
   {
@@ -57,12 +57,12 @@ export function getPreset(id: string): PresetDefinition {
 export function applyPreset(id: string): void {
   const preset = getPreset(id)
 
-  // Set or remove the data-theme attribute
-  if (id === 'default') {
-    document.documentElement.removeAttribute('data-theme')
-  } else {
-    document.documentElement.setAttribute('data-theme', id)
-  }
+  // 'default' = the ZugaLife studio identity (data-theme="life", mint accent).
+  // Other presets override accent/surface/typography on top of the same ZugaCore base.
+  document.documentElement.setAttribute(
+    'data-theme',
+    id === 'default' ? 'life' : id,
+  )
 
   // Load Google Font if needed
   if (preset.googleFont) {
@@ -72,7 +72,10 @@ export function applyPreset(id: string): void {
 
 /** Get the currently active preset ID from the DOM */
 export function getActivePresetId(): string {
-  return document.documentElement.getAttribute('data-theme') || 'default'
+  const attr = document.documentElement.getAttribute('data-theme')
+  // 'life' is the studio identity exposed to users as 'default'.
+  if (!attr || attr === 'life') return 'default'
+  return attr
 }
 
 // --- Internal ---

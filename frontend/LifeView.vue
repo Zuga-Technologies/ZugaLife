@@ -511,15 +511,15 @@ onMounted(async () => {
   border-radius: 0.75rem;
   background: rgba(15, 15, 25, 0.96);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 24px rgba(168, 85, 247, 0.15);
+  border: 1px solid rgb(var(--accent) / 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 24px rgb(var(--accent) / 0.15);
   color: #e2e8f0;
   cursor: pointer;
   max-width: 360px;
   -webkit-tap-highlight-color: transparent;
 }
 .med-ready-toast:hover {
-  border-color: rgba(168, 85, 247, 0.5);
+  border-color: rgb(var(--accent) / 0.5);
 }
 @media (max-width: 640px) {
   .med-ready-toast {
