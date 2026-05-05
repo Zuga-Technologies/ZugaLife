@@ -329,9 +329,11 @@ onMounted(async () => {
 
     <div
       class="relative z-10 mx-auto py-6 md:py-10 pb-24 md:pb-10 animate-fade-in"
-      :class="activeTab !== 'dashboard'
-        ? 'max-w-2xl px-4 sm:px-6 mx-4 sm:mx-auto md:rounded-2xl md:bg-surface-0/80 md:backdrop-blur-md md:border md:border-white/[0.04]'
-        : 'max-w-6xl px-4 sm:px-6'"
+      :class="activeTab === 'dashboard'
+        ? 'max-w-6xl px-4 sm:px-6'
+        : activeTab === 'therapist'
+          ? 'max-w-3xl px-4 sm:px-6 mx-4 sm:mx-auto md:rounded-2xl md:bg-surface-0/80 md:backdrop-blur-md md:border md:border-white/[0.04]'
+          : 'max-w-2xl px-4 sm:px-6 mx-4 sm:mx-auto md:rounded-2xl md:bg-surface-0/80 md:backdrop-blur-md md:border md:border-white/[0.04]'"
     >
 
     <!-- Back nav + module label — desktop only; mobile uses BottomNavRail -->
