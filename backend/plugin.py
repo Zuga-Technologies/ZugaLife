@@ -136,6 +136,10 @@ _data_mgmt = _load_sibling("data_management")
 # Load dashboard AFTER all modules — it reads from sys.modules at request time
 _dashboard = _load_sibling("dashboard")
 
+# ZugaOS command catalog — published to the platform router for cross-studio
+# intent dispatch. Static catalog for now; can become dynamic later.
+_commands = _load_sibling("commands")
+
 # Merge all routers into a single combined router
 _combined_router = APIRouter()
 _combined_router.include_router(_routes.router)
@@ -152,6 +156,7 @@ _combined_router.include_router(_gam_routes.router)
 _combined_router.include_router(_gam_notif_routes.router)
 _combined_router.include_router(_data_mgmt.router)
 _combined_router.include_router(_dashboard.router)
+_combined_router.include_router(_commands.router)
 
 
 class ZugaLifePlugin(StudioPlugin):
