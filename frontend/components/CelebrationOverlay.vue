@@ -66,7 +66,7 @@ const levelNames: Record<number, string> = {
           </button>
           <div class="cel-modal__shine" />
           <div class="cel-badge-icon">
-            <component v-if="badgeIcons[activeBadge.badge_key]" :is="badgeIcons[activeBadge.badge_key]" :size="48" class="text-accent-alt" />
+            <component v-if="badgeIcons[activeBadge.badge_key]" :is="badgeIcons[activeBadge.badge_key]" :size="48" class="text-accent" />
           </div>
           <div class="cel-modal__label">You've proven something</div>
           <div class="cel-modal__title">{{ activeBadge.title }}</div>
@@ -211,7 +211,7 @@ const levelNames: Record<number, string> = {
   overflow: hidden;
   background: rgba(20, 20, 35, 0.97);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(139, 92, 246, 0.15);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgb(var(--accent) / 0.18);
 }
 
 .cel-modal__close {
@@ -242,7 +242,7 @@ const levelNames: Record<number, string> = {
   left: -50%;
   width: 200%;
   height: 200%;
-  background: radial-gradient(ellipse at center, rgba(139, 92, 246, 0.15) 0%, transparent 60%);
+  background: radial-gradient(ellipse at center, rgb(var(--accent) / 0.18) 0%, transparent 60%);
   animation: shine-pulse 2s ease-in-out infinite;
   pointer-events: none;
 }
@@ -261,7 +261,7 @@ const levelNames: Record<number, string> = {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  color: rgba(139, 92, 246, 0.8);
+  color: rgb(var(--accent) / 0.95);
   margin-bottom: 0.25rem;
 }
 
@@ -293,9 +293,9 @@ const levelNames: Record<number, string> = {
   cursor: pointer;
   min-height: 44px;
   transition: transform 0.15s, box-shadow 0.15s;
-  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+  background: linear-gradient(135deg, rgb(var(--accent)) 0%, rgb(var(--accent-dim)) 100%);
   color: white;
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 4px 12px rgb(var(--accent) / 0.35);
 }
 
 .cel-modal__btn:active {
