@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { api, ApiError } from '@core/api/client'
 import { habitIcons, habitIconPicker, habitIconCategories, getIcon } from '../icons'
-import { ChevronDown, ChevronUp, CircleDot, Trash2 } from 'lucide-vue-next'
+import { Check, ChevronDown, ChevronUp, CircleDot, Plus, Trash2 } from 'lucide-vue-next'
 import { useLifeShared } from '../composables/useLifeShared'
 
 const emit = defineEmits<{
@@ -381,8 +381,21 @@ async function toggleHabitActive(habit: HabitDefinition) {
   }
 }
 
+// Two-step delete for custom habits — bible §11 button.danger MUST NOT
+// fire destructive action immediately. First click arms confirm for 4s.
+const deletingHabit = ref<number | null>(null)
+let deletingHabitTimer: ReturnType<typeof setTimeout> | null = null
+
+function armDeleteHabit(habitId: number) {
+  deletingHabit.value = habitId
+  if (deletingHabitTimer) clearTimeout(deletingHabitTimer)
+  deletingHabitTimer = setTimeout(() => { deletingHabit.value = null }, 4000)
+}
+
 async function deleteCustomHabit(habit: HabitDefinition) {
   habitError.value = null
+  if (deletingHabitTimer) clearTimeout(deletingHabitTimer)
+  deletingHabit.value = null
   // Optimistic remove — drop from both lists immediately.
   const idx = allHabits.value.indexOf(habit)
   if (idx >= 0) allHabits.value.splice(idx, 1)
@@ -606,14 +619,13 @@ onBeforeUnmount(() => {
       ] as { key: HabitView; label: string }[]"
       :key="view.key"
       @click="habitView = view.key; if (view.key === 'history') fetchHabitHistory()"
-      class="px-4 py-2.5 text-xs font-medium rounded-lg transition-colors"
-      :class="habitView === view.key ? 'bg-accent/15 text-accent' : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
+      :class="habitView === view.key ? 'tab-btn-active' : 'tab-btn'"
     >
       {{ view.label }}
     </button>
   </div>
 
-  <p v-if="habitError" class="text-sm text-red-400 mb-4">{{ habitError }}</p>
+  <p v-if="habitError" class="text-sm text-danger mb-4">{{ habitError }}</p>
 
   <!-- ===== CHECK-IN VIEW ===== -->
   <template v-if="habitView === 'checkin'">
@@ -672,10 +684,12 @@ onBeforeUnmount(() => {
             :disabled="!item.habit.is_active"
             class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors duration-100 ease-out flex-shrink-0 disabled:cursor-not-allowed"
             :class="item.logged
-              ? 'bg-success border-success text-white'
+              ? 'bg-success border-success text-surface-0'
               : 'border-bdr hover:border-accent'"
+            :aria-label="item.logged ? `Mark ${item.habit.name} undone` : `Mark ${item.habit.name} done`"
+            :aria-pressed="item.logged"
           >
-            <span v-if="item.logged" class="text-xs">&#10003;</span>
+            <Check v-if="item.logged" :size="14" stroke-width="3" />
           </button>
           <component :is="getIcon(item.habit.emoji)" :size="22" class="flex-shrink-0 text-accent" v-if="getIcon(item.habit.emoji)" />
           <CircleDot v-else :size="22" class="flex-shrink-0 text-accent" />
@@ -684,10 +698,10 @@ onBeforeUnmount(() => {
               <span class="text-sm font-medium text-txt-primary">{{ item.habit.name }}</span>
               <span
                 v-if="!item.habit.is_active"
-                class="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-3 text-txt-muted"
+                class="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded bg-surface-3 text-txt-muted"
               >Paused</span>
             </div>
-            <p v-if="item.habit.trigger" class="text-[11px] text-txt-muted leading-tight mt-0.5">After {{ item.habit.trigger }}</p>
+            <p v-if="item.habit.trigger" class="text-xs text-txt-muted leading-tight mt-0.5">After {{ item.habit.trigger }}</p>
           </div>
           <div v-if="item.habit.unit" class="flex items-center gap-1.5">
             <input
@@ -709,7 +723,7 @@ onBeforeUnmount(() => {
           <button
             v-if="item.habit.can_escalate && item.logged"
             @click="escalateHabit(item.habit.id)"
-            class="text-[10px] text-success hover:text-success transition-colors whitespace-nowrap"
+            class="text-xs text-success hover:text-success transition-colors whitespace-nowrap"
             :title="`Level up to ${item.habit.full_target} ${item.habit.unit || ''}`"
           >
             Ready for more
@@ -717,19 +731,21 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- AI Insight -->
+      <!-- AI Insight — coral-themed for ZugaLife brand consistency.
+           accent-alt (violet) is reserved for prestige/quest semantics
+           per ZugaCore theme-vars.css; AI features inside Life use --accent. -->
       <div class="mt-6 glass-card p-4">
         <div class="flex items-center justify-between">
           <span class="text-xs font-medium text-txt-secondary">Weekly AI Insight</span>
           <button
             @click="fetchHabitInsight"
             :disabled="habitInsightLoading"
-            class="text-xs text-accent-alt hover:text-accent-alt-bright transition-colors disabled:opacity-50"
+            class="text-xs text-accent hover:text-accent-bright transition-colors disabled:opacity-50"
           >
             {{ habitInsightLoading ? 'Analyzing...' : 'Generate Insight' }}
           </button>
         </div>
-        <div v-if="habitInsightText" class="mt-3 p-3 rounded-lg bg-accent-alt/10 border border-accent-alt/20 animate-fade-in">
+        <div v-if="habitInsightText" class="mt-3 p-3 rounded-lg bg-accent/10 border border-accent/20 animate-fade-in">
           <p class="text-xs text-txt-secondary leading-relaxed whitespace-pre-line">{{ habitInsightText }}</p>
         </div>
         <!-- Soft "not enough data" hint — guidance, not error. -->
@@ -755,7 +771,8 @@ onBeforeUnmount(() => {
           :key="d"
           @click="historyDays = d; fetchHabitHistory()"
           class="px-4 py-2 text-xs rounded-lg transition-colors"
-          :class="historyDays === d ? 'bg-accent/15 text-accent' : 'text-txt-muted hover:text-txt-primary'"
+          :class="historyDays === d ? 'pill-active' : 'pill-inactive'"
+          :aria-pressed="historyDays === d"
         >
           {{ d }}d
         </button>
@@ -788,8 +805,7 @@ onBeforeUnmount(() => {
             <template v-if="deletingDay !== day.date">
               <button
                 @click="deletingDay = day.date"
-                class="text-txt-muted hover:text-red-400 transition-colors p-1 rounded"
-                title="Delete this day's logs"
+                class="text-txt-muted hover:text-danger transition-colors p-1 rounded"
                 aria-label="Delete this day's logs"
               >
                 <Trash2 :size="14" />
@@ -798,7 +814,7 @@ onBeforeUnmount(() => {
             <template v-else>
               <button
                 @click="deleteHabitDay(day.date)"
-                class="text-xs text-red-400 hover:text-red-300 font-medium px-2 py-0.5 rounded"
+                class="text-xs text-danger font-medium px-2 py-0.5 rounded ring-1 ring-danger/50 bg-danger/10"
               >
                 Confirm
               </button>
@@ -834,9 +850,10 @@ onBeforeUnmount(() => {
       <h2 class="text-lg font-semibold text-txt-primary">Manage Habits</h2>
       <button
         @click="showNewHabitForm = !showNewHabitForm"
-        class="text-sm text-accent hover:text-accent/80 transition-colors"
+        class="inline-flex items-center gap-1 text-sm text-accent hover:text-accent-bright transition-colors"
       >
-        {{ showNewHabitForm ? 'Cancel' : '+ Add Custom' }}
+        <Plus v-if="!showNewHabitForm" :size="14" />
+        {{ showNewHabitForm ? 'Cancel' : 'Add Custom' }}
       </button>
     </div>
 
@@ -878,7 +895,7 @@ onBeforeUnmount(() => {
           class="mt-2 p-3 rounded-lg border border-bdr/60 bg-surface-2/40 max-h-60 overflow-y-auto space-y-3 animate-fade-in"
         >
           <div v-for="(cat, ci) in habitIconCategories" :key="cat.label" :class="ci > 0 ? 'pt-3 border-t border-bdr/30' : ''">
-            <p class="text-[11px] text-txt-muted uppercase tracking-wider mb-1.5">{{ cat.label }}</p>
+            <p class="text-xs text-txt-muted uppercase tracking-wider mb-1.5">{{ cat.label }}</p>
             <div class="flex flex-wrap gap-1.5">
               <button
                 v-for="opt in cat.icons"
@@ -898,25 +915,25 @@ onBeforeUnmount(() => {
            below) plus a custom-text fallback. Replaces the native <datalist>
            dropdown that browsers rendered in inconsistent / ugly styles. -->
       <div>
-        <label class="text-[11px] text-txt-muted mb-1 block">How will you measure it?</label>
+        <label class="text-xs text-txt-muted mb-1 block">How will you measure it?</label>
         <div class="flex flex-wrap gap-1.5 mb-2">
           <button
             type="button"
             @click="newHabitUnit = ''"
-            class="px-2.5 py-1 text-[11px] rounded-full border transition-colors"
+            class="px-2.5 py-1 text-xs rounded-full transition-colors"
             :class="!newHabitUnit
-              ? 'bg-accent/20 border-accent text-accent'
-              : 'border-bdr text-txt-muted hover:border-accent/50'"
+              ? 'bg-accent/15 ring-1 ring-accent/50 text-accent'
+              : 'border border-bdr text-txt-muted hover:border-accent/50'"
           >Just check off</button>
           <button
             type="button"
             v-for="u in habitUnits"
             :key="u.value"
             @click="newHabitUnit = u.value"
-            class="px-2.5 py-1 text-[11px] rounded-full border transition-colors"
+            class="px-2.5 py-1 text-xs rounded-full transition-colors"
             :class="newHabitUnit === u.value
-              ? 'bg-accent/20 border-accent text-accent'
-              : 'border-bdr text-txt-muted hover:border-accent/50'"
+              ? 'bg-accent/15 ring-1 ring-accent/50 text-accent'
+              : 'border border-bdr text-txt-muted hover:border-accent/50'"
             :title="u.label"
           >{{ u.value }}</button>
         </div>
@@ -940,16 +957,16 @@ onBeforeUnmount(() => {
       </div>
       <!-- Habit anchor — "After what routine?" (habit stacking) -->
       <div>
-        <label class="text-[11px] text-txt-muted mb-1 block">After what existing routine?</label>
+        <label class="text-xs text-txt-muted mb-1 block">After what existing routine?</label>
         <div class="flex flex-wrap gap-1.5 mb-2">
           <button
             v-for="anchor in ['morning coffee', 'brushing teeth', 'lunch', 'getting home', 'dinner', 'before bed']"
             :key="anchor"
             @click="newHabitTrigger = anchor"
-            class="px-2 py-1 text-[11px] rounded-full border transition-colors"
+            class="px-2 py-1 text-xs rounded-full transition-colors"
             :class="newHabitTrigger === anchor
-              ? 'bg-accent/20 border-accent text-accent'
-              : 'border-bdr text-txt-muted hover:border-accent/50'"
+              ? 'bg-accent/15 ring-1 ring-accent/50 text-accent'
+              : 'border border-bdr text-txt-muted hover:border-accent/50'"
           >
             {{ anchor }}
           </button>
@@ -1004,7 +1021,7 @@ onBeforeUnmount(() => {
               <button
                 v-else
                 @click="startEditTarget(habit)"
-                class="text-[11px] px-2 py-0.5 rounded-full border border-bdr text-txt-muted hover:text-accent hover:border-accent/50 transition-colors whitespace-nowrap"
+                class="text-xs px-2 py-0.5 rounded-full border border-bdr text-txt-muted hover:text-accent hover:border-accent/50 transition-colors whitespace-nowrap"
                 :title="habit.weekly_target ? 'Change weekly target' : 'Set a weekly target'"
               >
                 {{ habit.weekly_target ? habit.weekly_target + 'x / week' : 'No target' }}
@@ -1026,7 +1043,7 @@ onBeforeUnmount(() => {
           <template v-if="resettingHabit !== habit.id">
             <button
               @click="resettingHabit = habit.id"
-              class="flex-1 sm:flex-none text-xs text-txt-muted hover:text-red-400 transition-colors px-3 py-2.5 sm:py-2"
+              class="flex-1 sm:flex-none text-xs text-txt-muted hover:text-danger transition-colors px-3 py-2.5 sm:py-2"
             >
               Reset
             </button>
@@ -1034,7 +1051,7 @@ onBeforeUnmount(() => {
           <template v-else>
             <button
               @click="resetSingleHabit(habit.id)"
-              class="flex-1 sm:flex-none text-xs text-red-400 hover:text-red-300 font-medium px-2 py-2.5 sm:py-1.5"
+              class="flex-1 sm:flex-none text-xs text-danger font-medium px-2 py-2.5 sm:py-1.5"
             >Clear logs</button>
             <span class="w-px bg-bdr/60 sm:hidden" />
             <button
@@ -1043,13 +1060,26 @@ onBeforeUnmount(() => {
             >Cancel</button>
           </template>
           <span v-if="!habit.is_preset" class="w-px bg-bdr/60 sm:hidden" />
-          <button
-            v-if="!habit.is_preset"
-            @click="deleteCustomHabit(habit)"
-            class="flex-1 sm:flex-none text-xs text-txt-muted hover:text-red-400 transition-colors px-3 py-2.5 sm:py-2"
-          >
-            Delete
-          </button>
+          <!-- Two-step delete (bible §11): first click → confirm row, second within 4s actually deletes -->
+          <template v-if="!habit.is_preset && deletingHabit !== habit.id">
+            <button
+              @click="armDeleteHabit(habit.id)"
+              class="flex-1 sm:flex-none text-xs text-txt-muted hover:text-danger transition-colors px-3 py-2.5 sm:py-2"
+            >
+              Delete
+            </button>
+          </template>
+          <template v-else-if="!habit.is_preset">
+            <button
+              @click="deleteCustomHabit(habit)"
+              class="flex-1 sm:flex-none text-xs text-danger font-medium px-2 py-2.5 sm:py-1.5"
+            >Confirm delete</button>
+            <span class="w-px bg-bdr/60 sm:hidden" />
+            <button
+              @click="deletingHabit = null"
+              class="flex-1 sm:flex-none text-xs text-txt-muted hover:text-txt-primary px-2 py-2.5 sm:py-1.5"
+            >Cancel</button>
+          </template>
         </div>
       </div>
     </div>
