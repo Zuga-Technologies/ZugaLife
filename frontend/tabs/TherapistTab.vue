@@ -5,14 +5,17 @@ import { useLifeShared } from '../composables/useLifeShared'
 import { moodIcons } from '../icons'
 import {
   AlertTriangle,
+  ArrowLeft,
   Lightbulb,
   Loader2,
   Lock,
   MessageCircleHeart,
   Mic,
   MicOff,
+  RotateCw,
   ScrollText,
   Send,
+  Star,
   Trash2,
   Pencil,
   User,
@@ -106,6 +109,17 @@ const therapistMoodBefore = ref<string | null>(null)
 const therapistMoodAfter = ref<string | null>(null)
 const therapistRating = ref<number | null>(null)
 const therapistShowEndMood = ref(false)
+
+// Two-step delete for session notes — bible §11 button.danger MUST NOT
+// fire destructive action immediately. First click arms confirm for 4s.
+const deletingNote = ref<number | null>(null)
+let deletingNoteTimer: ReturnType<typeof setTimeout> | null = null
+
+function armDeleteNote(id: number) {
+  deletingNote.value = id
+  if (deletingNoteTimer) clearTimeout(deletingNoteTimer)
+  deletingNoteTimer = setTimeout(() => { deletingNote.value = null }, 4000)
+}
 
 // ── Tips on how to write to the wellness companion ──────────────
 // Static pool — rotates each session, user can cycle manually.
@@ -558,6 +572,8 @@ async function saveNoteEdit() {
 
 async function deleteTherapistNote(id: number) {
   therapistError.value = null
+  if (deletingNoteTimer) clearTimeout(deletingNoteTimer)
+  deletingNote.value = null
   try {
     await api.delete(`/api/life/therapist/notes/${id}`)
     therapistNotes.value = therapistNotes.value.filter(n => n.id !== id)
@@ -633,19 +649,18 @@ defineExpose({ therapistSessionActive, therapistMessages })
         ] as { key: TherapistView; label: string }[]"
         :key="view.key"
         @click="therapistView = view.key as TherapistView; if (view.key === 'notes') fetchTherapistNotes()"
-        class="px-4 py-2.5 text-xs font-medium rounded-lg transition-colors"
         :class="therapistView === view.key || (therapistView === 'note-detail' && view.key === 'notes')
-          ? 'bg-accent/15 text-accent'
-          : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
+          ? 'tab-btn-active'
+          : 'tab-btn'"
       >
         {{ view.label }}
       </button>
-      <span v-if="therapistStatus" class="ml-auto text-xs text-txt-muted self-center">
+      <span v-if="therapistStatus" class="ml-auto text-xs text-txt-muted self-center tabular-nums">
         {{ therapistStatus.sessions_remaining }}/{{ therapistStatus.sessions_limit }} sessions left today
       </span>
     </div>
 
-    <p v-if="therapistError" class="text-sm text-red-400 mb-4">{{ therapistError }}</p>
+    <p v-if="therapistError" class="text-sm text-danger mb-4">{{ therapistError }}</p>
 
     <!-- ===== CHAT VIEW ===== -->
     <template v-if="therapistView === 'chat'">
@@ -776,7 +791,7 @@ defineExpose({ therapistSessionActive, therapistMessages })
             <div
               class="max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed"
               :class="msg.role === 'user'
-                ? 'bg-accent text-white rounded-br-md'
+                ? 'bg-accent text-surface-0 rounded-br-md'
                 : 'glass-card text-txt-primary rounded-bl-md'"
             >
               <p v-for="(para, j) in msg.content.split('\n\n')" :key="j" :class="j > 0 ? 'mt-2' : ''" v-html="renderMarkdown(para)">
@@ -803,10 +818,9 @@ defineExpose({ therapistSessionActive, therapistMessages })
           <button
             @click="cycleTip()"
             class="flex-shrink-0 p-1 rounded text-txt-muted/60 hover:text-txt-secondary hover:bg-surface-3 transition-colors"
-            title="Show a different tip"
             aria-label="Show a different tip"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+            <RotateCw :size="12" />
           </button>
         </div>
 
@@ -828,15 +842,18 @@ defineExpose({ therapistSessionActive, therapistMessages })
           </div>
           <div>
             <p class="text-xs text-txt-muted mb-2">How helpful was this session?</p>
-            <div class="flex gap-1">
+            <div class="flex gap-1" role="radiogroup" aria-label="Session rating">
               <button
                 v-for="star in [1, 2, 3, 4, 5]"
                 :key="star"
                 @click="therapistRating = therapistRating === star ? null : star"
-                class="text-lg transition-colors"
+                class="p-1 transition-colors"
                 :class="therapistRating && star <= therapistRating ? 'text-accent' : 'text-surface-3 hover:text-accent/50'"
+                role="radio"
+                :aria-checked="!!(therapistRating && star <= therapistRating)"
+                :aria-label="`${star} ${star === 1 ? 'star' : 'stars'}`"
               >
-                &#9733;
+                <Star :size="20" :fill="therapistRating && star <= therapistRating ? 'currentColor' : 'none'" />
               </button>
             </div>
           </div>
@@ -851,7 +868,7 @@ defineExpose({ therapistSessionActive, therapistMessages })
         <!-- Input area -->
         <div v-if="!therapistShowEndMood" class="border-t border-bdr pt-3">
           <div class="flex items-center gap-2 mb-2">
-            <span class="text-xs text-txt-muted">{{ therapistMessagesRemaining }} messages left</span>
+            <span class="text-xs text-txt-muted tabular-nums">{{ therapistMessagesRemaining }} messages left</span>
             <button
               @click="endTherapistSession()"
               :disabled="therapistEndingSession"
@@ -866,7 +883,7 @@ defineExpose({ therapistSessionActive, therapistMessages })
             v-if="!voiceMuted"
             class="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg border animate-fade-in"
             :class="{
-              'bg-red-500/10 border-red-500/30 text-red-300': voicePhase === 'capturing',
+              'bg-danger/10 border-danger/30 text-danger': voicePhase === 'capturing',
               'bg-accent/10 border-accent/30 text-accent': voicePhase === 'transcribing',
               'bg-surface-2/60 border-bdr/60 text-txt-muted': voicePhase === 'listening' || voicePhase === 'paused',
             }"
@@ -874,9 +891,9 @@ defineExpose({ therapistSessionActive, therapistMessages })
             <span
               class="w-2 h-2 rounded-full"
               :class="{
-                'bg-red-500 animate-pulse': voicePhase === 'capturing',
+                'bg-danger animate-pulse': voicePhase === 'capturing',
                 'bg-accent animate-pulse': voicePhase === 'transcribing',
-                'bg-emerald-400 animate-pulse': voicePhase === 'listening',
+                'bg-success animate-pulse': voicePhase === 'listening',
                 'bg-txt-muted/60': voicePhase === 'paused',
               }"
             ></span>
@@ -890,7 +907,7 @@ defineExpose({ therapistSessionActive, therapistMessages })
             <div class="w-16 h-1.5 rounded-full bg-surface-3 overflow-hidden">
               <div
                 class="h-full transition-[width] duration-75"
-                :class="voicePhase === 'capturing' ? 'bg-red-500' : 'bg-emerald-400'"
+                :class="voicePhase === 'capturing' ? 'bg-danger' : 'bg-success'"
                 :style="{ width: Math.round(voiceVolume * 100) + '%' }"
               ></div>
             </div>
@@ -915,12 +932,11 @@ defineExpose({ therapistSessionActive, therapistMessages })
                 voiceMuted
                   ? 'bg-surface-3 text-txt-secondary hover:bg-surface-4 border border-bdr'
                   : voicePhase === 'capturing'
-                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    ? 'bg-danger text-surface-0 hover:opacity-90'
                     : voicePhase === 'transcribing'
-                      ? 'bg-accent text-white'
-                      : 'bg-emerald-500 text-white hover:bg-emerald-600',
+                      ? 'bg-accent text-surface-0'
+                      : 'bg-success text-surface-0 hover:opacity-90',
               ]"
-              :title="voiceMuted ? 'Unmute mic — talk to her' : 'Mute mic'"
               :aria-label="voiceMuted ? 'Unmute microphone' : 'Mute microphone'"
               :aria-pressed="!voiceMuted"
             >
@@ -932,13 +948,14 @@ defineExpose({ therapistSessionActive, therapistMessages })
               <span
                 v-if="!voiceMuted && voicePhase !== 'transcribing'"
                 class="absolute -inset-0.5 rounded-xl ring-2 pointer-events-none animate-ping"
-                :class="voicePhase === 'capturing' ? 'ring-red-400/60' : 'ring-emerald-400/60'"
+                :class="voicePhase === 'capturing' ? 'ring-danger/60' : 'ring-success/60'"
               ></span>
             </button>
             <button
               @click="sendTherapistMessage()"
               :disabled="!therapistInput.trim() || therapistSending || therapistMessagesRemaining <= 0 || voicePhase === 'transcribing'"
-              class="self-end px-4 py-3 rounded-xl bg-accent text-white hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              class="self-end px-4 py-3 rounded-xl bg-accent text-surface-0 hover:bg-accent-bright transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Send message"
             >
               <Send :size="18" />
             </button>
@@ -982,13 +999,31 @@ defineExpose({ therapistSessionActive, therapistMessages })
               <p class="text-sm font-medium text-txt-primary">{{ note.themes.split('\n')[0] }}</p>
               <p class="text-xs text-txt-muted mt-0.5">{{ formatDate(note.created_at) }}</p>
             </div>
-            <button
-              @click.stop="deleteTherapistNote(note.id)"
-              class="p-2 rounded-lg text-txt-muted/40 hover:text-red-400 hover:bg-red-400/10 transition-all"
-              title="Delete note"
-            >
-              <Trash2 :size="14" />
-            </button>
+            <!-- Two-step delete (bible §11) — first click arms confirm for 4s -->
+            <template v-if="deletingNote !== note.id">
+              <button
+                @click.stop="armDeleteNote(note.id)"
+                class="p-2 rounded-lg text-txt-muted/40 hover:text-danger hover:bg-danger/10 transition-all"
+                aria-label="Delete note"
+              >
+                <Trash2 :size="14" />
+              </button>
+            </template>
+            <template v-else>
+              <div class="flex gap-1">
+                <button
+                  @click.stop="deleteTherapistNote(note.id)"
+                  class="text-xs font-medium text-danger px-2 py-1 rounded ring-1 ring-danger/50 bg-danger/10 inline-flex items-center gap-1"
+                >
+                  <Trash2 :size="12" />
+                  Confirm
+                </button>
+                <button
+                  @click.stop="deletingNote = null"
+                  class="text-xs text-txt-muted hover:text-txt-primary px-2 py-1 rounded"
+                >Cancel</button>
+              </div>
+            </template>
           </div>
           <div v-if="note.mood_snapshot" class="flex items-center gap-1.5 mb-2">
             <span class="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent">{{ note.mood_snapshot }}</span>
@@ -1006,9 +1041,11 @@ defineExpose({ therapistSessionActive, therapistMessages })
     <template v-if="therapistView === 'note-detail' && therapistCurrentNote">
       <button
         @click="therapistView = 'notes'; therapistEditingNote = false"
-        class="text-sm text-accent hover:underline mb-4 inline-block"
+        class="inline-flex items-center gap-1.5 text-sm text-accent hover:text-accent-bright mb-4"
+        aria-label="Back to session notes"
       >
-        &larr;
+        <ArrowLeft :size="14" />
+        <span>Back</span>
       </button>
 
       <div class="glass-card p-6 space-y-5">
@@ -1019,22 +1056,38 @@ defineExpose({ therapistSessionActive, therapistMessages })
               <span class="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent">{{ therapistCurrentNote.mood_snapshot }}</span>
             </div>
           </div>
-          <div class="flex gap-2">
+          <div class="flex gap-2 items-center">
             <button
               v-if="!therapistEditingNote"
               @click="startEditingNote()"
               class="p-1.5 rounded-lg text-txt-muted hover:text-accent hover:bg-accent/10 transition-colors"
-              title="Edit note"
+              aria-label="Edit note"
             >
               <Pencil :size="16" />
             </button>
-            <button
-              @click="deleteTherapistNote(therapistCurrentNote.id)"
-              class="p-1.5 rounded-lg text-txt-muted hover:text-red-400 hover:bg-red-400/10 transition-colors"
-              title="Delete note"
-            >
-              <Trash2 :size="16" />
-            </button>
+            <!-- Two-step delete (bible §11) — first click arms confirm for 4s -->
+            <template v-if="deletingNote !== therapistCurrentNote.id">
+              <button
+                @click="armDeleteNote(therapistCurrentNote.id)"
+                class="p-1.5 rounded-lg text-txt-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                aria-label="Delete note"
+              >
+                <Trash2 :size="16" />
+              </button>
+            </template>
+            <template v-else>
+              <button
+                @click="deleteTherapistNote(therapistCurrentNote.id)"
+                class="text-xs font-medium text-danger px-2 py-1 rounded ring-1 ring-danger/50 bg-danger/10 inline-flex items-center gap-1"
+              >
+                <Trash2 :size="12" />
+                Confirm
+              </button>
+              <button
+                @click="deletingNote = null"
+                class="text-xs text-txt-muted hover:text-txt-primary px-2 py-1 rounded"
+              >Cancel</button>
+            </template>
           </div>
         </div>
 
@@ -1072,7 +1125,7 @@ defineExpose({ therapistSessionActive, therapistMessages })
             <button @click="therapistEditingNote = false" class="px-3 py-1.5 text-sm rounded-lg text-txt-muted hover:text-txt-primary transition-colors">
               Cancel
             </button>
-            <button @click="saveNoteEdit()" class="px-4 py-1.5 text-sm rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors">
+            <button @click="saveNoteEdit()" class="px-4 py-1.5 text-sm rounded-lg bg-accent text-surface-0 hover:bg-accent-bright transition-colors">
               Save
             </button>
           </div>
