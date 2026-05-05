@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { api, ApiError, getToken } from '@core/api/client'
 import { startAmbience, stopAmbience, pauseAmbience, resumeAmbience, setAmbienceVolume } from '../ambience'
 import { meditationTypeIcons, ambienceIcons } from '../icons'
-import { Download, Headphones } from 'lucide-vue-next'
+import { Download, Headphones, MoreVertical, Play, Pause, Star, X } from 'lucide-vue-next'
 import { useLifeShared, type GamificationData } from '../composables/useLifeShared'
 import { playXpSound, playBadgeSound, playLevelUpSound } from '../composables/useCelebrationSounds'
 
@@ -209,7 +209,9 @@ const activeSegmentIndex = computed(() => {
   return 0
 })
 
-// Auto-scroll transcript to keep the active segment visible (throttled to avoid scroll jank)
+// Auto-scroll transcript to keep the active segment visible (throttled to avoid scroll jank).
+// Honors prefers-reduced-motion at the JS layer — scrollIntoView's CSS smooth-behavior
+// override only applies to scroll-behavior CSS, not the imperative call's behavior arg.
 let _lastScrollTime = 0
 watch(activeSegmentIndex, () => {
   const now = performance.now()
@@ -217,7 +219,12 @@ watch(activeSegmentIndex, () => {
   _lastScrollTime = now
   nextTick(() => {
     if (activeParagraphEl && transcriptContainer.value) {
-      activeParagraphEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const reduceMotion = typeof window !== 'undefined'
+        && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      activeParagraphEl.scrollIntoView({
+        behavior: reduceMotion ? 'auto' : 'smooth',
+        block: 'center',
+      })
     }
   })
 })
@@ -936,20 +943,19 @@ onUnmounted(() => {
         ] as { key: MedView; label: string }[]"
         :key="view.key"
         @click="medError = null; medView = view.key; if (view.key === 'history') fetchMedSessions()"
-        class="px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-medium rounded-lg transition-colors"
         :class="medView === view.key || (medView === 'player' && view.key === 'new')
-          ? 'bg-accent/15 text-accent'
-          : 'text-txt-muted hover:text-txt-primary hover:bg-surface-3'"
+          ? 'tab-btn-active'
+          : 'tab-btn'"
       >
         {{ view.label }}
       </button>
-      <span v-if="medRemaining" class="ml-auto text-[11px] sm:text-xs text-txt-muted self-center whitespace-nowrap">
+      <span v-if="medRemaining" class="ml-auto text-xs text-txt-muted self-center whitespace-nowrap">
         <span class="sm:hidden">{{ medRemaining.remaining }}/{{ medRemaining.limit }} left</span>
         <span class="hidden sm:inline">{{ medRemaining.remaining }}/{{ medRemaining.limit }} sessions left today</span>
       </span>
     </div>
 
-    <p v-if="medError" class="text-sm text-red-400 mb-4">{{ medError }}</p>
+    <p v-if="medError" class="text-sm text-danger mb-4">{{ medError }}</p>
 
     <!-- Extension status banner — hidden on mobile when extension isn't
          installed (mobile can't install Chrome extensions, so the prompt
@@ -980,7 +986,7 @@ onUnmounted(() => {
             :key="mt.key"
             @click="medType = mt.key"
             class="glass-card px-4 py-3 text-left transition-all duration-150"
-            :class="medType === mt.key ? 'ring-1 ring-accent bg-accent/5' : 'hover:bg-surface-2'"
+            :class="medType === mt.key ? 'pill-active' : 'hover:bg-surface-2'"
           >
             <div class="flex items-center gap-2 mb-1">
               <component :is="meditationTypeIcons[mt.key]" :size="20" v-if="meditationTypeIcons[mt.key]" />
@@ -1001,11 +1007,11 @@ onUnmounted(() => {
             @click="medLength = opt.key"
             class="flex-1 py-2 rounded-lg font-medium transition-all duration-150 flex flex-col items-center"
             :class="medLength === opt.key
-              ? 'bg-accent text-white'
+              ? 'pill-active'
               : 'glass-card text-txt-muted hover:text-txt-primary'"
           >
             <span class="text-sm">{{ opt.label }}</span>
-            <span class="text-[10px] opacity-70">{{ opt.sub }}</span>
+            <span class="text-xs opacity-70">{{ opt.sub }}</span>
           </button>
         </div>
       </div>
@@ -1117,23 +1123,26 @@ onUnmounted(() => {
           <div class="flex items-center gap-2 flex-shrink-0">
             <button
               @click="toggleMedFavorite"
-              class="text-xl transition-colors"
+              class="transition-colors p-1"
               :class="medSession.is_favorite ? 'text-accent' : 'text-txt-muted hover:text-accent'"
+              :aria-label="medSession.is_favorite ? 'Remove from favorites' : 'Add to favorites'"
+              :aria-pressed="medSession.is_favorite"
             >
-              {{ medSession.is_favorite ? '&#9733;' : '&#9734;' }}
+              <Star :size="18" :fill="medSession.is_favorite ? 'currentColor' : 'none'" />
             </button>
             <div class="relative">
               <button
                 @click="showMedActionMenu = !showMedActionMenu"
                 class="text-txt-muted hover:text-accent transition-colors p-1"
-                title="More actions"
+                aria-label="More actions"
+                :aria-expanded="showMedActionMenu"
               >
-                <Download :size="16" />
+                <MoreVertical :size="18" />
               </button>
               <div v-if="showMedActionMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[180px] max-w-[calc(100vw-2rem)]">
                 <button
                   @click="showMedActionMenu = false; downloadMeditationAudio()"
-                  class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors flex items-center gap-2"
+                  class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-surface-3 px-3 py-2 rounded transition-colors flex items-center gap-2"
                 >
                   <Download :size="12" />
                   Download MP3
@@ -1141,7 +1150,7 @@ onUnmounted(() => {
                 <button
                   @click="sendToZugaAudio()"
                   :disabled="medSendingToAudio"
-                  class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors flex items-center gap-2 disabled:opacity-50"
+                  class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-surface-3 px-3 py-2 rounded transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
                   <Headphones :size="12" />
                   {{ medSendingToAudio ? 'Sending...' : 'Edit in ZugaAudio' }}
@@ -1157,10 +1166,12 @@ onUnmounted(() => {
           <div class="flex items-center gap-3">
             <button
               @click="togglePlayPause()"
-              class="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center hover:bg-accent/80 transition-colors flex-shrink-0"
+              class="w-10 h-10 rounded-full bg-accent text-surface-0 flex items-center justify-center hover:bg-accent-bright transition-colors flex-shrink-0"
+              :class="medPlaying ? 'animate-pulse-glow' : ''"
+              :aria-label="medPlaying ? 'Pause meditation' : 'Play meditation'"
             >
-              <span v-if="medPlaying" class="text-sm">&#9646;&#9646;</span>
-              <span v-else class="text-sm ml-0.5">&#9654;</span>
+              <Pause v-if="medPlaying" :size="16" fill="currentColor" />
+              <Play v-else :size="16" fill="currentColor" class="ml-0.5" />
             </button>
             <div class="flex-1">
               <div
@@ -1196,10 +1207,16 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Live transcript -->
+      <!-- Live transcript — past segments fade to secondary, future to muted.
+           No sub-AA opacity dimming on text the user might read; bible §13. -->
       <div ref="transcriptContainer" class="glass-card p-4 sm:p-5 mb-4 max-h-64 overflow-y-auto scroll-smooth">
         <h3 class="text-xs font-semibold text-txt-muted uppercase tracking-wide mb-3">Transcript</h3>
-        <div class="space-y-3">
+        <div v-if="transcriptSegments.length === 0" class="space-y-2" aria-busy="true" aria-label="Loading transcript">
+          <div class="h-3 rounded bg-surface-3 animate-pulse w-full" />
+          <div class="h-3 rounded bg-surface-3 animate-pulse w-5/6" />
+          <div class="h-3 rounded bg-surface-3 animate-pulse w-3/4" />
+        </div>
+        <div v-else class="space-y-3">
           <p
             v-for="(seg, i) in transcriptSegments"
             :key="i"
@@ -1209,7 +1226,7 @@ onUnmounted(() => {
               ? 'text-txt-primary font-medium'
               : i < activeSegmentIndex
                 ? 'text-txt-secondary'
-                : 'text-txt-muted/40'"
+                : 'text-txt-muted'"
           >
             {{ seg.text }}
           </p>
@@ -1226,10 +1243,12 @@ onUnmounted(() => {
         <h2 class="text-lg font-semibold text-txt-primary">Past Sessions</h2>
         <button
           @click="medShowFavoritesOnly = !medShowFavoritesOnly"
-          class="text-sm transition-colors"
+          class="text-sm transition-colors inline-flex items-center gap-1.5"
           :class="medShowFavoritesOnly ? 'text-accent' : 'text-txt-muted hover:text-txt-primary'"
+          :aria-pressed="medShowFavoritesOnly"
         >
-          {{ medShowFavoritesOnly ? '&#9733; Favorites' : '&#9734; All' }}
+          <Star :size="14" :fill="medShowFavoritesOnly ? 'currentColor' : 'none'" />
+          {{ medShowFavoritesOnly ? 'Favorites' : 'All' }}
         </button>
       </div>
 
@@ -1255,21 +1274,22 @@ onUnmounted(() => {
               <span class="text-xs text-txt-muted">{{ getMedTypeLabel(s.type) }}</span>
               <span class="text-xs text-txt-muted">{{ Math.floor(s.duration_seconds / 60) }}:{{ String(s.duration_seconds % 60).padStart(2, '0') }}</span>
               <span v-if="s.mood_after" class="text-sm">{{ s.mood_after }}</span>
-              <span v-if="s.is_favorite" class="text-accent text-xs">&#9733;</span>
+              <Star v-if="s.is_favorite" :size="12" fill="currentColor" class="text-accent" />
             </div>
           </div>
           <button
             @click.stop="downloadMedHistoryAudio(s)"
             class="text-txt-muted hover:text-accent transition-colors px-1 self-center"
-            title="Download MP3"
+            aria-label="Download MP3"
           >
             <Download :size="14" />
           </button>
           <button
             @click.stop="deleteMedSession(s.id)"
-            class="text-xs text-txt-muted hover:text-red-400 transition-colors px-1 self-center"
+            class="text-txt-muted hover:text-danger transition-colors px-1 self-center"
+            aria-label="Delete session"
           >
-            &times;
+            <X :size="14" />
           </button>
         </div>
       </div>
