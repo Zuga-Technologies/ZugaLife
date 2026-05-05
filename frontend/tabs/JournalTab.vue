@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { api, ApiError, getToken } from '@core/api/client'
-import { ArrowRight, BookOpen, Download, Meh } from 'lucide-vue-next'
+import { ArrowLeft, ArrowRight, BookOpen, Bold, ChevronRight, Download, Heading2, Italic, List, Meh, Sparkles, Trash2 } from 'lucide-vue-next'
 import { moodIcons } from '../icons'
 import { useLifeShared } from '../composables/useLifeShared'
 
@@ -164,6 +164,11 @@ const groupedJournalEntries = computed(() => {
 const showExportMenu = ref(false)
 const showBulkExportMenu = ref(false)
 
+// Two-step delete — bible §11 button.danger MUST NOT fire destructive
+// action immediately. First click flips to "Click to confirm" for 4s.
+const confirmingDelete = ref(false)
+let confirmDeleteTimer: ReturnType<typeof setTimeout> | null = null
+
 // ── Functions ─────────────────────────────────────────────────
 
 function usePrompt(prompt: string) {
@@ -174,6 +179,21 @@ function toggleComposeTag(tag: string) {
   const idx = composeTags.value.indexOf(tag)
   if (idx >= 0) composeTags.value.splice(idx, 1)
   else composeTags.value.push(tag)
+}
+
+/** Wire Ctrl+B / Cmd+B → bold and Ctrl+I / Cmd+I → italic on the journal
+ *  textarea. Heading + list don't get shortcuts (Ctrl+H is browser history,
+ *  Ctrl+L is address bar). The toolbar still works for those. */
+function handleTextareaKeydown(e: KeyboardEvent) {
+  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return
+  const k = e.key.toLowerCase()
+  if (k === 'b') {
+    e.preventDefault()
+    insertFormat('bold')
+  } else if (k === 'i') {
+    e.preventDefault()
+    insertFormat('italic')
+  }
 }
 
 function insertFormat(type: 'bold' | 'italic' | 'heading' | 'list') {
@@ -335,6 +355,16 @@ async function requestReflection() {
 
 async function deleteEntry() {
   if (!currentEntry.value) return
+  // First click — arm confirmation for 4 seconds
+  if (!confirmingDelete.value) {
+    confirmingDelete.value = true
+    if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer)
+    confirmDeleteTimer = setTimeout(() => { confirmingDelete.value = false }, 4000)
+    return
+  }
+  // Second click — actually delete
+  if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer)
+  confirmingDelete.value = false
   journalError.value = null
   try {
     await api.delete(`/api/life/journal/${currentEntry.value.id}`)
@@ -428,10 +458,10 @@ onMounted(async () => {
             Export All
           </button>
           <div v-if="showBulkExportMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[170px] max-w-[calc(100vw-2rem)]">
-            <button @click="exportAllJournal('markdown')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
+            <button @click="exportAllJournal('markdown')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-surface-3 px-3 py-2 rounded transition-colors">
               Markdown (.zip)
             </button>
-            <button @click="exportAllJournal('json')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
+            <button @click="exportAllJournal('json')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-surface-3 px-3 py-2 rounded transition-colors">
               JSON (.json)
             </button>
           </div>
@@ -458,18 +488,21 @@ onMounted(async () => {
             @click="goToDetail(entry.id)"
             class="glass-card px-4 py-3 w-full text-left flex items-start gap-3 animate-slide-up transition-colors hover:bg-surface-2"
           >
-            <component :is="moodIcons[entry.mood_emoji]" v-if="entry.mood_emoji && moodIcons[entry.mood_emoji]" :size="24" class="text-accent flex-shrink-0" />
-            <Meh v-else-if="entry.mood_emoji" :size="24" class="text-accent flex-shrink-0" />
-            <BookOpen v-else :size="24" class="text-txt-muted flex-shrink-0" />
+            <component :is="moodIcons[entry.mood_emoji]" v-if="entry.mood_emoji && moodIcons[entry.mood_emoji]" :size="22" class="text-accent/60 flex-shrink-0" />
+            <Meh v-else-if="entry.mood_emoji" :size="22" class="text-accent/60 flex-shrink-0" />
+            <BookOpen v-else :size="22" class="text-txt-muted flex-shrink-0" />
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
                 <span class="text-sm font-medium text-txt-primary truncate">{{ entry.title || entry.content_preview.slice(0, 60) }}</span>
-                <span class="text-xs text-txt-muted flex-shrink-0">{{ timeAgo(entry.created_at) }}</span>
+                <span class="text-xs text-txt-muted flex-shrink-0 ml-auto tabular-nums">{{ timeAgo(entry.created_at) }}</span>
               </div>
               <p v-if="entry.title" class="text-sm text-txt-secondary mt-0.5 truncate">{{ entry.content_preview }}</p>
               <div class="flex items-center gap-1.5 mt-1 flex-wrap">
-                <span v-for="tag in (entry.tags || [])" :key="tag" class="px-1.5 py-0.5 text-[10px] rounded-full bg-surface-3 text-txt-muted">{{ tag }}</span>
-                <span v-if="entry.reflection_count > 0" class="text-xs text-accent">{{ entry.reflection_count }} reflection{{ entry.reflection_count > 1 ? 's' : '' }}</span>
+                <span v-for="tag in (entry.tags || [])" :key="tag" class="px-1.5 py-0.5 text-xs rounded-full bg-surface-3 text-txt-muted">{{ tag }}</span>
+                <span v-if="entry.reflection_count > 0" class="inline-flex items-center gap-1 text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">
+                  <Sparkles :size="10" />
+                  {{ entry.reflection_count }}
+                </span>
               </div>
             </div>
           </button>
@@ -480,7 +513,10 @@ onMounted(async () => {
 
   <template v-if="journalView === 'compose'">
     <div class="mb-6">
-      <button @click="goToJournalList" class="text-txt-muted hover:text-txt-primary transition-colors text-sm mb-2">&larr;</button>
+      <button @click="goToJournalList" class="inline-flex items-center gap-1.5 text-txt-muted hover:text-txt-primary transition-colors text-sm mb-2" aria-label="Back to journal list">
+        <ArrowLeft :size="14" />
+        <span>Back</span>
+      </button>
       <h2 class="text-xl font-bold text-txt-primary">New Entry</h2>
     </div>
 
@@ -502,14 +538,14 @@ onMounted(async () => {
           }"
         />
         <div class="pl-3">
-          <p class="text-[9px] font-bold uppercase tracking-[0.15em] mb-2 opacity-70"
+          <p class="text-[10px] font-bold uppercase tracking-widest mb-2 opacity-70"
             :class="{
               'text-accent-alt': dailyJournalPrompt.category === 'expressive',
               'text-accent': dailyJournalPrompt.category === 'gratitude',
               'text-info': dailyJournalPrompt.category === 'reflection',
             }"
           >Today's prompt &mdash; {{ dailyJournalPrompt.category }}</p>
-          <p class="text-[15px] text-txt-primary font-medium mb-4 leading-relaxed">{{ dailyJournalPrompt.prompt }}</p>
+          <p class="text-base text-txt-primary font-medium mb-4 leading-relaxed">{{ dailyJournalPrompt.prompt }}</p>
           <div class="flex items-center gap-4">
             <button
               @click="usePrompt(dailyJournalPrompt!.prompt)"
@@ -534,8 +570,9 @@ onMounted(async () => {
       <button
         @click="showJournalPrompts = !showJournalPrompts"
         class="flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-secondary uppercase tracking-wider transition-colors mb-2"
+        :aria-expanded="showJournalPrompts"
       >
-        <svg :class="showJournalPrompts ? 'rotate-90' : ''" class="w-3 h-3 transition-transform duration-150" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        <ChevronRight :size="12" :class="showJournalPrompts ? 'rotate-90' : ''" class="transition-transform duration-150" />
         Need a starting point?
       </button>
       <div v-if="showJournalPrompts" class="space-y-2 animate-fade-in">
@@ -555,22 +592,29 @@ onMounted(async () => {
 
       <!-- Formatting toolbar -->
       <div class="flex items-center gap-1 border-b border-bdr/50 pb-2">
-        <button @click="insertFormat('bold')" class="px-3 py-2 text-xs font-bold text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Bold (Ctrl+B)">B</button>
-        <button @click="insertFormat('italic')" class="px-3 py-2 text-xs italic text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Italic (Ctrl+I)">I</button>
-        <button @click="insertFormat('heading')" class="px-3 py-2 text-xs font-semibold text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Heading">H</button>
-        <button @click="insertFormat('list')" class="px-3 py-2 text-xs text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="List">
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        <button @click="insertFormat('bold')" class="p-2 text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Bold (Ctrl+B)" aria-label="Bold">
+          <Bold :size="14" />
+        </button>
+        <button @click="insertFormat('italic')" class="p-2 text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Italic (Ctrl+I)" aria-label="Italic">
+          <Italic :size="14" />
+        </button>
+        <button @click="insertFormat('heading')" class="p-2 text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="Heading" aria-label="Heading">
+          <Heading2 :size="14" />
+        </button>
+        <button @click="insertFormat('list')" class="p-2 text-txt-muted hover:text-txt-primary hover:bg-surface-3 rounded transition-colors" title="List" aria-label="List">
+          <List :size="14" />
         </button>
         <span class="flex-1" />
-        <span v-if="contentLength > 0" class="text-xs" :class="contentLength > 45000 ? 'text-accent' : 'text-txt-muted'">{{ contentLength.toLocaleString() }}</span>
+        <span v-if="contentLength > 0" class="text-xs tabular-nums" :class="contentLength > 45000 ? 'text-streak' : 'text-txt-muted'">{{ contentLength.toLocaleString() }}</span>
       </div>
 
       <textarea
         v-model="composeContent"
+        @keydown="handleTextareaKeydown"
         placeholder="What's on your mind?"
         maxlength="50000"
         rows="12"
-        class="journal-textarea input-field resize-none text-sm leading-relaxed font-mono"
+        class="journal-textarea input-field resize-none text-sm leading-relaxed"
       />
 
       <!-- Activity tags -->
@@ -609,7 +653,7 @@ onMounted(async () => {
         <p v-if="composeMoodLabel" class="text-xs text-accent mt-1.5 animate-fade-in">{{ composeMoodLabel }}</p>
       </div>
 
-      <p v-if="journalError" class="text-sm text-red-400">{{ journalError }}</p>
+      <p v-if="journalError" class="text-sm text-danger">{{ journalError }}</p>
       <button @click="saveEntry" :disabled="composeIsBlank || journalSubmitting" class="btn-primary w-full">
         <span v-if="journalSubmitting" class="inline-flex items-center gap-2">
           <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
@@ -643,15 +687,24 @@ onMounted(async () => {
                 Export
               </button>
               <div v-if="showExportMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[140px] max-w-[calc(100vw-2rem)]">
-                <button @click="exportEntry('markdown')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
+                <button @click="exportEntry('markdown')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-surface-3 px-3 py-2 rounded transition-colors">
                   Markdown (.md)
                 </button>
-                <button @click="exportEntry('json')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/5 px-3 py-2 rounded transition-colors">
+                <button @click="exportEntry('json')" class="w-full text-left text-xs text-txt-secondary hover:text-txt-primary hover:bg-surface-3 px-3 py-2 rounded transition-colors">
                   JSON (.json)
                 </button>
               </div>
             </div>
-            <button @click="deleteEntry" class="text-xs text-txt-muted hover:text-red-400 transition-colors px-3 py-2">Delete</button>
+            <button
+              @click="deleteEntry"
+              class="text-xs transition-colors px-3 py-2 inline-flex items-center gap-1.5 rounded"
+              :class="confirmingDelete
+                ? 'text-danger ring-1 ring-danger/50 bg-danger/10 font-medium'
+                : 'text-txt-muted hover:text-danger'"
+            >
+              <Trash2 :size="12" />
+              {{ confirmingDelete ? 'Click to confirm' : 'Delete' }}
+            </button>
           </div>
         </div>
         <!-- Tags -->
@@ -659,7 +712,7 @@ onMounted(async () => {
           <span
             v-for="tag in currentEntry.tags"
             :key="tag"
-            class="px-2 py-0.5 text-[11px] rounded-full bg-accent/10 text-accent font-medium"
+            class="px-2 py-0.5 text-xs rounded-full bg-accent/10 text-accent font-medium"
           >{{ tag }}</span>
         </div>
         <!-- Content rendered with basic markdown -->
@@ -678,10 +731,11 @@ onMounted(async () => {
           <div v-for="(reflection, i) in currentEntry.reflections" :key="reflection.id" class="glass-card p-4 animate-slide-up">
             <div class="flex items-center gap-2 mb-2">
               <span class="text-xs font-medium text-accent">Reflection {{ i + 1 }}</span>
+              <span class="text-xs text-txt-muted/60" aria-hidden="true">·</span>
               <span class="text-xs text-txt-muted">{{ formatDate(reflection.created_at) }}</span>
               <span class="text-xs text-txt-muted ml-auto">{{ tokenLabel(reflection.cost) }}</span>
             </div>
-            <p class="text-sm text-txt-secondary leading-relaxed whitespace-pre-wrap">{{ reflection.content }}</p>
+            <div class="text-sm text-txt-secondary leading-relaxed journal-content" v-html="renderMarkdown(reflection.content)" />
           </div>
         </div>
       </div>
@@ -693,7 +747,7 @@ onMounted(async () => {
         <span v-else>Get AI Reflection <span class="text-xs opacity-70">({{ reflectionsRemaining }} remaining)</span></span>
       </button>
       <p v-else class="text-xs text-txt-muted text-center">Maximum reflections reached for this entry.</p>
-      <p v-if="journalError" class="text-sm text-red-400 mt-3">{{ journalError }}</p>
+      <p v-if="journalError" class="text-sm text-danger mt-3">{{ journalError }}</p>
 
       <!-- Next entry — keeps the user reading without going back to the list. -->
       <div class="mt-6 flex justify-end">
@@ -713,7 +767,7 @@ onMounted(async () => {
       </div>
     </template>
     <div v-else class="glass-card p-6 text-center">
-      <p v-if="journalError" class="text-sm text-red-400">{{ journalError }}</p>
+      <p v-if="journalError" class="text-sm text-danger">{{ journalError }}</p>
       <p v-else class="text-sm text-txt-muted">Entry not found.</p>
     </div>
   </template>
