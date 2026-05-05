@@ -689,6 +689,41 @@ function seekAudio(event: MouseEvent) {
   medAudioEl.currentTime = pct * medDurationSec.value
 }
 
+/** Jump audio to a specific transcript segment's start time. If audio
+ *  hasn't been loaded yet (user opened the player but hasn't pressed play),
+ *  load + start playback first, then seek. */
+function seekToSegment(startTime: number) {
+  if (!medAudioEl) {
+    loadAndPlayAudio().then(() => {
+      if (medAudioEl) (medAudioEl as HTMLAudioElement).currentTime = startTime
+    })
+    return
+  }
+  medAudioEl.currentTime = startTime
+}
+
+/** Player keyboard shortcuts — Space toggles play, ArrowLeft/Right skip 5s.
+ *  Skips when focus is in an input/textarea so typing in the Focus field
+ *  (or any contenteditable) isn't hijacked. */
+function handlePlayerKeyboard(e: KeyboardEvent) {
+  if (medView.value !== 'player' || !medSession.value) return
+  const target = e.target as HTMLElement | null
+  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+
+  if (e.code === 'Space') {
+    e.preventDefault()
+    togglePlayPause()
+  } else if (e.code === 'ArrowLeft') {
+    if (!medAudioEl) return
+    e.preventDefault()
+    medAudioEl.currentTime = Math.max(0, medAudioEl.currentTime - 5)
+  } else if (e.code === 'ArrowRight') {
+    if (!medAudioEl || !medDurationSec.value) return
+    e.preventDefault()
+    medAudioEl.currentTime = Math.min(medDurationSec.value, medAudioEl.currentTime + 5)
+  }
+}
+
 function stopAmbient() {
   stopAmbience()
 }
@@ -923,12 +958,14 @@ onMounted(async () => {
   loadingMeditation.value = false
   await checkInProgressMeditation()
   window.addEventListener('zugalife-open-meditation', handleOpenMeditationEvent)
+  window.addEventListener('keydown', handlePlayerKeyboard)
 })
 
 onUnmounted(() => {
   stopAudio()
   clearExtensionMedTimers()
   window.removeEventListener('zugalife-open-meditation', handleOpenMeditationEvent)
+  window.removeEventListener('keydown', handlePlayerKeyboard)
 })
 </script>
 
@@ -1116,7 +1153,9 @@ onUnmounted(() => {
             <h2 class="text-base sm:text-lg font-semibold text-txt-primary truncate">{{ medSession.title }}</h2>
             <div class="flex items-center gap-2 mt-1 flex-wrap">
               <span class="text-xs text-txt-muted">{{ getMedTypeLabel(medSession.type) }}</span>
-              <span class="text-xs text-txt-muted">{{ Math.floor(medSession.duration_seconds / 60) }}:{{ String(medSession.duration_seconds % 60).padStart(2, '0') }}</span>
+              <span class="text-xs text-txt-muted/60" aria-hidden="true">·</span>
+              <span class="text-xs text-txt-muted tabular-nums">{{ Math.floor(medSession.duration_seconds / 60) }}:{{ String(medSession.duration_seconds % 60).padStart(2, '0') }}</span>
+              <span class="text-xs text-txt-muted/60" aria-hidden="true">·</span>
               <span class="text-xs text-txt-muted">{{ tokenLabel(medSession.cost) }}</span>
             </div>
           </div>
@@ -1137,7 +1176,7 @@ onUnmounted(() => {
                 aria-label="More actions"
                 :aria-expanded="showMedActionMenu"
               >
-                <MoreVertical :size="18" />
+                <MoreVertical :size="14" />
               </button>
               <div v-if="showMedActionMenu" class="absolute right-0 top-full mt-1 glass-card p-1 rounded-lg shadow-lg z-20 min-w-[180px] max-w-[calc(100vw-2rem)]">
                 <button
@@ -1176,16 +1215,21 @@ onUnmounted(() => {
             <div class="flex-1">
               <div
                 @click="seekAudio"
-                class="w-full h-2 bg-surface-3 rounded-full cursor-pointer relative"
+                class="w-full h-2 hover:h-3 bg-surface-3 rounded-full cursor-pointer relative transition-all duration-150"
+                role="slider"
+                :aria-valuenow="Math.round(medProgress)"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-label="Audio progress"
               >
                 <div
-                  class="h-2 rounded-full bg-accent transition-all duration-200"
+                  class="h-full rounded-full bg-accent transition-all duration-200"
                   :style="{ width: medProgress + '%' }"
                 />
               </div>
               <div class="flex justify-between mt-1">
-                <span class="text-xs text-txt-muted">{{ medFormatTime(medCurrentTime) }}</span>
-                <span class="text-xs text-txt-muted">{{ medDurationSec > 0 ? medFormatTime(medDurationSec) : '--:--' }}</span>
+                <span class="text-xs text-txt-muted tabular-nums">{{ medFormatTime(medCurrentTime) }}</span>
+                <span class="text-xs text-txt-muted tabular-nums">{{ medDurationSec > 0 ? medFormatTime(medDurationSec) : '--:--' }}</span>
               </div>
             </div>
           </div>
@@ -1208,28 +1252,34 @@ onUnmounted(() => {
       </div>
 
       <!-- Live transcript — past segments fade to secondary, future to muted.
-           No sub-AA opacity dimming on text the user might read; bible §13. -->
-      <div ref="transcriptContainer" class="glass-card p-4 sm:p-5 mb-4 max-h-64 overflow-y-auto scroll-smooth">
-        <h3 class="text-xs font-semibold text-txt-muted uppercase tracking-wide mb-3">Transcript</h3>
-        <div v-if="transcriptSegments.length === 0" class="space-y-2" aria-busy="true" aria-label="Loading transcript">
-          <div class="h-3 rounded bg-surface-3 animate-pulse w-full" />
-          <div class="h-3 rounded bg-surface-3 animate-pulse w-5/6" />
-          <div class="h-3 rounded bg-surface-3 animate-pulse w-3/4" />
-        </div>
-        <div v-else class="space-y-3">
-          <p
-            v-for="(seg, i) in transcriptSegments"
-            :key="i"
-            :ref="el => { if (i === activeSegmentIndex) activeParagraphEl = el as HTMLElement }"
-            class="text-sm leading-relaxed transition-all duration-500"
-            :class="i === activeSegmentIndex
-              ? 'text-txt-primary font-medium'
-              : i < activeSegmentIndex
-                ? 'text-txt-secondary'
-                : 'text-txt-muted'"
-          >
-            {{ seg.text }}
-          </p>
+           No sub-AA opacity dimming on text the user might read; bible §13.
+           Section label sticks to top of scroll container so it persists when
+           paragraphs scroll past. Each segment is click-to-seek. -->
+      <div ref="transcriptContainer" class="glass-card mb-4 max-h-64 overflow-y-auto scroll-smooth">
+        <h3 class="sticky top-0 z-10 px-4 sm:px-5 pt-4 sm:pt-5 pb-3 text-xs font-semibold text-txt-muted uppercase tracking-wide bg-surface-1/95 backdrop-blur">Transcript</h3>
+        <div class="px-4 sm:px-5 pb-4 sm:pb-5">
+          <div v-if="transcriptSegments.length === 0" class="space-y-2" aria-busy="true" aria-label="Loading transcript">
+            <div class="h-3 rounded bg-surface-3 animate-pulse w-full" />
+            <div class="h-3 rounded bg-surface-3 animate-pulse w-5/6" />
+            <div class="h-3 rounded bg-surface-3 animate-pulse w-3/4" />
+          </div>
+          <div v-else class="space-y-3">
+            <p
+              v-for="(seg, i) in transcriptSegments"
+              :key="i"
+              :ref="el => { if (i === activeSegmentIndex) activeParagraphEl = el as HTMLElement }"
+              @click="seekToSegment(seg.startTime)"
+              :title="`Jump to ${medFormatTime(seg.startTime)}`"
+              class="text-sm leading-relaxed pl-3 border-l-2 cursor-pointer transition-all duration-500 hover:text-txt-primary"
+              :class="i === activeSegmentIndex
+                ? 'text-txt-primary font-medium border-accent'
+                : i < activeSegmentIndex
+                  ? 'text-txt-secondary border-transparent'
+                  : 'text-txt-muted border-transparent'"
+            >
+              {{ seg.text }}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -1247,7 +1297,7 @@ onUnmounted(() => {
           :class="medShowFavoritesOnly ? 'text-accent' : 'text-txt-muted hover:text-txt-primary'"
           :aria-pressed="medShowFavoritesOnly"
         >
-          <Star :size="14" :fill="medShowFavoritesOnly ? 'currentColor' : 'none'" />
+          <Star v-if="medShowFavoritesOnly" :size="14" fill="currentColor" />
           {{ medShowFavoritesOnly ? 'Favorites' : 'All' }}
         </button>
       </div>
@@ -1264,15 +1314,16 @@ onUnmounted(() => {
           @click="openMedSession(s.id)"
           class="glass-card px-4 py-3 w-full text-left flex items-start gap-3 transition-colors hover:bg-surface-2 cursor-pointer"
         >
-          <component :is="meditationTypeIcons[s.type]" :size="22" class="text-accent flex-shrink-0 mt-0.5" v-if="meditationTypeIcons[s.type]" />
+          <component :is="meditationTypeIcons[s.type]" :size="22" class="text-accent/60 flex-shrink-0 mt-0.5" v-if="meditationTypeIcons[s.type]" />
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <span class="text-sm font-medium text-txt-primary truncate">{{ s.title }}</span>
-              <span class="text-xs text-txt-muted flex-shrink-0">{{ timeAgo(s.created_at) }}</span>
+              <span class="text-xs text-txt-muted flex-shrink-0 ml-auto tabular-nums">{{ timeAgo(s.created_at) }}</span>
             </div>
             <div class="flex items-center gap-2 mt-0.5">
               <span class="text-xs text-txt-muted">{{ getMedTypeLabel(s.type) }}</span>
-              <span class="text-xs text-txt-muted">{{ Math.floor(s.duration_seconds / 60) }}:{{ String(s.duration_seconds % 60).padStart(2, '0') }}</span>
+              <span class="text-xs text-txt-muted/60" aria-hidden="true">·</span>
+              <span class="text-xs text-txt-muted tabular-nums">{{ Math.floor(s.duration_seconds / 60) }}:{{ String(s.duration_seconds % 60).padStart(2, '0') }}</span>
               <span v-if="s.mood_after" class="text-sm">{{ s.mood_after }}</span>
               <Star v-if="s.is_favorite" :size="12" fill="currentColor" class="text-accent" />
             </div>
