@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { api, ApiError } from '@core/api/client'
-import { CircleDot, Pencil, Trash2 } from 'lucide-vue-next'
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleDot, Pencil, Plus, Trash2, X } from 'lucide-vue-next'
 import { getIcon } from '../icons'
 import { useLifeShared } from '../composables/useLifeShared'
 import WoopGoalWizard from '../components/WoopGoalWizard.vue'
@@ -132,6 +132,17 @@ const goalInsights = ref<Record<number, string>>({})
 // Active goal cap
 const MAX_ACTIVE_GOALS = 3
 const showBacklogGoals = ref(false)
+
+// Two-step delete for top-level goals (bible §11 button.danger). Milestones
+// stay single-click — they're sub-items and cheap to recreate.
+const deletingGoal = ref<number | null>(null)
+let deletingGoalTimer: ReturnType<typeof setTimeout> | null = null
+
+function armDeleteGoal(goalId: number) {
+  deletingGoal.value = goalId
+  if (deletingGoalTimer) clearTimeout(deletingGoalTimer)
+  deletingGoalTimer = setTimeout(() => { deletingGoal.value = null }, 4000)
+}
 
 const priorityGoals = computed(() => activeGoals.value.slice(0, MAX_ACTIVE_GOALS))
 const backlogGoals = computed(() => activeGoals.value.slice(MAX_ACTIVE_GOALS))
@@ -361,6 +372,8 @@ async function toggleGoalComplete(goal: Goal) {
 
 async function deleteGoal(goal: Goal) {
   goalError.value = null
+  if (deletingGoalTimer) clearTimeout(deletingGoalTimer)
+  deletingGoal.value = null
   // Optimistic — drop the goal from whichever list it lives in.
   const list = activeGoals.value.indexOf(goal) >= 0 ? activeGoals : completedGoals
   const idx = list.value.indexOf(goal)
@@ -537,16 +550,17 @@ onMounted(async () => {
 </script>
 
 <template>
-  <p v-if="goalError" class="text-sm text-red-400 mb-4">{{ goalError }}</p>
+  <p v-if="goalError" class="text-sm text-danger mb-4">{{ goalError }}</p>
 
   <!-- ===== LIFE GOALS ===== -->
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg font-semibold text-txt-primary">Life Goals</h2>
       <button
         @click="goalCreateMode = goalCreateMode === 'none' ? 'templates' : 'none'"
-        class="text-sm text-accent hover:text-accent/80 transition-colors"
+        class="inline-flex items-center gap-1 text-sm text-accent hover:text-accent-bright transition-colors"
       >
-        {{ goalCreateMode !== 'none' ? 'Cancel' : '+ New Goal' }}
+        <Plus v-if="goalCreateMode === 'none'" :size="14" />
+        {{ goalCreateMode !== 'none' ? 'Cancel' : 'New Goal' }}
       </button>
     </div>
 
@@ -566,7 +580,7 @@ onMounted(async () => {
             <span
               v-for="h in tmpl.suggested_habits"
               :key="h"
-              class="text-[10px] bg-surface-3 text-txt-muted px-1.5 py-0.5 rounded"
+              class="text-xs bg-surface-3 text-txt-muted px-1.5 py-0.5 rounded"
             >{{ h }}</span>
           </div>
           <span v-if="templateAdopting === tmpl.key" class="text-xs text-accent mt-1 block">Creating...</span>
@@ -630,9 +644,10 @@ onMounted(async () => {
         </button>
         <button
           @click="goalCreateMode = 'templates'"
-          class="text-xs text-txt-muted hover:text-accent transition-colors px-3"
+          class="text-txt-muted hover:text-accent transition-colors px-3"
+          aria-label="Back to templates"
         >
-          &larr;
+          <ArrowLeft :size="14" />
         </button>
       </div>
     </div>
@@ -709,9 +724,9 @@ onMounted(async () => {
               <!-- Deadline countdown -->
               <span
                 v-if="goal.deadline"
-                class="text-[11px] px-1.5 py-0.5 rounded font-medium"
+                class="text-xs px-1.5 py-0.5 rounded font-medium"
                 :class="isOverdue(goal.deadline)
-                  ? 'bg-red-500/15 text-red-400'
+                  ? 'bg-danger/15 text-danger'
                   : daysUntilDeadline(goal.deadline)! <= 7
                     ? 'bg-accent/15 text-accent'
                     : 'bg-surface-3 text-txt-muted'"
@@ -721,11 +736,11 @@ onMounted(async () => {
               <!-- Pace status badge -->
               <span
                 v-if="paceStatus(goal)"
-                class="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+                class="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded font-semibold"
                 :class="{
                   'bg-success/15 text-success': paceStatus(goal) === 'ahead',
                   'bg-accent/15 text-accent': paceStatus(goal) === 'on-track',
-                  'bg-red-500/15 text-red-400': paceStatus(goal) === 'behind',
+                  'bg-danger/15 text-danger': paceStatus(goal) === 'behind',
                 }"
               >
                 {{ paceStatus(goal) === 'ahead' ? 'AHEAD' : paceStatus(goal) === 'behind' ? 'BEHIND' : 'ON TRACK' }}
@@ -734,11 +749,11 @@ onMounted(async () => {
             <p v-if="goal.description" class="text-xs text-txt-muted mt-1 line-clamp-2">{{ goal.description }}</p>
 
             <!-- Overdue recommit banner -->
-            <div v-if="isOverdue(goal.deadline)" class="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2">
-              <span class="text-xs text-red-400">Deadline passed.</span>
+            <div v-if="isOverdue(goal.deadline)" class="mt-2 p-2 rounded-lg bg-danger/10 border border-danger/20 flex items-center gap-2">
+              <span class="text-xs text-danger">Deadline passed.</span>
               <button
                 @click.stop="recommitGoal(goal.id)"
-                class="text-xs font-medium text-accent hover:text-accent/80 transition-colors"
+                class="text-xs font-medium text-accent hover:text-accent-bright transition-colors"
               >
                 Recommit (+30 days)
               </button>
@@ -749,7 +764,7 @@ onMounted(async () => {
               <div class="flex items-center justify-between mb-1">
                 <span class="text-xs text-txt-muted">{{ goal.milestone_done }}/{{ goal.milestone_count }} milestones</span>
                 <div class="flex items-center gap-2">
-                  <span v-if="projectedCompletion(goal)" class="text-[10px] text-txt-muted">
+                  <span v-if="projectedCompletion(goal)" class="text-xs text-txt-muted">
                     Est. {{ projectedCompletion(goal) }}
                   </span>
                   <span class="text-xs text-txt-muted">{{ goalMilestonePct(goal) }}%</span>
@@ -766,9 +781,11 @@ onMounted(async () => {
           </div>
           <button
             @click="toggleGoalExpand(goal.id)"
-            class="text-txt-muted hover:text-txt-primary transition-colors text-xs px-1"
+            class="text-txt-muted hover:text-txt-primary transition-colors p-1"
+            :aria-label="expandedGoals.has(goal.id) ? 'Collapse goal' : 'Expand goal'"
+            :aria-expanded="expandedGoals.has(goal.id)"
           >
-            {{ expandedGoals.has(goal.id) ? '&#9650;' : '&#9660;' }}
+            <component :is="expandedGoals.has(goal.id) ? ChevronUp : ChevronDown" :size="14" />
           </button>
         </div>
 
@@ -778,15 +795,15 @@ onMounted(async () => {
           <!-- WOOP Psychology Fields -->
           <div v-if="goal.identity_statement || goal.obstacle || goal.implementation_plan" class="space-y-2 pb-2 border-b border-bdr/50">
             <div v-if="goal.identity_statement" class="flex gap-2">
-              <span class="text-[10px] font-bold uppercase text-accent-alt w-16 flex-shrink-0 pt-0.5">Identity</span>
+              <span class="text-[10px] font-bold uppercase tracking-widest text-accent w-16 flex-shrink-0 pt-0.5">Identity</span>
               <p class="text-xs text-txt-secondary">{{ goal.identity_statement }}</p>
             </div>
             <div v-if="goal.obstacle" class="flex gap-2">
-              <span class="text-[10px] font-bold uppercase text-red-400 w-16 flex-shrink-0 pt-0.5">Obstacle</span>
+              <span class="text-[10px] font-bold uppercase tracking-widest text-danger w-16 flex-shrink-0 pt-0.5">Obstacle</span>
               <p class="text-xs text-txt-secondary">{{ goal.obstacle }}</p>
             </div>
             <div v-if="goal.implementation_plan" class="flex gap-2">
-              <span class="text-[10px] font-bold uppercase text-success w-16 flex-shrink-0 pt-0.5">Plan</span>
+              <span class="text-[10px] font-bold uppercase tracking-widest text-success w-16 flex-shrink-0 pt-0.5">Plan</span>
               <p class="text-xs text-txt-secondary">{{ goal.implementation_plan }}</p>
             </div>
           </div>
@@ -809,8 +826,9 @@ onMounted(async () => {
               <span class="text-xs text-txt-muted w-8 text-right">{{ lh.days_completed }}/{{ lh.days_total }}</span>
               <button
                 @click="unlinkHabit(goal.id, lh.habit_id)"
-                class="text-xs text-txt-muted/40 hover:text-red-400 transition-colors px-2 py-1"
-              >&times;</button>
+                class="text-txt-muted/40 hover:text-danger transition-colors px-2 py-1"
+                :aria-label="`Unlink ${lh.habit_name}`"
+              ><X :size="12" /></button>
             </div>
           </div>
 
@@ -838,10 +856,12 @@ onMounted(async () => {
                 @click="toggleMilestone(goal.id, ms)"
                 class="w-4 h-4 rounded border flex items-center justify-center transition-colors duration-100 ease-out flex-shrink-0"
                 :class="ms.is_completed
-                  ? 'bg-success border-success text-white'
+                  ? 'bg-success border-success text-surface-0'
                   : 'border-bdr hover:border-accent'"
+                :aria-pressed="ms.is_completed"
+                :aria-label="ms.is_completed ? `Mark ${ms.title} undone` : `Mark ${ms.title} done`"
               >
-                <span v-if="ms.is_completed" class="text-[10px]">&#10003;</span>
+                <Check v-if="ms.is_completed" :size="10" stroke-width="3" />
               </button>
               <span
                 class="text-sm flex-1"
@@ -851,9 +871,10 @@ onMounted(async () => {
               </span>
               <button
                 @click="deleteMilestone(goal.id, ms.id)"
-                class="text-xs text-txt-muted/40 hover:text-red-400 transition-colors px-2 py-1"
+                class="text-txt-muted/40 hover:text-danger transition-colors px-2 py-1"
+                :aria-label="`Delete milestone ${ms.title}`"
               >
-                &times;
+                <X :size="12" />
               </button>
             </div>
           </div>
@@ -905,22 +926,37 @@ onMounted(async () => {
             <button
               @click="fetchGoalInsight(goal.id)"
               :disabled="goalInsightLoading === goal.id"
-              class="text-xs text-accent-alt hover:text-accent-alt-bright transition-colors"
+              class="text-xs text-accent hover:text-accent-bright transition-colors"
             >
               {{ goalInsightLoading === goal.id ? 'Analyzing...' : 'AI Insight' }}
             </button>
-            <button
-              @click="deleteGoal(goal)"
-              class="ml-auto p-1.5 rounded-lg text-txt-muted/60 hover:text-red-400 hover:bg-red-400/10 transition-all"
-              title="Delete goal"
-              aria-label="Delete goal"
-            >
-              <Trash2 :size="14" />
-            </button>
+            <!-- Two-step delete (bible §11) — first click arms confirm for 4s -->
+            <template v-if="deletingGoal !== goal.id">
+              <button
+                @click="armDeleteGoal(goal.id)"
+                class="ml-auto p-1.5 rounded-lg text-txt-muted/60 hover:text-danger hover:bg-danger/10 transition-all"
+                aria-label="Delete goal"
+              >
+                <Trash2 :size="14" />
+              </button>
+            </template>
+            <template v-else>
+              <button
+                @click="deleteGoal(goal)"
+                class="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-danger px-2 py-1 rounded ring-1 ring-danger/50 bg-danger/10"
+              >
+                <Trash2 :size="12" />
+                Confirm delete
+              </button>
+              <button
+                @click="deletingGoal = null"
+                class="text-xs text-txt-muted hover:text-txt-primary px-2 py-1 rounded"
+              >Cancel</button>
+            </template>
           </div>
 
-          <!-- AI Insight display -->
-          <div v-if="goalInsights[goal.id]" class="mt-2 p-3 rounded-lg bg-accent-alt/10 border border-accent-alt/20">
+          <!-- AI Insight display — coral-themed for ZugaLife brand consistency -->
+          <div v-if="goalInsights[goal.id]" class="mt-2 p-3 rounded-lg bg-accent/10 border border-accent/20">
             <p class="text-xs text-txt-secondary leading-relaxed">{{ goalInsights[goal.id] }}</p>
           </div>
         </div>
@@ -949,14 +985,14 @@ onMounted(async () => {
             <span v-if="goal.milestone_count > 0" class="text-xs text-txt-muted">{{ goal.milestone_done }}/{{ goal.milestone_count }}</span>
             <span
               v-if="goal.deadline"
-              class="text-[10px] px-1.5 py-0.5 rounded"
-              :class="isOverdue(goal.deadline) ? 'bg-red-500/15 text-red-400' : 'bg-surface-3 text-txt-muted'"
+              class="text-xs px-1.5 py-0.5 rounded"
+              :class="isOverdue(goal.deadline) ? 'bg-danger/15 text-danger' : 'bg-surface-3 text-txt-muted'"
             >
               {{ deadlineLabel(goal.deadline) }}
             </span>
           </div>
         </div>
-        <p class="text-[10px] text-txt-muted mt-1">Focus on your top 3 active goals. Complete one to promote a backlog goal.</p>
+        <p class="text-xs text-txt-muted mt-1">Focus on your top 3 active goals. Complete one to promote a backlog goal.</p>
       </div>
 
       <!-- Completed goals -->
@@ -970,20 +1006,33 @@ onMounted(async () => {
           >
             <button
               @click="toggleGoalComplete(goal)"
-              class="w-5 h-5 rounded-full bg-success flex items-center justify-center flex-shrink-0"
+              class="w-5 h-5 rounded-full bg-success text-surface-0 flex items-center justify-center flex-shrink-0"
+              aria-label="Mark as not completed"
             >
-              <span class="text-white text-xs">&#10003;</span>
+              <Check :size="12" stroke-width="3" />
             </button>
             <span class="text-sm text-txt-muted line-through flex-1">{{ goal.title }}</span>
-            <span v-if="goal.completed_at" class="text-xs text-txt-muted">
+            <span v-if="goal.completed_at" class="text-xs text-txt-muted tabular-nums">
               {{ parseUTC(goal.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}
             </span>
-            <button
-              @click="deleteGoal(goal)"
-              class="text-xs text-txt-muted hover:text-red-400 transition-colors px-1"
-            >
-              &times;
-            </button>
+            <!-- Two-step delete (bible §11) -->
+            <template v-if="deletingGoal !== goal.id">
+              <button
+                @click="armDeleteGoal(goal.id)"
+                class="text-txt-muted hover:text-danger transition-colors p-1"
+                :aria-label="`Delete completed goal ${goal.title}`"
+              ><X :size="12" /></button>
+            </template>
+            <template v-else>
+              <button
+                @click="deleteGoal(goal)"
+                class="text-xs font-medium text-danger px-2 py-0.5 rounded ring-1 ring-danger/50 bg-danger/10"
+              >Confirm</button>
+              <button
+                @click="deletingGoal = null"
+                class="text-xs text-txt-muted hover:text-txt-primary px-2 py-0.5 rounded"
+              >Cancel</button>
+            </template>
           </div>
         </div>
       </div>

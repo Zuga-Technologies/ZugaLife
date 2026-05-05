@@ -118,7 +118,7 @@ function submit() {
     <!-- Step indicator -->
     <div class="flex items-center gap-2 mb-4">
       <component :is="stepIcons[step - 1]" :size="16" class="text-accent" />
-      <span class="text-[11px] font-bold uppercase tracking-wider text-accent">
+      <span class="text-[10px] font-bold uppercase tracking-widest text-accent">
         Step {{ step }}/{{ totalSteps }} &mdash; {{ stepLabels[step - 1] }}
       </span>
     </div>
@@ -132,10 +132,10 @@ function submit() {
           v-for="s in identitySuggestions"
           :key="s"
           @click="identity = s"
-          class="px-2.5 py-1.5 text-xs rounded-lg border transition-colors"
+          class="px-2.5 py-1.5 text-xs rounded-lg transition-colors"
           :class="identity === s
-            ? 'bg-accent/20 border-accent text-accent'
-            : 'border-bdr text-txt-muted hover:border-accent/50'"
+            ? 'bg-accent/15 ring-1 ring-accent/50 text-accent'
+            : 'border border-bdr text-txt-muted hover:border-accent/50'"
         >{{ s }}</button>
       </div>
       <input
@@ -166,7 +166,7 @@ function submit() {
         class="input-field text-sm w-full resize-none"
       />
       <div>
-        <label class="text-[11px] text-txt-muted mb-1 block">Deadline (optional)</label>
+        <label class="text-xs text-txt-muted mb-1 block">Deadline (optional)</label>
         <input
           v-model="deadline"
           type="date"
@@ -186,7 +186,7 @@ function submit() {
         rows="4"
         class="input-field text-sm w-full resize-none"
       />
-      <p class="text-[11px] text-txt-muted">This step activates motivational circuits through mental contrasting. You can skip it, but research shows it helps.</p>
+      <p class="text-xs text-txt-muted">This step activates motivational circuits through mental contrasting. You can skip it, but research shows it helps.</p>
     </div>
 
     <!-- Step 4: Obstacle -->
@@ -198,10 +198,10 @@ function submit() {
           v-for="s in obstacleSuggestions"
           :key="s"
           @click="obstacle = s"
-          class="px-2.5 py-1.5 text-xs rounded-lg border transition-colors"
+          class="px-2.5 py-1.5 text-xs rounded-lg transition-colors"
           :class="obstacle === s
-            ? 'bg-red-500/20 border-red-500/50 text-red-300'
-            : 'border-bdr text-txt-muted hover:border-red-500/30'"
+            ? 'bg-danger/15 ring-1 ring-danger/50 text-danger'
+            : 'border border-bdr text-txt-muted hover:border-danger/40'"
         >{{ s }}</button>
       </div>
       <input
@@ -219,8 +219,8 @@ function submit() {
       <p class="text-sm text-txt-muted">
         This if-then plan fires automatically when your obstacle appears &mdash; no willpower needed.
       </p>
-      <div class="p-3 rounded-lg bg-red-500/10 border border-red-500/20 mb-3">
-        <p class="text-xs text-red-300"><strong>When:</strong> {{ obstacle }}</p>
+      <div class="p-3 rounded-lg bg-danger/10 border border-danger/20 mb-3">
+        <p class="text-xs text-danger"><strong>When:</strong> {{ obstacle }}</p>
       </div>
       <textarea
         v-model="plan"
