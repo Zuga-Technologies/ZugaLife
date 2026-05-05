@@ -593,7 +593,7 @@ onMounted(async () => {
         </div>
 
         <p v-if="dashMoodSuccess" class="text-xs text-success text-center mt-3">{{ dashMoodSuccess }}</p>
-        <p v-if="dashMoodError" class="text-xs text-red-400 text-center mt-3">{{ dashMoodError }}</p>
+        <p v-if="dashMoodError" class="text-xs text-danger text-center mt-3">{{ dashMoodError }}</p>
 
         <div
           v-if="dashBreathworkSuggestion"
@@ -675,7 +675,7 @@ onMounted(async () => {
                 <span class="text-txt-secondary truncate flex-1">{{ g.title }}</span>
                 <span
                   v-if="g.is_template"
-                  class="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-accent/10 text-accent flex-shrink-0"
+                  class="text-[10px] font-semibold uppercase tracking-widest px-1.5 py-0.5 rounded bg-accent/10 text-accent flex-shrink-0"
                 >preset</span>
                 <span
                   v-if="g.deadline"
@@ -848,71 +848,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.badge-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255 255 255 / 0.12) transparent;
-}
-.badge-scroll::-webkit-scrollbar {
-  height: 4px;
-}
-.badge-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.badge-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255 255 255 / 0.12);
-  border-radius: 9999px;
-}
-.badge-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255 255 255 / 0.25);
-}
-
-/* Prestige animations */
-.prestige-glow {
-  box-shadow: 0 0 12px rgba(168, 85, 247, 0.3), 0 0 4px rgba(245, 158, 11, 0.2);
-}
-
-.prestige-star {
-  animation: star-twinkle 2s ease-in-out infinite;
-}
-.prestige-star:nth-child(2) { animation-delay: 0.4s; }
-.prestige-star:nth-child(3) { animation-delay: 0.8s; }
-.prestige-star:nth-child(4) { animation-delay: 1.2s; }
-.prestige-star:nth-child(5) { animation-delay: 1.6s; }
-
-@keyframes star-twinkle {
-  0%, 100% { opacity: 0.7; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.3); }
-}
-
-.multiplier-pulse {
-  animation: mult-pulse 2.5s ease-in-out infinite;
-}
-
-@keyframes mult-pulse {
-  0%, 100% { opacity: 0.85; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.08); }
-}
-
-.prestige-bar-shimmer {
-  background-size: 200% 100%;
-  animation: bar-shimmer 2s linear infinite;
-}
-
-@keyframes bar-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-.prestige-banner-glow {
-  animation: banner-glow 3s ease-in-out infinite;
-}
-
-@keyframes banner-glow {
-  0%, 100% { box-shadow: 0 0 8px rgb(var(--accent-alt) / 0.1); }
-  50% { box-shadow: 0 0 20px rgb(var(--accent-alt) / 0.25), 0 0 8px rgb(var(--accent) / 0.15); }
-}
-
-/* Skeleton loading placeholders */
+/* Skeleton loading placeholders — used by the loadingDashboard branch */
 .skeleton-pulse {
   background: linear-gradient(90deg, rgba(255 255 255 / 0.06) 25%, rgba(255 255 255 / 0.12) 50%, rgba(255 255 255 / 0.06) 75%);
   background-size: 200% 100%;
@@ -924,12 +860,7 @@ onMounted(async () => {
   100% { background-position: -200% 0; }
 }
 
-/* Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
-  .prestige-star,
-  .multiplier-pulse,
-  .prestige-bar-shimmer,
-  .prestige-banner-glow,
   .skeleton-pulse {
     animation: none !important;
   }
