@@ -604,7 +604,7 @@ onMounted(async () => {
             <p class="text-xs text-info font-medium mb-1.5">{{ dashBreathworkSuggestion }}</p>
             <div class="flex items-center gap-3">
               <a
-                href="https://boxbreather.com"
+                href="https://theboxbreather.com"
                 target="_blank"
                 class="text-xs font-semibold text-info hover:text-info transition-colors"
               >Breathe now &rarr;</a>
