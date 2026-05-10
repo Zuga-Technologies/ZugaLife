@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { api, ApiError } from '@core/api/client'
 import { habitIcons, habitIconPicker, habitIconCategories, getIcon } from '../icons'
 import { Check, ChevronDown, ChevronUp, CircleDot, Plus, Trash2 } from 'lucide-vue-next'
 import { useLifeShared } from '../composables/useLifeShared'
+import ZugaSparkle from '@core/components/delight/ZugaSparkle.vue'
+import ZugaConfetti from '@core/components/delight/ZugaConfetti.vue'
+import ZugaTactileChart from '@core/components/delight/ZugaTactileChart.vue'
+
+// Delight-kit triggers. Bumping the int re-fires the animation.
+const sparkleTriggers = ref<Record<number, number>>({})
+const confettiTrigger = ref(0)
 
 const emit = defineEmits<{
   (e: 'success'): void
@@ -124,6 +131,22 @@ const pausedCount = computed(() => {
   return habitCheckin.value.habits.filter(h => !h.habit.is_active).length
 })
 
+// Tactile chart data: per-day completion rate as a 0-100 series, in chronological
+// order. completion_rate is already 0-1 from the API. Labels are short weekday +
+// day-of-month for the hover tooltip and ARIA bar labels.
+const historyChartValues = computed<number[]>(() => {
+  if (!habitHistory.value) return []
+  return [...habitHistory.value.days]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(d => Math.round(d.completion_rate * 100))
+})
+const historyChartLabels = computed<string[]>(() => {
+  if (!habitHistory.value) return []
+  return [...habitHistory.value.days]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(d => new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }))
+})
+
 async function fetchHabitCheckin() {
   try {
     const prevDate = habitCheckin.value?.date
@@ -169,6 +192,10 @@ async function toggleHabit(item: HabitCheckInItem) {
   item.logged = !wasLogged
   if (habitCheckin.value) {
     habitCheckin.value.completed_count += wasLogged ? -1 : 1
+  }
+  // Fire sparkle on the toggle-to-done transition only (not on undo).
+  if (!wasLogged) {
+    sparkleTriggers.value[item.habit.id] = (sparkleTriggers.value[item.habit.id] ?? 0) + 1
   }
   try {
     if (wasLogged) {
@@ -606,6 +633,16 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', handleVisible)
   window.removeEventListener('focus', handleVisible)
 })
+
+// Milestone burst when the user completes the final active habit of the day.
+watch(
+  () => completionPercent.value,
+  (now, prev) => {
+    if (now === 100 && prev !== 100 && (habitCheckin.value?.total_count ?? 0) > 0) {
+      confettiTrigger.value++
+    }
+  },
+)
 </script>
 
 <template>
@@ -651,7 +688,7 @@ onBeforeUnmount(() => {
     </div>
     <template v-else-if="habitCheckin">
       <!-- Progress bar -->
-      <div class="glass-card p-4 mb-6">
+      <div class="glass-card p-4 mb-6 relative overflow-visible">
         <div class="flex items-center justify-between mb-2">
           <span class="text-sm font-medium text-txt-primary">
             {{ habitCheckin.completed_count }}/{{ habitCheckin.total_count }} active habits done
@@ -666,6 +703,7 @@ onBeforeUnmount(() => {
             :style="{ width: completionPercent + '%' }"
           />
         </div>
+        <ZugaConfetti :trigger="confettiTrigger" intensity="medium" />
       </div>
 
       <!-- Habit cards -->
@@ -679,18 +717,23 @@ onBeforeUnmount(() => {
             !item.habit.is_active ? 'opacity-50' : '',
           ]"
         >
-          <button
-            @click="toggleHabit(item)"
-            :disabled="!item.habit.is_active"
-            class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors duration-100 ease-out flex-shrink-0 disabled:cursor-not-allowed"
-            :class="item.logged
-              ? 'bg-success border-success text-surface-0'
-              : 'border-bdr hover:border-accent'"
-            :aria-label="item.logged ? `Mark ${item.habit.name} undone` : `Mark ${item.habit.name} done`"
-            :aria-pressed="item.logged"
-          >
-            <Check v-if="item.logged" :size="14" stroke-width="3" />
-          </button>
+          <div class="relative flex-shrink-0">
+            <button
+              @click="toggleHabit(item)"
+              :disabled="!item.habit.is_active"
+              class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors duration-100 ease-out disabled:cursor-not-allowed"
+              :class="item.logged
+                ? 'bg-success border-success text-surface-0'
+                : 'border-bdr hover:border-accent'"
+              :aria-label="item.logged ? `Mark ${item.habit.name} undone` : `Mark ${item.habit.name} done`"
+              :aria-pressed="item.logged"
+            >
+              <Check v-if="item.logged" :size="14" stroke-width="3" />
+            </button>
+            <span class="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <ZugaSparkle :trigger="sparkleTriggers[item.habit.id] ?? 0" :size="32" />
+            </span>
+          </div>
           <component :is="getIcon(item.habit.emoji)" :size="22" class="flex-shrink-0 text-accent" v-if="getIcon(item.habit.emoji)" />
           <CircleDot v-else :size="22" class="flex-shrink-0 text-accent" />
           <div class="flex-1 min-w-0">
@@ -791,7 +834,19 @@ onBeforeUnmount(() => {
     <div v-else-if="habitHistory.days.filter(d => d.completed_count > 0).length === 0" class="glass-card p-6 text-center">
       <p class="text-txt-muted">No habit data yet. Start checking in!</p>
     </div>
-    <div v-else class="space-y-2">
+    <template v-else>
+      <!-- Tactile completion-rate chart. Hover/focus a bar to see the
+           percentage; the accent glow makes the data feel live. -->
+      <div class="glass-card p-4 mb-3">
+        <div class="text-xs text-txt-secondary mb-3">Completion rate · last {{ historyDays }} days</div>
+        <ZugaTactileChart
+          :values="historyChartValues"
+          :labels="historyChartLabels"
+          :height="120"
+          aria-label="Daily habit completion rate"
+        />
+      </div>
+    <div class="space-y-2">
       <div
         v-for="day in habitHistory.days.filter(d => d.completed_count > 0)"
         :key="day.date"
@@ -842,6 +897,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+    </template>
   </template>
 
   <!-- ===== MANAGE VIEW ===== -->

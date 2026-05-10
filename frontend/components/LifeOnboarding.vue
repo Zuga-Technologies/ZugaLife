@@ -10,18 +10,39 @@
   Emits @complete when user finishes or skips.
 -->
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { api } from '@core/api/client'
 import {
   Heart, BookOpen, Target, Brain, Trophy, Smile,
-  ArrowRight, ArrowLeft, X, Check, Sparkles,
+  ArrowRight, ArrowLeft, X, Sparkles,
   Wind, Moon, Lightbulb, TrendingUp,
 } from 'lucide-vue-next'
+import ZugaCompanion from '@core/components/delight/ZugaCompanion.vue'
+import ZugaConfetti from '@core/components/delight/ZugaConfetti.vue'
 
 const emit = defineEmits<{ complete: [recommendedTab?: string] }>()
 
 const currentStep = ref(0)
 const TOTAL_STEPS = 5
+
+// Companion expression follows the user's progress through the flow.
+type CompanionState = 'idle' | 'happy' | 'thinking' | 'celebrate'
+const companionExpression = computed<CompanionState>(() => {
+  switch (currentStep.value) {
+    case 0: return 'idle'
+    case 1: return 'happy'
+    case 2: return 'thinking'
+    case 3: return 'happy'
+    case 4: return 'celebrate'
+    default: return 'idle'
+  }
+})
+
+// Confetti fires once on arrival at the final "you're all set" step.
+const confettiTrigger = ref(0)
+watch(currentStep, (n, o) => {
+  if (n === 4 && o !== 4) confettiTrigger.value++
+})
 
 // ── Step 1: Goal selection ───────────────────────────────
 const selectedGoal = ref<string | null>(null)
@@ -345,10 +366,9 @@ function finish(tab?: string) {
 
           <!-- ─── Step 4: Done ────────────────────────────── -->
           <template v-else-if="currentStep === 4">
-            <div class="flex-1 flex flex-col items-center justify-center text-center">
-              <div class="w-14 h-14 rounded-2xl bg-success/10 flex items-center justify-center mb-5">
-                <Check :size="28" class="text-success" />
-              </div>
+            <div class="flex-1 flex flex-col items-center justify-center text-center relative">
+              <ZugaConfetti :trigger="confettiTrigger" intensity="heavy" />
+              <ZugaCompanion :expression="companionExpression" :size="80" class="mb-5" />
               <h2 class="text-xl font-bold text-txt-primary mb-3">
                 You're all set
               </h2>
