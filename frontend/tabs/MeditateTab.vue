@@ -1048,7 +1048,7 @@ onUnmounted(() => {
               : 'glass-card text-txt-muted hover:text-txt-primary'"
           >
             <span class="text-sm">{{ opt.label }}</span>
-            <span class="text-xs opacity-70">{{ opt.sub }}</span>
+            <span class="text-xs">{{ opt.sub }}</span>
           </button>
         </div>
       </div>
@@ -1084,7 +1084,7 @@ onUnmounted(() => {
               : 'glass-card text-txt-muted hover:text-txt-primary'"
           >
             Serene
-            <span class="hidden sm:block text-xs opacity-70">Calm &amp; soothing</span>
+            <span class="hidden sm:block text-xs">Calm &amp; soothing</span>
           </button>
           <button
             @click="medVoice = 'gentle'"
@@ -1094,7 +1094,7 @@ onUnmounted(() => {
               : 'glass-card text-txt-muted hover:text-txt-primary'"
           >
             Gentle
-            <span class="hidden sm:block text-xs opacity-70">Warm &amp; nurturing</span>
+            <span class="hidden sm:block text-xs">Warm &amp; nurturing</span>
           </button>
           <button
             @click="medVoice = 'whisper'"
@@ -1104,7 +1104,7 @@ onUnmounted(() => {
               : 'glass-card text-txt-muted hover:text-txt-primary'"
           >
             Whisper
-            <span class="hidden sm:block text-xs opacity-70">Soft &amp; breathy</span>
+            <span class="hidden sm:block text-xs">Soft &amp; breathy</span>
           </button>
         </div>
       </div>

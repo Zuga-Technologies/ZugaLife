@@ -1,0 +1,14 @@
+
+POST-FIX SCAN
+
+ROUTE                VIOLS  RULES
+-------------------- -----  --------------------------------
+/life                    0  (none)
+/life/journal            1  color-contrast(10)
+/life/habits             1  color-contrast(10)
+/life/goals              1  color-contrast(10)
+/life/meditate           1  color-contrast(10)
+/life/therapist          1  color-contrast(10)
+/life/settings           1  color-contrast(10)
+-------------------- -----
+TOTAL                    6

@@ -1,0 +1,15 @@
+{
+  "target": "https://zugabot.ai/life/habits",
+  "violations": 1,
+  "by_impact": {
+    "serious": 1
+  },
+  "rules": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 10,
+      "first_target": ".nav-link.hidden-sm[href$=\"blog\"]"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "slug": "tab-goals",
+  "final_url": "https://zugabot.ai/life",
+  "violations": 2,
+  "by_impact": {
+    "critical": 1,
+    "serious": 1
+  },
+  "rules": [
+    {
+      "id": "button-name",
+      "impact": "critical",
+      "nodes": 1,
+      "first_target": ".chat-fab"
+    },
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 5,
+      "first_target": ".brand-name"
+    }
+  ],
+  "nodes_detail": [
+    {
+      "rule": "button-name",
+      "impact": "critical",
+      "target": ".chat-fab",
+      "summary": "Fix any of the following: |   Element does not have inner text that is visible to screen readers |   aria-label attribute does not exist or is empty |   aria-labelledby attribute does not exist, references elements that ",
+      "html": "<button data-v-fa85b888=\"\" class=\"chat-fab\" style=\"--studio-tint: #fb7185;\">"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".brand-name",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 1.1 (foreground color: #0f172a, background color: #0a0a0a, font size: 11.3pt (15px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17d95a1a=\"\" class=\"brand-name\">Zugabot</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".nav-btn > span",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 1.86 (foreground color: #334155, background color: #0e0e0f, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17d95a1a=\"\">Studios</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".user-name",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 1.91 (foreground color: #334155, background color: #0a0a0a, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17d95a1a=\"\" class=\"user-name\">Antonio</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".gap-1\\.5 > span[data-v-3fdb45ef=\"\"]",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.53 (foreground color: #525252, background color: #0a0a0a, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-3fdb45ef=\"\">Back</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".glass-card > p:nth-child(2)",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.43 (foreground color: #525252, background color: #101010, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<p class=\"text-txt-muted text-sm\">Pick a template above or create a custom goal.</p>"
+    }
+  ]
+}

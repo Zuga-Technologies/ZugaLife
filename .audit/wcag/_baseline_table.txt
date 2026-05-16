@@ -1,0 +1,12 @@
+
+ROUTE                VIOLS  CRIT  SERIOUS  MOD  MINOR  AUTH
+-------------------- -----  ----  -------  ---  -----  ----
+/life                    2     1        1    0      0  OK
+/life/journal            1     0        1    0      0  OK
+/life/habits             1     0        1    0      0  OK
+/life/goals              1     0        1    0      0  OK
+/life/meditate           1     0        1    0      0  OK
+/life/therapist          1     0        1    0      0  OK
+/life/settings           1     0        1    0      0  OK
+-------------------- -----  ----  -------  ---  -----  ----
+TOTAL                    8

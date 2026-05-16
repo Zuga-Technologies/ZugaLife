@@ -1,0 +1,151 @@
+{
+  "slug": "tab-dashboard",
+  "final_url": "https://zugabot.ai/life",
+  "violations": 2,
+  "by_impact": {
+    "critical": 1,
+    "serious": 1
+  },
+  "rules": [
+    {
+      "id": "button-name",
+      "impact": "critical",
+      "nodes": 2,
+      "first_target": ".user-btn"
+    },
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 16,
+      "first_target": ".nav-btn > span[data-v-17d95a1a=\"\"]"
+    }
+  ],
+  "nodes_detail": [
+    {
+      "rule": "button-name",
+      "impact": "critical",
+      "target": ".user-btn",
+      "summary": "Fix any of the following: |   Element does not have inner text that is visible to screen readers |   aria-label attribute does not exist or is empty |   aria-labelledby attribute does not exist, references elements that ",
+      "html": "<button data-v-17d95a1a=\"\" class=\"user-btn\">"
+    },
+    {
+      "rule": "button-name",
+      "impact": "critical",
+      "target": ".chat-fab",
+      "summary": "Fix any of the following: |   Element does not have inner text that is visible to screen readers |   aria-label attribute does not exist or is empty |   aria-labelledby attribute does not exist, references elements that ",
+      "html": "<button data-v-fa85b888=\"\" class=\"chat-fab\" style=\"--studio-tint: #fb7185;\">"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".nav-btn > span[data-v-17d95a1a=\"\"]",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 1.86 (foreground color: #334155, background color: #0e0e0f, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17d95a1a=\"\">Studios</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": "section > .justify-between.mb-6.items-center > .tracking-\\[0\\.18em\\]",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.45 (foreground color: #525252, background color: #0f0f0f, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<p data-v-17c98034=\"\" class=\"text-[11px] font-semibold uppercase tracking-[0.18em] text-txt-muted\">Recent moods</p>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".tabular-nums.text-xs.text-txt-muted",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.45 (foreground color: #525252, background color: #0f0f0f, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17c98034=\"\" class=\"text-xs text-txt-muted tabular-nums\">1 total logs </span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".py-12 > p:nth-child(3)",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.45 (foreground color: #525252, background color: #0f0f0f, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<p data-v-17c98034=\"\" class=\"text-xs text-txt-muted\">Tap a feeling in the pulse below to start →</p>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".lg\\:col-span-5.dash-card.text-left > .tracking-\\[0\\.18em\\]",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.45 (foreground color: #525252, background color: #0f0f0f, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<p data-v-17c98034=\"\" class=\"text-[11px] font-semibold uppercase tracking-[0.18em] text-txt-muted\">Habits · this week</p>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".px-2.py-0\\.5.rounded-md:nth-child(1) > .text-txt-muted",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.03 (foreground color: #525252, background color: #222222, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17c98034=\"\" class=\"text-txt-muted\">0/7</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".px-2.py-0\\.5.rounded-md:nth-child(2) > .text-txt-muted",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.03 (foreground color: #525252, background color: #222222, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17c98034=\"\" class=\"text-txt-muted\">0/7</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".px-2.py-0\\.5.rounded-md:nth-child(3) > .text-txt-muted",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.03 (foreground color: #525252, background color: #222222, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17c98034=\"\" class=\"text-txt-muted\">0/7</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".mb-2",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.45 (foreground color: #525252, background color: #0f0f0f, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<p data-v-17c98034=\"\" class=\"text-[11px] font-semibold uppercase tracking-[0.18em] text-txt-muted mb-2\">Today's pulse</p>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".lg\\:col-span-7.dash-card.text-left > .justify-between.mb-6.items-center > .tracking-\\[0\\.18em\\]",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.45 (foreground color: #525252, background color: #0f0f0f, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<p data-v-17c98034=\"\" class=\"text-[11px] font-semibold uppercase tracking-[0.18em] text-txt-muted\">Goals</p>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".ml-1",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.45 (foreground color: #525252, background color: #0f0f0f, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17c98034=\"\" class=\"text-txt-muted ml-1\">active</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".items-start.p-4.bg-surface-1\\/40:nth-child(1) > .w-full.gap-2.items-center > .tracking-wider.uppercase.font-semibold",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.48 (foreground color: #525252, background color: #0d0d0d, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17c98034=\"\" class=\"text-[11px] font-semibold uppercase tracking-wider text-txt-muted\">Meditate</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".items-start.p-4.bg-surface-1\\/40:nth-child(2) > .w-full.gap-2.items-center > .tracking-wider.uppercase.font-semibold",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.48 (foreground color: #525252, background color: #0d0d0d, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17c98034=\"\" class=\"text-[11px] font-semibold uppercase tracking-wider text-txt-muted\">Journal</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": ".items-start.p-4.bg-surface-1\\/40:nth-child(3) > .w-full.gap-2.items-center > .tracking-wider.uppercase.font-semibold",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.48 (foreground color: #525252, background color: #0d0d0d, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17c98034=\"\" class=\"text-[11px] font-semibold uppercase tracking-wider text-txt-muted\">Companion</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": "a[href$=\"theboxbreather.com\"] > .w-full.gap-2.items-center > .tracking-wider.uppercase.font-semibold",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.48 (foreground color: #525252, background color: #0d0d0d, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span data-v-17c98034=\"\" class=\"text-[11px] font-semibold uppercase tracking-wider text-txt-muted\">Breathwork</span>"
+    },
+    {
+      "rule": "color-contrast",
+      "impact": "serious",
+      "target": "button[aria-label=\"Journal\"] > .text-\\[10px\\].tracking-wide.font-semibold",
+      "summary": "Fix any of the following: |   Element has insufficient color contrast of 2.51 (foreground color: #525252, background color: #0b0b0b, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1",
+      "html": "<span class=\"text-[10px] font-semibold tracking-wide\">Journal</span>"
+    }
+  ]
+}
