@@ -400,13 +400,15 @@ function finish(tab?: string) {
                   :key="mood.emoji"
                   @click="selectedMood = mood.emoji"
                   :disabled="moodLogging"
+                  :aria-label="mood.label"
+                  :aria-pressed="selectedMood === mood.emoji"
                   class="flex flex-col items-center gap-1.5 p-4 rounded-xl border transition-all duration-200"
                   :class="selectedMood === mood.emoji
                     ? 'bg-accent/15 border-accent/40 ring-1 ring-accent/20 scale-105'
                     : 'bg-surface-2/50 border-bdr/50 hover:border-bdr-hover hover:bg-surface-2 hover:scale-105'"
                 >
-                  <span class="text-2xl">{{ mood.emoji }}</span>
-                  <span class="text-xs" :class="selectedMood === mood.emoji ? 'text-accent font-medium' : 'text-txt-muted'">
+                  <span class="text-2xl" aria-hidden="true">{{ mood.emoji }}</span>
+                  <span class="text-xs" aria-hidden="true" :class="selectedMood === mood.emoji ? 'text-accent font-medium' : 'text-txt-muted'">
                     {{ mood.label }}
                   </span>
                 </button>
