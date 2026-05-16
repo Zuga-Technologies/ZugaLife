@@ -727,17 +727,33 @@ defineExpose({ therapistSessionActive, therapistMessages })
             :mood="companionMood"
             :mood-intensity="companionMoodIntensity"
           />
-          <!-- Status pill (top-left): "Speaking…" while audio plays, otherwise
-               quiet. Floats over the gradient backdrop. -->
+          <!-- Status pill (top-left). Four honest states — the idle state
+               used to say "Listening" which lied when the mic was off.
+               Now: Muted (her voice output off), Speaking (TTS playing),
+               Hearing you (mic actively capturing), Here (idle / present
+               but not listening). The voice-input banner below the input
+               bar covers the finer mic phases. -->
           <div
             class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/35 backdrop-blur-sm text-[11px] text-white/90 flex items-center gap-1.5 transition-opacity"
-            :class="avatarSpeaking ? 'opacity-100' : 'opacity-60'"
+            :class="(avatarSpeaking || voicePhase === 'capturing') ? 'opacity-100' : 'opacity-60'"
           >
             <span
               class="w-1.5 h-1.5 rounded-full"
-              :class="!avatarVoiceEnabled ? 'bg-red-400' : avatarSpeaking ? 'bg-emerald-400 animate-pulse' : 'bg-white/40'"
+              :class="!avatarVoiceEnabled
+                ? 'bg-red-400'
+                : avatarSpeaking
+                  ? 'bg-emerald-400 animate-pulse'
+                  : voicePhase === 'capturing'
+                    ? 'bg-rose-300 animate-pulse'
+                    : 'bg-white/40'"
             ></span>
-            {{ !avatarVoiceEnabled ? 'Muted' : avatarSpeaking ? 'Speaking' : 'Listening' }}
+            {{ !avatarVoiceEnabled
+                ? 'Muted'
+                : avatarSpeaking
+                  ? 'Speaking'
+                  : voicePhase === 'capturing'
+                    ? 'Hearing you'
+                    : 'Here' }}
           </div>
           <!-- Privacy line (top-right): keeps the Venice-private framing
                visible — chat content never leaves Venice; voice in/out is
