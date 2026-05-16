@@ -110,6 +110,13 @@ const therapistMoodAfter = ref<string | null>(null)
 const therapistRating = ref<number | null>(null)
 const therapistShowEndMood = ref(false)
 
+// Companion mood — set from each assistant reply, drives the avatar's visor
+// emission color, posture, and idle tempo. Resets to neutral when a new
+// session starts so the bot doesn't carry yesterday's mood into today.
+type CompanionMood = 'neutral' | 'happy' | 'sad' | 'angry' | 'surprised' | 'relaxed'
+const companionMood = ref<CompanionMood>('neutral')
+const companionMoodIntensity = ref(0.0)
+
 // Two-step delete for session notes — bible §11 button.danger MUST NOT
 // fire destructive action immediately. First click arms confirm for 4s.
 const deletingNote = ref<number | null>(null)
@@ -392,6 +399,8 @@ async function startTherapistSession() {
   therapistMoodAfter.value = null
   therapistRating.value = null
   therapistShowEndMood.value = false
+  companionMood.value = 'neutral'
+  companionMoodIntensity.value = 0.0
   therapistSending.value = true
 
   // The Start button click is a definite user gesture — pre-warm the
@@ -436,11 +445,13 @@ async function sendTherapistMessage() {
 
   try {
     const apiMessages = therapistMessages.value.map(m => ({ role: m.role, content: m.content }))
-    const res = await api.post<{ content: string; message_index: number; session_messages_remaining: number; cost: number }>(
+    const res = await api.post<{ content: string; message_index: number; session_messages_remaining: number; cost: number; mood?: CompanionMood; mood_intensity?: number }>(
       '/api/life/therapist/chat',
       { messages: apiMessages },
     )
     therapistMessages.value.push({ role: 'assistant', content: res.content })
+    companionMood.value = res.mood ?? 'neutral'
+    companionMoodIntensity.value = res.mood_intensity ?? 0.0
     if (avatarEnabled.value && avatarVoiceEnabled.value && !document.hidden) {
       avatarSpeak(res.content).catch(() => { /* silent — chat still works */ })
     }
@@ -710,7 +721,12 @@ defineExpose({ therapistSessionActive, therapistMessages })
              The bottom-right toggle hides her without leaving the session,
              same key as the Settings tab so both surfaces stay in sync. -->
         <div v-if="avatarEnabled" class="mb-3 rounded-2xl overflow-hidden border border-bdr/40 relative">
-          <WellnessAvatar ref="avatarRef" :height="380" />
+          <WellnessAvatar
+            ref="avatarRef"
+            :height="380"
+            :mood="companionMood"
+            :mood-intensity="companionMoodIntensity"
+          />
           <!-- Status pill (top-left): "Speaking…" while audio plays, otherwise
                quiet. Floats over the gradient backdrop. -->
           <div

@@ -41,6 +41,11 @@ class TherapistChatResponse(BaseModel):
     session_messages_remaining: int
     cost: float
     crisis_detected: bool = False
+    # Companion expression cue for the avatar — keyword-classified from the
+    # reply text. mood matches VRM 1.0 expression presets so future
+    # human-character VRMs can drive blendshapes from the same field.
+    mood: Literal["happy", "sad", "angry", "surprised", "relaxed", "neutral"] = "neutral"
+    mood_intensity: float = Field(0.0, ge=0.0, le=1.0)
 
 
 class TherapistSpeakRequest(BaseModel):

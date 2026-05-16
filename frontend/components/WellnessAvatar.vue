@@ -1,13 +1,55 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, defineExpose } from 'vue'
+import { onMounted, onBeforeUnmount, ref, watch, defineExpose } from 'vue'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm'
 
-const props = defineProps<{
+export type AvatarMood = 'neutral' | 'happy' | 'sad' | 'angry' | 'surprised' | 'relaxed'
+
+const props = withDefaults(defineProps<{
   vrmUrl?: string
   height?: number
-}>()
+  mood?: AvatarMood
+  moodIntensity?: number
+}>(), {
+  mood: 'neutral',
+  moodIntensity: 0.0,
+})
+
+// Per-mood expression vocabulary for the wellness robot. Each entry is the
+// target the animate() loop interpolates toward — visor emission color +
+// strength, idle-loop multipliers, and a small additive head/spine offset.
+// Defined here (not in a character template yet) because we're hardcoding the
+// robot first; the character abstraction lands after #1/2/4/5.
+interface MoodTarget {
+  visor: { r: number; g: number; b: number; strength: number }
+  breathRate: number
+  swayRate: number
+  headTiltX: number
+  spineTiltX: number
+}
+const MOOD_TARGETS: Record<AvatarMood, MoodTarget> = {
+  // Default visor color from the VRM (.23, .60, .008) is a warm yellow-green.
+  neutral:   { visor: { r: 0.23, g: 0.60, b: 0.008, strength: 1.0 }, breathRate: 1.0, swayRate: 1.0, headTiltX:  0.00, spineTiltX:  0.00 },
+  happy:     { visor: { r: 0.95, g: 0.75, b: 0.30,  strength: 1.6 }, breathRate: 1.25, swayRate: 1.20, headTiltX: -0.05, spineTiltX: -0.02 },
+  sad:       { visor: { r: 0.12, g: 0.20, b: 0.55,  strength: 0.5 }, breathRate: 0.70, swayRate: 0.70, headTiltX:  0.18, spineTiltX:  0.06 },
+  angry:     { visor: { r: 0.95, g: 0.10, b: 0.08,  strength: 1.8 }, breathRate: 1.40, swayRate: 1.30, headTiltX:  0.06, spineTiltX:  0.03 },
+  surprised: { visor: { r: 0.80, g: 0.85, b: 0.95,  strength: 1.7 }, breathRate: 1.30, swayRate: 0.90, headTiltX: -0.10, spineTiltX: -0.04 },
+  relaxed:   { visor: { r: 0.40, g: 0.85, b: 0.60,  strength: 0.9 }, breathRate: 0.80, swayRate: 0.85, headTiltX:  0.03, spineTiltX:  0.00 },
+}
+
+// Smoothed mood state — eased toward target each frame so transitions look
+// like the bot is reacting, not snapping. ~1.5s to settle at dt*4.
+const moodSmoothed = {
+  r: MOOD_TARGETS.neutral.visor.r,
+  g: MOOD_TARGETS.neutral.visor.g,
+  b: MOOD_TARGETS.neutral.visor.b,
+  strength: 1.0,
+  breathRate: 1.0,
+  swayRate: 1.0,
+  headTiltX: 0.0,
+  spineTiltX: 0.0,
+}
 
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const status = ref<'loading' | 'ready' | 'error'>('loading')
@@ -25,6 +67,11 @@ let mouthOpenTarget = 0
 let mouthOpenSmoothed = 0
 let mouthMesh: THREE.SkinnedMesh | null = null
 let mouthOpenMorphIndex = -1
+// Visor material — its emissive color is driven by mood. Captured once
+// during VRM load by name (mat_visor_static) to avoid hot-path lookups.
+let visorMaterial: THREE.MeshStandardMaterial | THREE.MeshBasicMaterial | null = null
+const visorBaseEmissive = new THREE.Color()
+let visorBaseEmissiveIntensity = 1.0
 
 // Blink schedule — closes the eyes briefly every few seconds. Stored as a
 // running cycle so animate() can interpolate without allocating per frame.
@@ -146,6 +193,26 @@ onMounted(async () => {
         mouthOpenMorphIndex = dict['open']
       }
     }
+
+    // Capture the visor material so mood can drive its emissive color.
+    // MToon materials (VRMC_materials_mtoon) get re-keyed by three-vrm; we
+    // walk every mesh and pick the first material named 'mat_visor_static'.
+    // Falls back silently if absent (non-robot VRMs).
+    vrm.scene.traverse((obj) => {
+      const m = obj as THREE.Mesh
+      if (!m.isMesh || visorMaterial) return
+      const mats = Array.isArray(m.material) ? m.material : [m.material]
+      for (const mat of mats) {
+        if (mat && mat.name === 'mat_visor_static') {
+          visorMaterial = mat as THREE.MeshStandardMaterial
+          if ((visorMaterial as THREE.MeshStandardMaterial).emissive) {
+            visorBaseEmissive.copy((visorMaterial as THREE.MeshStandardMaterial).emissive)
+          }
+          visorBaseEmissiveIntensity = (visorMaterial as THREE.MeshStandardMaterial).emissiveIntensity ?? 1.0
+          break
+        }
+      }
+    })
     scene.add(vrm.scene)
     status.value = 'ready'
   } catch (e) {
@@ -174,18 +241,55 @@ onMounted(async () => {
       const lUA = hum?.getNormalizedBoneNode('leftUpperArm')
       const rUA = hum?.getNormalizedBoneNode('rightUpperArm')
 
+      // ── Mood targeting ──
+      // Interpolate moodSmoothed toward the current props.mood target,
+      // weighted by moodIntensity (intensity 0 falls back to neutral). This
+      // is the single place mood propagates into the avatar — emission +
+      // posture + idle tempo all read off moodSmoothed below.
+      const tgt = MOOD_TARGETS[props.mood] || MOOD_TARGETS.neutral
+      const neu = MOOD_TARGETS.neutral
+      const k = Math.max(0, Math.min(1, props.moodIntensity))
+      const want = {
+        r: neu.visor.r + (tgt.visor.r - neu.visor.r) * k,
+        g: neu.visor.g + (tgt.visor.g - neu.visor.g) * k,
+        b: neu.visor.b + (tgt.visor.b - neu.visor.b) * k,
+        strength: neu.visor.strength + (tgt.visor.strength - neu.visor.strength) * k,
+        breathRate: 1.0 + (tgt.breathRate - 1.0) * k,
+        swayRate:   1.0 + (tgt.swayRate - 1.0) * k,
+        headTiltX:  tgt.headTiltX * k,
+        spineTiltX: tgt.spineTiltX * k,
+      }
+      const ease = Math.min(1, dt * 4)
+      moodSmoothed.r          += (want.r - moodSmoothed.r) * ease
+      moodSmoothed.g          += (want.g - moodSmoothed.g) * ease
+      moodSmoothed.b          += (want.b - moodSmoothed.b) * ease
+      moodSmoothed.strength   += (want.strength - moodSmoothed.strength) * ease
+      moodSmoothed.breathRate += (want.breathRate - moodSmoothed.breathRate) * ease
+      moodSmoothed.swayRate   += (want.swayRate - moodSmoothed.swayRate) * ease
+      moodSmoothed.headTiltX  += (want.headTiltX - moodSmoothed.headTiltX) * ease
+      moodSmoothed.spineTiltX += (want.spineTiltX - moodSmoothed.spineTiltX) * ease
+
+      // Apply visor emission. MToon stores emissive on .emissive — we write
+      // the smoothed RGB directly and scale .emissiveIntensity for "glow".
+      if (visorMaterial && (visorMaterial as THREE.MeshStandardMaterial).emissive) {
+        const mat = visorMaterial as THREE.MeshStandardMaterial
+        mat.emissive.setRGB(moodSmoothed.r, moodSmoothed.g, moodSmoothed.b)
+        mat.emissiveIntensity = visorBaseEmissiveIntensity * moodSmoothed.strength
+      }
+
       // Breathing — slow sine on chest+spine, ~14 cycles/min. Bumps when
-      // talking so the body 'breathes harder' as it speaks.
+      // talking so the body 'breathes harder' as it speaks. Rate is mood-
+      // modulated (faster for happy/angry, slower for sad/relaxed).
       const ampForBody = isFinite(mouthOpenSmoothed) ? mouthOpenSmoothed : 0
-      const breath = Math.sin(t * 1.4) * (0.018 + ampForBody * 0.025)
-      if (spine) spine.rotation.x = breath
+      const breath = Math.sin(t * 1.4 * moodSmoothed.breathRate) * (0.018 + ampForBody * 0.025)
+      if (spine) spine.rotation.x = breath + moodSmoothed.spineTiltX
       if (chest) chest.rotation.x = breath * 0.6 + ampForBody * 0.04
       // Subtle forward chest lean during speech — emphasis on talking
       if (spine) spine.rotation.x += ampForBody * 0.03
 
       // Weight shift — slow lateral hip sway over ~6s. Gives her a natural
       // standing presence instead of a stock-still T-pose feel.
-      const sway = Math.sin(t * 0.55)
+      const sway = Math.sin(t * 0.55 * moodSmoothed.swayRate)
       if (hips) {
         hips.rotation.z = sway * 0.025
         hips.position.x = sway * 0.015
@@ -196,9 +300,10 @@ onMounted(async () => {
       if (neck) neck.rotation.y = 0
       if (head) {
         head.rotation.y = -sway * 0.04
-        // Nod: high-frequency micro-bob (3 Hz) scaled by amp + slow drift
+        // Nod: high-frequency micro-bob (3 Hz) scaled by amp + slow drift,
+        // plus the mood head-tilt offset (sad droops, happy lifts, etc.).
         const nod = ampForBody * 0.06 * Math.sin(t * 3)
-        head.rotation.x = Math.sin(t * 0.9) * 0.02 + nod
+        head.rotation.x = Math.sin(t * 0.9) * 0.02 + nod + moodSmoothed.headTiltX
       }
 
       // Arm idle — small inward/outward swing baseline, plus when talking
@@ -281,6 +386,7 @@ onBeforeUnmount(() => {
   vrm = null
   mouthMesh = null
   mouthOpenMorphIndex = -1
+  visorMaterial = null
 })
 </script>
 
