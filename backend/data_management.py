@@ -22,6 +22,8 @@ from core.auth.middleware import get_current_user
 from core.auth.models import CurrentUser
 from core.database.session import get_session
 
+from .consent_constants import CURRENT_CONSENT_VERSION
+
 # Models loaded via sys.modules (plugin.py pre-loads them)
 _models = sys.modules["zugalife.models"]
 _j_models = sys.modules["zugalife.journal.models"]
@@ -368,6 +370,10 @@ class ConsentState(BaseModel):
     ai_sharing_at: datetime | None
     age_confirmed_at: datetime | None
     deletion_requested_at: datetime | None
+    # Version stamped on this row; FE compares vs `current_version` to decide
+    # whether to re-fire the onboarding gate.
+    consent_version: int = 0
+    current_version: int = 0
 
 
 @_consent_router.get("", response_model=ConsentState)
@@ -382,12 +388,16 @@ async def get_consent(user: CurrentUser = Depends(get_current_user)) -> ConsentS
             ai_sharing_at=None,
             age_confirmed_at=None,
             deletion_requested_at=None,
+            consent_version=0,
+            current_version=CURRENT_CONSENT_VERSION,
         )
     return ConsentState(
         health_collected_at=row.consent_health_collected_at,
         ai_sharing_at=row.consent_ai_sharing_at,
         age_confirmed_at=row.age_confirmed_at,
         deletion_requested_at=row.deletion_requested_at,
+        consent_version=row.consent_version or 0,
+        current_version=CURRENT_CONSENT_VERSION,
     )
 
 
@@ -420,19 +430,24 @@ async def record_consent(
         row = await session.scalar(
             select(LifeConsent).where(LifeConsent.user_id == user.id)
         )
-        # Stamp only fields not yet set so we preserve original consent dates
+        # Stamp only fields not yet set so we preserve original consent dates.
+        # Version: always stamp to CURRENT (a re-consent overwrites the old
+        # version stamp so the user passes the freshness check).
         if body.health_collected and row.consent_health_collected_at is None:
             row.consent_health_collected_at = now
         if body.ai_sharing and row.consent_ai_sharing_at is None:
             row.consent_ai_sharing_at = now
         if body.age_confirmed and row.age_confirmed_at is None:
             row.age_confirmed_at = now
+        row.consent_version = CURRENT_CONSENT_VERSION
 
     return ConsentState(
         health_collected_at=row.consent_health_collected_at,
         ai_sharing_at=row.consent_ai_sharing_at,
         age_confirmed_at=row.age_confirmed_at,
         deletion_requested_at=row.deletion_requested_at,
+        consent_version=row.consent_version or 0,
+        current_version=CURRENT_CONSENT_VERSION,
     )
 
 

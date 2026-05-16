@@ -20,6 +20,8 @@ from core.auth.middleware import get_current_user
 from core.auth.models import CurrentUser
 from core.database.session import get_session
 
+from .consent_constants import CURRENT_CONSENT_VERSION
+
 _models = sys.modules["zugalife.models"]
 LifeConsent = _models.LifeConsent
 
@@ -34,13 +36,20 @@ async def _load_consent(user_id: str):
 
 
 def _missing_required(row, *, ai: bool) -> list[str]:
-    """Return list of missing consent fields. Age is always required."""
+    """Return list of missing consent fields. Age is always required.
+
+    If the user's stamped consent_version is below CURRENT_CONSENT_VERSION,
+    EVERY field is treated as missing — forces a full re-consent through
+    the onboarding gate. This is how we invalidate pre-existing rows when
+    Mike's copy lands.
+    """
     missing: list[str] = []
-    if row is None or row.age_confirmed_at is None:
+    stale = row is not None and (row.consent_version or 0) < CURRENT_CONSENT_VERSION
+    if row is None or stale or row.age_confirmed_at is None:
         missing.append("age_confirmed")
-    if row is None or row.consent_health_collected_at is None:
+    if row is None or stale or row.consent_health_collected_at is None:
         missing.append("health_collected")
-    if ai and (row is None or row.consent_ai_sharing_at is None):
+    if ai and (row is None or stale or row.consent_ai_sharing_at is None):
         missing.append("ai_sharing")
     return missing
 

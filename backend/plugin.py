@@ -315,6 +315,10 @@ class ZugaLifePlugin(StudioPlugin):
                 "ALTER TABLE life_user_settings ADD COLUMN last_breath_date VARCHAR(10)",
                 # Consent compliance (WA MHMDA + CA CMIA + COPPA) — Issue #3
                 "ALTER TABLE life_consents ADD COLUMN age_confirmed_at DATETIME",
+                # Versioned consent — Issue #3 follow-up. When CURRENT_CONSENT_VERSION
+                # in consent_constants.py is bumped past a user's row value, the
+                # guard treats the row as stale and forces re-consent.
+                "ALTER TABLE life_consents ADD COLUMN consent_version INTEGER NOT NULL DEFAULT 0",
             ]
             for sql in additive_migrations:
                 try:

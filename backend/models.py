@@ -49,3 +49,10 @@ class LifeConsent(Base, TimestampMixin):
     deletion_requested_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Versioned consent — bump backend CURRENT_CONSENT_VERSION when consent
+    # copy materially changes (e.g., Mike's T1/T2/T3 final language lands).
+    # Users whose stamped version < CURRENT are forced through the onboarding
+    # consent gate again. See backend/consent_constants.py.
+    consent_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
