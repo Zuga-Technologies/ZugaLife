@@ -73,6 +73,15 @@ let visorMaterial: THREE.MeshStandardMaterial | THREE.MeshBasicMaterial | null =
 const visorBaseEmissive = new THREE.Color()
 let visorBaseEmissiveIntensity = 1.0
 
+// Eye meshes — captured during VRM load so the animate() loop can scale
+// each eye independently for the Star Wars droid "lens zoom" effect. Each
+// eye has slightly offset sine-driven scale on Z (depth = how far the iris
+// pushes out) and Y (height = squint/widen). Phases differ left vs right
+// so the eyes don't move in sync.
+let eyeL: THREE.Object3D | null = null
+let eyeR: THREE.Object3D | null = null
+const eyeBaseScale = { L: new THREE.Vector3(1,1,1), R: new THREE.Vector3(1,1,1) }
+
 // Blink schedule — closes the eyes briefly every few seconds. Stored as a
 // running cycle so animate() can interpolate without allocating per frame.
 let nextBlinkAt = 2 + Math.random() * 3
@@ -163,7 +172,7 @@ onMounted(async () => {
   // Cache-bust query string forces SW + CF + browser to fetch the latest VRM
   // whenever its bytes change (avatar revisions). The version tag bumps with
   // each material/geometry edit on the asset.
-  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=830-aaa-stylized'
+  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=831-logo-head'
   try {
     const gltf = await loader.loadAsync(url)
     vrm = gltf.userData.vrm as VRM
@@ -201,6 +210,12 @@ onMounted(async () => {
         mouthOpenMorphIndex = dict['open']
       }
     }
+
+    // Capture eye meshes by name for the independent droid-zoom animation.
+    eyeL = vrm.scene.getObjectByName('mesh_eye_big_l') ?? null
+    eyeR = vrm.scene.getObjectByName('mesh_eye_big_r') ?? null
+    if (eyeL) eyeBaseScale.L.copy(eyeL.scale)
+    if (eyeR) eyeBaseScale.R.copy(eyeR.scale)
 
     // Capture the visor material so mood can drive its emissive color.
     // MToon materials (VRMC_materials_mtoon) get re-keyed by three-vrm; we
@@ -369,6 +384,20 @@ onMounted(async () => {
         rHand.rotation.z = Math.sin(t * 0.6 + 1.0) * 0.05
       }
 
+      // Droid eye-zoom — each eye scales independently on a slow sine. Left
+      // and right use different frequencies + phase offsets so they look
+      // like a Star Wars astromech recalibrating its lens (one widens
+      // briefly while the other contracts). Scale range stays tight
+      // (0.85..1.15) so the eye stays on the face plate.
+      if (eyeL) {
+        const sL = 1.0 + Math.sin(t * 0.9 + 0.0) * 0.12 + Math.sin(t * 2.7) * 0.04
+        eyeL.scale.set(eyeBaseScale.L.x * sL, eyeBaseScale.L.y * sL, eyeBaseScale.L.z * (sL * 0.7 + 0.3))
+      }
+      if (eyeR) {
+        const sR = 1.0 + Math.sin(t * 1.1 + 1.8) * 0.12 + Math.sin(t * 3.1 + 0.4) * 0.04
+        eyeR.scale.set(eyeBaseScale.R.x * sR, eyeBaseScale.R.y * sR, eyeBaseScale.R.z * (sR * 0.7 + 0.3))
+      }
+
       // Blink — every 2-5s, close the eyes for ~140ms. blinkPhase ramps
       // 0→1→0; expressionManager.blink takes that directly.
       if (t >= nextBlinkAt) {
@@ -428,6 +457,8 @@ onBeforeUnmount(() => {
   mouthMesh = null
   mouthOpenMorphIndex = -1
   visorMaterial = null
+  eyeL = null
+  eyeR = null
 })
 </script>
 
