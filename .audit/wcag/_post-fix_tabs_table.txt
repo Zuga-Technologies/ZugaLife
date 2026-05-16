@@ -1,0 +1,14 @@
+
+POST-FIX TABS SCAN
+
+TAB              VIOLS  CRIT  SERIOUS  MOD  MINOR  URL
+---------------- -----  ----  -------  ---  -----  --------------------
+tab-dashboard        0     0        0    0      0  /life
+tab-journal          0     0        0    0      0  /life
+tab-habits           0     0        0    0      0  /life
+tab-meditate         0     0        0    0      0  /life
+tab-therapist        0     0        0    0      0  /life
+tab-goals            0     0        0    0      0  /life
+tab-settings         0     0        0    0      0  /life
+---------------- -----  ----  -------  ---  -----
+TOTAL                0

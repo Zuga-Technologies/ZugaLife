@@ -6,7 +6,7 @@ import logging
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from core.plugins.interface import StudioPlugin
 
@@ -96,6 +96,7 @@ _m_routes = _load_submodule("meditation", "routes")
 _t_models = _load_submodule("therapist", "models")
 _t_schemas = _load_submodule("therapist", "schemas")
 _t_safety = _load_submodule("therapist", "safety")
+_t_sentiment = _load_submodule("therapist", "sentiment")
 _t_prompts = _load_submodule("therapist", "prompts")
 _t_context = _load_submodule("therapist", "context")
 _t_routes = _load_submodule("therapist", "routes")
@@ -133,6 +134,9 @@ _ecosystem = _load_sibling("ecosystem")
 # Load data management (reset endpoints) — must come after all domain modules
 _data_mgmt = _load_sibling("data_management")
 
+# Consent guards — must load AFTER models (it imports zugalife.models from sys.modules)
+_consent_guards = _load_sibling("consent_guards")
+
 # Load dashboard AFTER all modules — it reads from sys.modules at request time
 _dashboard = _load_sibling("dashboard")
 
@@ -141,18 +145,32 @@ _dashboard = _load_sibling("dashboard")
 _commands = _load_sibling("commands")
 
 # Merge all routers into a single combined router
+#
+# Consent guards: attached per-router. Each guard short-circuits to pass-through
+# on GET/HEAD/OPTIONS so users can always read and export. WRITE methods 403
+# when the required consent flag is unstamped.
+#   - health-data routers (mood/journal/habits/goals/meditation/gamification)
+#     → require_health_consent
+#   - therapist routers (chat/end-session/notes/speech/transcribe)
+#     → require_health_and_ai (additionally requires Venice AI sharing opt-in)
+#   - settings / data_management / forecasting / dashboard / commands / notif
+#     prefs → ungated. data_management.delete /me must work without consent
+#     so users can revoke + purge.
+_health_dep = [Depends(_consent_guards.require_health_consent)]
+_therapist_dep = [Depends(_consent_guards.require_health_and_ai)]
+
 _combined_router = APIRouter()
-_combined_router.include_router(_routes.router)
-_combined_router.include_router(_j_routes.router)
-_combined_router.include_router(_h_routes.router)
-_combined_router.include_router(_g_routes.router)
-_combined_router.include_router(_m_routes.router)
-_combined_router.include_router(_t_routes.router)
-_combined_router.include_router(_t_speech.router)
-_combined_router.include_router(_t_transcribe.router)
+_combined_router.include_router(_routes.router, dependencies=_health_dep)
+_combined_router.include_router(_j_routes.router, dependencies=_health_dep)
+_combined_router.include_router(_h_routes.router, dependencies=_health_dep)
+_combined_router.include_router(_g_routes.router, dependencies=_health_dep)
+_combined_router.include_router(_m_routes.router, dependencies=_health_dep)
+_combined_router.include_router(_t_routes.router, dependencies=_therapist_dep)
+_combined_router.include_router(_t_speech.router, dependencies=_therapist_dep)
+_combined_router.include_router(_t_transcribe.router, dependencies=_therapist_dep)
 _combined_router.include_router(_s_routes.router)
 _combined_router.include_router(_f_routes.router)
-_combined_router.include_router(_gam_routes.router)
+_combined_router.include_router(_gam_routes.router, dependencies=_health_dep)
 _combined_router.include_router(_gam_notif_routes.router)
 _combined_router.include_router(_data_mgmt.router)
 _combined_router.include_router(_dashboard.router)
@@ -207,6 +225,7 @@ class ZugaLifePlugin(StudioPlugin):
     def models(self) -> list:
         return [
             _models.MoodEntry,
+            _models.LifeConsent,
             _s_models.LifeUserSettings,
             _j_models.JournalEntry, _j_models.JournalReflection,
             _h_models.HabitDefinition, _h_models.HabitLog, _h_models.HabitInsight,
@@ -289,6 +308,8 @@ class ZugaLifePlugin(StudioPlugin):
                 "ALTER TABLE life_weekly_quests ADD COLUMN completion_source VARCHAR(50)",
                 # Daily breath cold-open cross-device gate (2026-04-26)
                 "ALTER TABLE life_user_settings ADD COLUMN last_breath_date VARCHAR(10)",
+                # Consent compliance (WA MHMDA + CA CMIA + COPPA) — Issue #3
+                "ALTER TABLE life_consents ADD COLUMN age_confirmed_at DATETIME",
             ]
             for sql in additive_migrations:
                 try:

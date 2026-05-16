@@ -23,6 +23,7 @@ _models = sys.modules["zugalife.therapist.models"]
 _schemas = sys.modules["zugalife.therapist.schemas"]
 _prompts = sys.modules["zugalife.therapist.prompts"]
 _safety = sys.modules["zugalife.therapist.safety"]
+_sentiment = sys.modules["zugalife.therapist.sentiment"]
 _context = sys.modules["zugalife.therapist.context"]
 
 def _get_gam_engine():
@@ -257,6 +258,11 @@ async def therapist_chat(
                 session_messages_remaining=MAX_MESSAGES_PER_SESSION - (message_count // 2),
                 cost=0.0,
                 crisis_detected=True,
+                # Crisis routing language is grave + grounding — visor goes
+                # warm-low, posture quiets. Avoid 'sad' here because the
+                # classifier would over-index on the resources block.
+                mood="relaxed",
+                mood_intensity=1.0,
             )
 
     # Build context-enriched system prompt
@@ -338,11 +344,15 @@ async def therapist_chat(
         content += ("\n\nBefore we wrap up — what's one thing from this conversation "
                     "that you want to sit with or try before next time?")
 
+    mood, mood_intensity = _sentiment.classify(content)
+
     return TherapistChatResponse(
         content=content,
         message_index=message_count + 1,
         session_messages_remaining=max(0, MAX_MESSAGES_PER_SESSION - user_exchanges),
         cost=response.cost,
+        mood=mood,
+        mood_intensity=mood_intensity,
     )
 
 

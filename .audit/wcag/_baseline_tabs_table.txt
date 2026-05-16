@@ -1,0 +1,14 @@
+
+BASELINE TABS SCAN
+
+TAB              VIOLS  CRIT  SERIOUS  MOD  MINOR  URL
+---------------- -----  ----  -------  ---  -----  --------------------
+tab-dashboard        2     1        1    0      0  /life
+tab-journal          2     1        1    0      0  /life
+tab-habits           2     1        1    0      0  /life
+tab-meditate         2     1        1    0      0  /life
+tab-therapist        3     2        1    0      0  /life
+tab-goals            2     1        1    0      0  /life
+tab-settings         2     1        1    0      0  /life
+---------------- -----  ----  -------  ---  -----
+TOTAL               15

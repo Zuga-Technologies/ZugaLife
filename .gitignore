@@ -11,3 +11,10 @@ data/
 /backend/core/plugins
 /backend/core/credits
 frontend/tsconfig.*.tsbuildinfo
+
+# WCAG audit working dir — JSON evidence OK to share; creds, state, node_modules never
+.audit/creds.env
+.audit/storage-state.json
+.audit/node_modules/
+.audit/wcag/*.png
+.audit/wcag/_capture_header.mjs

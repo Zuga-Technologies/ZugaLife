@@ -62,7 +62,10 @@ async function saveMedSettings() {
   }
 }
 
-onMounted(fetchSettings)
+onMounted(() => {
+  fetchSettings()
+  loadConsent()
+})
 
 // ─── Confirmation modal ──────────────────────────────────────────────────────
 
@@ -72,6 +75,9 @@ interface ResetItem {
   description: string
   endpoint: string
   isAll?: boolean
+  // When true, the endpoint is DELETE /api/life/users/me — full account
+  // deletion + 30d SLA stamp. Requires typing DELETE to confirm.
+  isDeleteAccount?: boolean
 }
 
 const resetItems: ResetItem[] = [
@@ -121,6 +127,48 @@ const allResetItem: ResetItem = {
   isAll: true,
 }
 
+const deleteAccountItem: ResetItem = {
+  key: 'delete_account',
+  label: 'Delete ZugaLife Account',
+  description: 'Revoke all consents and purge every record (mood, journal, habits, goals, meditation, therapist notes, gamification, settings). Stamps the 30-day SLA window we promise for cache/log purge.',
+  endpoint: '/api/life/users/me',
+  isDeleteAccount: true,
+}
+
+// ─── Consent state (loaded for display in Privacy section) ────────────────────
+
+interface ConsentState {
+  health_collected_at: string | null
+  ai_sharing_at: string | null
+  age_confirmed_at: string | null
+  deletion_requested_at: string | null
+}
+
+const consentState = ref<ConsentState | null>(null)
+const consentLoading = ref(false)
+
+async function loadConsent() {
+  consentLoading.value = true
+  try {
+    consentState.value = await api.get<ConsentState>('/api/life/consent')
+  } catch {
+    consentState.value = null
+  } finally {
+    consentLoading.value = false
+  }
+}
+
+function fmtTs(ts: string | null): string {
+  if (!ts) return 'Not given'
+  try {
+    return new Date(ts).toLocaleDateString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+    })
+  } catch {
+    return ts
+  }
+}
+
 // Icon map keyed by reset item key
 const resetIcons: Record<string, unknown> = {
   mood: Smile,
@@ -154,6 +202,7 @@ function closeModal() {
 
 const confirmEnabled = computed(() => {
   if (!modalItem.value) return false
+  if (modalItem.value.isDeleteAccount) return modalResetInput.value === 'DELETE'
   if (modalItem.value.isAll) return modalResetInput.value === 'RESET'
   return true
 })
@@ -164,6 +213,9 @@ async function confirmReset() {
   try {
     await api.delete(modalItem.value.endpoint)
     modalSuccess.value = true
+    if (modalItem.value.isDeleteAccount) {
+      await loadConsent()
+    }
     setTimeout(() => {
       modalVisible.value = false
       modalItem.value = null
@@ -391,6 +443,74 @@ function exportJournal() {
       </div>
     </div>
 
+    <!-- ── Section 5: Privacy & Consent ─────────────────────────────────── -->
+    <!-- WA MHMDA + CA CMIA + COPPA revocation surface. Issue #3 follow-up. -->
+    <div class="bg-surface-1 rounded-xl border border-bdr p-6">
+      <div class="mb-5">
+        <h2 class="text-base font-semibold text-txt-primary">Privacy &amp; Consent</h2>
+        <p class="text-sm text-txt-muted mt-0.5">
+          Review what you've agreed to and revoke at any time
+        </p>
+      </div>
+
+      <!-- Consent state grid -->
+      <div class="space-y-2 mb-4">
+        <div class="flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg bg-surface-2/50">
+          <p class="text-sm text-txt-secondary">Wellness data collection</p>
+          <p class="text-xs font-mono"
+            :class="consentState?.health_collected_at ? 'text-accent' : 'text-txt-muted'">
+            {{ fmtTs(consentState?.health_collected_at ?? null) }}
+          </p>
+        </div>
+        <div class="flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg bg-surface-2/50">
+          <p class="text-sm text-txt-secondary">AI sharing (Venice — therapist)</p>
+          <p class="text-xs font-mono"
+            :class="consentState?.ai_sharing_at ? 'text-accent' : 'text-txt-muted'">
+            {{ fmtTs(consentState?.ai_sharing_at ?? null) }}
+          </p>
+        </div>
+        <div class="flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg bg-surface-2/50">
+          <p class="text-sm text-txt-secondary">Age confirmed (13+)</p>
+          <p class="text-xs font-mono"
+            :class="consentState?.age_confirmed_at ? 'text-accent' : 'text-txt-muted'">
+            {{ fmtTs(consentState?.age_confirmed_at ?? null) }}
+          </p>
+        </div>
+        <div
+          v-if="consentState?.deletion_requested_at"
+          class="flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg border border-amber-500/30 bg-amber-500/5"
+        >
+          <p class="text-sm text-amber-300">Deletion requested</p>
+          <p class="text-xs font-mono text-amber-300">
+            {{ fmtTs(consentState.deletion_requested_at) }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div class="border-t border-bdr my-4" />
+
+      <!-- Delete account = revocation. Always available, even without consent. -->
+      <div class="flex items-center justify-between gap-4 py-3 px-4 rounded-lg border border-red-500/30 bg-red-500/5">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+            <AlertTriangle :size="15" class="text-red-400" />
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-txt-primary truncate">{{ deleteAccountItem.label }}</p>
+            <p class="text-xs text-txt-muted">{{ deleteAccountItem.description }}</p>
+          </div>
+        </div>
+        <button
+          @click="openModal(deleteAccountItem)"
+          class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/40 bg-red-500/15 text-xs font-medium text-red-400 hover:bg-red-500/25 hover:border-red-500/60 transition-colors"
+        >
+          <Trash2 :size="12" />
+          Delete account
+        </button>
+      </div>
+    </div>
+
   </div>
 
   <!-- ── Confirmation Modal ───────────────────────────────────────────────── -->
@@ -425,7 +545,9 @@ function exportJournal() {
                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <p class="text-sm font-medium text-txt-primary">Reset complete</p>
+                <p class="text-sm font-medium text-txt-primary">
+                  {{ modalItem?.isDeleteAccount ? 'Account purged' : 'Reset complete' }}
+                </p>
               </div>
             </template>
 
@@ -437,23 +559,39 @@ function exportJournal() {
                 </div>
                 <div>
                   <h3 class="text-base font-semibold text-txt-primary">
-                    Reset {{ modalItem.label }}?
+                    <template v-if="modalItem.isDeleteAccount">
+                      Delete your ZugaLife account?
+                    </template>
+                    <template v-else>
+                      Reset {{ modalItem.label }}?
+                    </template>
                   </h3>
                   <p class="text-sm text-txt-muted mt-1">
-                    This will permanently delete all your {{ modalItem.description.toLowerCase() }}. This cannot be undone.
+                    <template v-if="modalItem.isDeleteAccount">
+                      This revokes all consents and purges every ZugaLife record
+                      tied to your account. We then have 30 days to scrub backups,
+                      caches, and any third-party copies. This cannot be undone.
+                    </template>
+                    <template v-else>
+                      This will permanently delete all your {{ modalItem.description.toLowerCase() }}. This cannot be undone.
+                    </template>
                   </p>
                 </div>
               </div>
 
-              <!-- "Type RESET" requirement for reset-all -->
-              <div v-if="modalItem.isAll" class="mb-5">
+              <!-- Type-to-confirm gate (RESET or DELETE) -->
+              <div v-if="modalItem.isAll || modalItem.isDeleteAccount" class="mb-5">
                 <label class="block text-sm font-medium text-txt-secondary mb-1.5">
-                  Type <span class="font-mono text-red-400">RESET</span> to confirm
+                  Type
+                  <span class="font-mono text-red-400">
+                    {{ modalItem.isDeleteAccount ? 'DELETE' : 'RESET' }}
+                  </span>
+                  to confirm
                 </label>
                 <input
                   v-model="modalResetInput"
                   type="text"
-                  placeholder="RESET"
+                  :placeholder="modalItem.isDeleteAccount ? 'DELETE' : 'RESET'"
                   autocomplete="off"
                   class="w-full bg-surface-2 border border-bdr rounded-lg px-3 py-2 text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-1 focus:ring-red-500/50 focus:border-red-500/50 transition-colors font-mono"
                 />
@@ -474,7 +612,7 @@ function exportJournal() {
                 >
                   <Loader2 v-if="modalLoading" :size="14" class="animate-spin" />
                   <Trash2 v-else :size="14" />
-                  Confirm Reset
+                  {{ modalItem.isDeleteAccount ? 'Delete account' : 'Confirm Reset' }}
                 </button>
               </div>
             </template>

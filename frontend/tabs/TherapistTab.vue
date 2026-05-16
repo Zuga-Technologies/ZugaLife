@@ -110,6 +110,13 @@ const therapistMoodAfter = ref<string | null>(null)
 const therapistRating = ref<number | null>(null)
 const therapistShowEndMood = ref(false)
 
+// Companion mood — set from each assistant reply, drives the avatar's visor
+// emission color, posture, and idle tempo. Resets to neutral when a new
+// session starts so the bot doesn't carry yesterday's mood into today.
+type CompanionMood = 'neutral' | 'happy' | 'sad' | 'angry' | 'surprised' | 'relaxed'
+const companionMood = ref<CompanionMood>('neutral')
+const companionMoodIntensity = ref(0.0)
+
 // Two-step delete for session notes — bible §11 button.danger MUST NOT
 // fire destructive action immediately. First click arms confirm for 4s.
 const deletingNote = ref<number | null>(null)
@@ -392,6 +399,8 @@ async function startTherapistSession() {
   therapistMoodAfter.value = null
   therapistRating.value = null
   therapistShowEndMood.value = false
+  companionMood.value = 'neutral'
+  companionMoodIntensity.value = 0.0
   therapistSending.value = true
 
   // The Start button click is a definite user gesture — pre-warm the
@@ -436,11 +445,13 @@ async function sendTherapistMessage() {
 
   try {
     const apiMessages = therapistMessages.value.map(m => ({ role: m.role, content: m.content }))
-    const res = await api.post<{ content: string; message_index: number; session_messages_remaining: number; cost: number }>(
+    const res = await api.post<{ content: string; message_index: number; session_messages_remaining: number; cost: number; mood?: CompanionMood; mood_intensity?: number }>(
       '/api/life/therapist/chat',
       { messages: apiMessages },
     )
     therapistMessages.value.push({ role: 'assistant', content: res.content })
+    companionMood.value = res.mood ?? 'neutral'
+    companionMoodIntensity.value = res.mood_intensity ?? 0.0
     if (avatarEnabled.value && avatarVoiceEnabled.value && !document.hidden) {
       avatarSpeak(res.content).catch(() => { /* silent — chat still works */ })
     }
@@ -710,18 +721,39 @@ defineExpose({ therapistSessionActive, therapistMessages })
              The bottom-right toggle hides her without leaving the session,
              same key as the Settings tab so both surfaces stay in sync. -->
         <div v-if="avatarEnabled" class="mb-3 rounded-2xl overflow-hidden border border-bdr/40 relative">
-          <WellnessAvatar ref="avatarRef" :height="380" />
-          <!-- Status pill (top-left): "Speaking…" while audio plays, otherwise
-               quiet. Floats over the gradient backdrop. -->
+          <WellnessAvatar
+            ref="avatarRef"
+            :height="380"
+            :mood="companionMood"
+            :mood-intensity="companionMoodIntensity"
+          />
+          <!-- Status pill (top-left). Four honest states — the idle state
+               used to say "Listening" which lied when the mic was off.
+               Now: Muted (her voice output off), Speaking (TTS playing),
+               Hearing you (mic actively capturing), Here (idle / present
+               but not listening). The voice-input banner below the input
+               bar covers the finer mic phases. -->
           <div
             class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/35 backdrop-blur-sm text-[11px] text-white/90 flex items-center gap-1.5 transition-opacity"
-            :class="avatarSpeaking ? 'opacity-100' : 'opacity-60'"
+            :class="(avatarSpeaking || voicePhase === 'capturing') ? 'opacity-100' : 'opacity-60'"
           >
             <span
               class="w-1.5 h-1.5 rounded-full"
-              :class="!avatarVoiceEnabled ? 'bg-red-400' : avatarSpeaking ? 'bg-emerald-400 animate-pulse' : 'bg-white/40'"
+              :class="!avatarVoiceEnabled
+                ? 'bg-red-400'
+                : avatarSpeaking
+                  ? 'bg-emerald-400 animate-pulse'
+                  : voicePhase === 'capturing'
+                    ? 'bg-rose-300 animate-pulse'
+                    : 'bg-white/40'"
             ></span>
-            {{ !avatarVoiceEnabled ? 'Muted' : avatarSpeaking ? 'Speaking' : 'Listening' }}
+            {{ !avatarVoiceEnabled
+                ? 'Muted'
+                : avatarSpeaking
+                  ? 'Speaking'
+                  : voicePhase === 'capturing'
+                    ? 'Hearing you'
+                    : 'Here' }}
           </div>
           <!-- Privacy line (top-right): keeps the Venice-private framing
                visible — chat content never leaves Venice; voice in/out is
