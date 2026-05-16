@@ -10,10 +10,13 @@ never from user input.
 
 import shutil
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import delete
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from core.auth.middleware import get_current_user
 from core.auth.models import CurrentUser
@@ -29,6 +32,7 @@ _t_models = sys.modules["zugalife.therapist.models"]
 _gam_models = sys.modules["zugalife.gamification.models"]
 
 MoodEntry = _models.MoodEntry
+LifeConsent = _models.LifeConsent
 JournalEntry = _j_models.JournalEntry
 HabitDefinition = _h_models.HabitDefinition
 HabitLog = _h_models.HabitLog
@@ -340,3 +344,214 @@ async def reset_all(
             "total": total,
         }
     }
+
+
+# ---------------------------------------------------------------------------
+# Consent (WA MHMDA + CA CMIA — opt-in must occur BEFORE any health data
+# collection. UI gates the first onboarding step on this; routes that collect
+# health data should also guard via require_health_consent / require_ai_consent
+# in a follow-up pass.)
+# ---------------------------------------------------------------------------
+
+
+_consent_router = APIRouter(prefix="/api/life/consent", tags=["life-consent"])
+
+
+class ConsentBody(BaseModel):
+    health_collected: bool = False
+    ai_sharing: bool = False
+    age_confirmed: bool = False  # COPPA — user affirms they are 13+
+
+
+class ConsentState(BaseModel):
+    health_collected_at: datetime | None
+    ai_sharing_at: datetime | None
+    age_confirmed_at: datetime | None
+    deletion_requested_at: datetime | None
+
+
+@_consent_router.get("", response_model=ConsentState)
+async def get_consent(user: CurrentUser = Depends(get_current_user)) -> ConsentState:
+    async with get_session() as session:
+        row = await session.scalar(
+            select(LifeConsent).where(LifeConsent.user_id == user.id)
+        )
+    if row is None:
+        return ConsentState(
+            health_collected_at=None,
+            ai_sharing_at=None,
+            age_confirmed_at=None,
+            deletion_requested_at=None,
+        )
+    return ConsentState(
+        health_collected_at=row.consent_health_collected_at,
+        ai_sharing_at=row.consent_ai_sharing_at,
+        age_confirmed_at=row.age_confirmed_at,
+        deletion_requested_at=row.deletion_requested_at,
+    )
+
+
+@_consent_router.post("", response_model=ConsentState)
+async def record_consent(
+    body: ConsentBody,
+    user: CurrentUser = Depends(get_current_user),
+) -> ConsentState:
+    """Stamp consent timestamps. Idempotent: re-posting only stamps fields that
+    haven't been stamped yet — consent can be GIVEN but never silently revoked
+    through this endpoint. (Revocation runs through DELETE /api/life/users/me.)
+    """
+    if not (body.health_collected or body.ai_sharing or body.age_confirmed):
+        raise HTTPException(400, "at least one consent flag must be true")
+
+    now = datetime.now(timezone.utc)
+    async with get_session() as session:
+        stmt = (
+            sqlite_insert(LifeConsent)
+            .values(
+                user_id=user.id,
+                consent_health_collected_at=now if body.health_collected else None,
+                consent_ai_sharing_at=now if body.ai_sharing else None,
+                age_confirmed_at=now if body.age_confirmed else None,
+            )
+            .on_conflict_do_nothing(index_elements=["user_id"])
+        )
+        await session.execute(stmt)
+
+        row = await session.scalar(
+            select(LifeConsent).where(LifeConsent.user_id == user.id)
+        )
+        # Stamp only fields not yet set so we preserve original consent dates
+        if body.health_collected and row.consent_health_collected_at is None:
+            row.consent_health_collected_at = now
+        if body.ai_sharing and row.consent_ai_sharing_at is None:
+            row.consent_ai_sharing_at = now
+        if body.age_confirmed and row.age_confirmed_at is None:
+            row.age_confirmed_at = now
+
+    return ConsentState(
+        health_collected_at=row.consent_health_collected_at,
+        ai_sharing_at=row.consent_ai_sharing_at,
+        age_confirmed_at=row.age_confirmed_at,
+        deletion_requested_at=row.deletion_requested_at,
+    )
+
+
+router.include_router(_consent_router)
+
+
+# ---------------------------------------------------------------------------
+# Account deletion (WA MHMDA 45d / GDPR 30d / FTC HBNR — we promise 30d SLA)
+# ---------------------------------------------------------------------------
+
+
+_user_router = APIRouter(prefix="/api/life/users", tags=["life-users"])
+
+
+class DeleteResponse(BaseModel):
+    status: str
+    deletion_requested_at: datetime
+    sla_days: int
+    purged: dict
+
+
+@_user_router.delete("/me", response_model=DeleteResponse, status_code=200)
+async def delete_me(user: CurrentUser = Depends(get_current_user)) -> DeleteResponse:
+    """Full ZugaLife account deletion.
+
+    Runs the same per-module purge as /api/life/data/reset/all and stamps
+    deletion_requested_at on the user's consent record. The stamp is the
+    SLA anchor — any latent caches / logs / backups must be purged within
+    30 days of that timestamp.
+    """
+    purged: dict[str, int] = {}
+    requested_at = datetime.now(timezone.utc)
+
+    async with get_session() as session:
+        # ---- Mood
+        r = await session.execute(
+            delete(MoodEntry).where(MoodEntry.user_id == user.id).returning(MoodEntry.id)
+        )
+        purged["mood"] = len(r.all())
+
+        # ---- Habits
+        h_logs = await session.execute(
+            delete(HabitLog).where(HabitLog.user_id == user.id).returning(HabitLog.id)
+        )
+        h_ins = await session.execute(
+            delete(HabitInsight).where(HabitInsight.user_id == user.id).returning(HabitInsight.id)
+        )
+        h_def = await session.execute(
+            delete(HabitDefinition).where(HabitDefinition.user_id == user.id).returning(HabitDefinition.id)
+        )
+        purged["habits"] = len(h_logs.all()) + len(h_ins.all()) + len(h_def.all())
+
+        # ---- Goals
+        g = await session.execute(
+            delete(GoalDefinition).where(GoalDefinition.user_id == user.id).returning(GoalDefinition.id)
+        )
+        purged["goals"] = len(g.all())
+
+        # ---- Journal
+        j = await session.execute(
+            delete(JournalEntry).where(JournalEntry.user_id == user.id).returning(JournalEntry.id)
+        )
+        purged["journal"] = len(j.all())
+
+        # ---- Meditation
+        m = await session.execute(
+            delete(MeditationSession).where(MeditationSession.user_id == user.id).returning(MeditationSession.id)
+        )
+        purged["meditation"] = len(m.all())
+
+        # ---- Therapist
+        t = await session.execute(
+            delete(TherapistSessionNote).where(TherapistSessionNote.user_id == user.id).returning(TherapistSessionNote.id)
+        )
+        purged["therapist"] = len(t.all())
+
+        # ---- Gamification
+        xp = await session.execute(
+            delete(UserXP).where(UserXP.user_id == user.id).returning(UserXP.id)
+        )
+        tx = await session.execute(
+            delete(XPTransaction).where(XPTransaction.user_id == user.id).returning(XPTransaction.id)
+        )
+        ub = await session.execute(
+            delete(UserBadge).where(UserBadge.user_id == user.id).returning(UserBadge.id)
+        )
+        dc = await session.execute(
+            delete(DailyChallenge).where(DailyChallenge.user_id == user.id).returning(DailyChallenge.id)
+        )
+        purged["gamification"] = (
+            len(xp.all()) + len(tx.all()) + len(ub.all()) + len(dc.all())
+        )
+
+        # ---- Stamp deletion request on consent row (insert if user never
+        # consented but is somehow requesting deletion — extreme edge case)
+        stmt = (
+            sqlite_insert(LifeConsent)
+            .values(user_id=user.id, deletion_requested_at=requested_at)
+            .on_conflict_do_nothing(index_elements=["user_id"])
+        )
+        await session.execute(stmt)
+        row = await session.scalar(
+            select(LifeConsent).where(LifeConsent.user_id == user.id)
+        )
+        row.deletion_requested_at = requested_at
+
+    # Audio cleanup post-commit (same pattern as reset_all)
+    audio_dir = _AUDIO_BASE / user.id
+    if audio_dir.is_dir():
+        shutil.rmtree(audio_dir)
+
+    purged["total"] = sum(v for k, v in purged.items() if k != "total")
+
+    return DeleteResponse(
+        status="purged",
+        deletion_requested_at=requested_at,
+        sla_days=30,
+        purged=purged,
+    )
+
+
+router.include_router(_user_router)

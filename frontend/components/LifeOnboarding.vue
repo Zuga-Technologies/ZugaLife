@@ -15,7 +15,7 @@ import { api } from '@core/api/client'
 import {
   Heart, BookOpen, Target, Brain, Trophy, Smile,
   ArrowRight, ArrowLeft, X, Sparkles,
-  Wind, Moon, Lightbulb, TrendingUp,
+  Wind, Moon, Lightbulb, TrendingUp, ShieldCheck,
 } from 'lucide-vue-next'
 import ZugaCompanion from '@core/components/delight/ZugaCompanion.vue'
 import ZugaConfetti from '@core/components/delight/ZugaConfetti.vue'
@@ -23,17 +23,18 @@ import ZugaConfetti from '@core/components/delight/ZugaConfetti.vue'
 const emit = defineEmits<{ complete: [recommendedTab?: string] }>()
 
 const currentStep = ref(0)
-const TOTAL_STEPS = 5
+const TOTAL_STEPS = 6
 
 // Companion expression follows the user's progress through the flow.
 type CompanionState = 'idle' | 'happy' | 'thinking' | 'celebrate'
 const companionExpression = computed<CompanionState>(() => {
   switch (currentStep.value) {
-    case 0: return 'idle'
-    case 1: return 'happy'
-    case 2: return 'thinking'
-    case 3: return 'happy'
-    case 4: return 'celebrate'
+    case 0: return 'idle'      // consent
+    case 1: return 'idle'      // goal
+    case 2: return 'happy'     // mood
+    case 3: return 'thinking'  // insight
+    case 4: return 'happy'     // toolkit
+    case 5: return 'celebrate' // done
     default: return 'idle'
   }
 })
@@ -41,8 +42,39 @@ const companionExpression = computed<CompanionState>(() => {
 // Confetti fires once on arrival at the final "you're all set" step.
 const confettiTrigger = ref(0)
 watch(currentStep, (n, o) => {
-  if (n === 4 && o !== 4) confettiTrigger.value++
+  if (n === 5 && o !== 5) confettiTrigger.value++
 })
+
+// ── Step 0: Consent (WA MHMDA + CA CMIA opt-in) ─────────
+// Copy is placeholder pending Mike's legal review (Issue #3 T1-T3).
+// Do NOT ship to revenue without Mike-approved strings replacing both
+// [MIKE COPY T3A] / [MIKE COPY T3B] slots.
+const consentHealth = ref(false)
+const consentAi = ref(false)
+const consentAge = ref(false)  // COPPA: user affirms they are 13+
+const consentSubmitting = ref(false)
+const consentError = ref<string | null>(null)
+const consentReady = computed(
+  () => consentHealth.value && consentAi.value && consentAge.value,
+)
+
+async function submitConsent() {
+  if (!consentReady.value || consentSubmitting.value) return
+  consentSubmitting.value = true
+  consentError.value = null
+  try {
+    await api.post('/api/life/consent', {
+      health_collected: true,
+      ai_sharing: true,
+      age_confirmed: true,
+    })
+    next()
+  } catch (e: any) {
+    consentError.value = e?.message || 'Could not record consent. Try again.'
+  } finally {
+    consentSubmitting.value = false
+  }
+}
 
 // ── Step 1: Goal selection ───────────────────────────────
 const selectedGoal = ref<string | null>(null)
@@ -190,12 +222,12 @@ const features = computed(() => [
 function next() {
   if (currentStep.value < TOTAL_STEPS - 1) {
     currentStep.value++
-    // Trigger AI insight generation when entering step 3
-    if (currentStep.value === 2) {
+    // Trigger AI insight generation when entering the insight step
+    if (currentStep.value === 3) {
       generateInsight()
     }
-    // Default toolkit choice to recommendation when entering step 4
-    if (currentStep.value === 3 && !chosenFeature.value) {
+    // Default toolkit choice to recommendation when entering toolkit step
+    if (currentStep.value === 4 && !chosenFeature.value) {
       chosenFeature.value = recommendedFeature.value
     }
   }
@@ -230,8 +262,90 @@ function finish(tab?: string) {
 
         <div class="px-8 pt-8 pb-6 min-h-[400px] flex flex-col">
 
-          <!-- ─── Step 0: What matters most? ────────────── -->
+          <!-- ─── Step 0: Consent gate (WA MHMDA + CA CMIA) ── -->
+          <!-- Copy placeholders [MIKE COPY T3A/T3B] are stand-ins.
+               Mike-approved strings required before revenue launch. -->
           <template v-if="currentStep === 0">
+            <div class="flex-1 flex flex-col">
+              <div class="text-center mb-5">
+                <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-3">
+                  <ShieldCheck :size="24" class="text-accent" />
+                </div>
+                <h2 class="text-xl font-bold text-txt-primary mb-1">
+                  Before we start
+                </h2>
+                <p class="text-xs text-txt-muted">
+                  Two quick consents so we can do this properly.
+                </p>
+              </div>
+
+              <div class="space-y-3 flex-1">
+                <label
+                  class="flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer bg-surface-2/50 border-bdr/50 hover:border-bdr-hover hover:bg-surface-2 transition-colors"
+                  :class="consentHealth ? 'bg-accent/10 border-accent/40 ring-1 ring-accent/20' : ''"
+                >
+                  <input
+                    type="checkbox"
+                    v-model="consentHealth"
+                    class="mt-1 w-4 h-4 accent-accent flex-shrink-0"
+                  />
+                  <span class="text-xs text-txt-secondary leading-relaxed">
+                    <!-- [MIKE COPY T3A] — health-data collection consent.
+                         Placeholder substantive enough to test flow; legal-final
+                         string must replace this before revenue. -->
+                    I consent to ZugaLife collecting my mood, journal, habit,
+                    and wellness data to provide the service.
+                  </span>
+                </label>
+
+                <label
+                  class="flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer bg-surface-2/50 border-bdr/50 hover:border-bdr-hover hover:bg-surface-2 transition-colors"
+                  :class="consentAi ? 'bg-accent/10 border-accent/40 ring-1 ring-accent/20' : ''"
+                >
+                  <input
+                    type="checkbox"
+                    v-model="consentAi"
+                    class="mt-1 w-4 h-4 accent-accent flex-shrink-0"
+                  />
+                  <span class="text-xs text-txt-secondary leading-relaxed">
+                    <!-- [MIKE COPY T3B] — Venice AI sharing consent.
+                         Placeholder; legal-final string must replace this. -->
+                    I consent to ZugaLife sharing my mental-health-related
+                    conversations with Venice AI to power the AI therapist
+                    feature.
+                  </span>
+                </label>
+
+                <!-- COPPA age gate (Issue #3 T10). Required: one under-13
+                     user triggers strict liability. -->
+                <label
+                  class="flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer bg-surface-2/50 border-bdr/50 hover:border-bdr-hover hover:bg-surface-2 transition-colors"
+                  :class="consentAge ? 'bg-accent/10 border-accent/40 ring-1 ring-accent/20' : ''"
+                >
+                  <input
+                    type="checkbox"
+                    v-model="consentAge"
+                    class="mt-1 w-4 h-4 accent-accent flex-shrink-0"
+                  />
+                  <span class="text-xs text-txt-secondary leading-relaxed">
+                    I confirm that I am 13 years of age or older.
+                  </span>
+                </label>
+
+                <p class="text-[10px] text-txt-muted leading-relaxed px-1 pt-1">
+                  All three are required to use ZugaLife. You can revoke
+                  consent and delete your account anytime from Settings.
+                </p>
+
+                <p v-if="consentError" class="text-xs text-red-400 px-1">
+                  {{ consentError }}
+                </p>
+              </div>
+            </div>
+          </template>
+
+          <!-- ─── Step 1: What matters most? ────────────── -->
+          <template v-else-if="currentStep === 1">
             <div class="flex-1 flex flex-col">
               <div class="text-center mb-6">
                 <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4">
@@ -272,8 +386,8 @@ function finish(tab?: string) {
             </div>
           </template>
 
-          <!-- ─── Step 1: How are you feeling? ────────────── -->
-          <template v-else-if="currentStep === 1">
+          <!-- ─── Step 2: How are you feeling? ────────────── -->
+          <template v-else-if="currentStep === 2">
             <div class="flex-1 flex flex-col items-center justify-center text-center">
               <h2 class="text-xl font-bold text-txt-primary mb-2">
                 How are you feeling right now?
@@ -301,8 +415,8 @@ function finish(tab?: string) {
             </div>
           </template>
 
-          <!-- ─── Step 2: AI Insight ──────────────────────── -->
-          <template v-else-if="currentStep === 2">
+          <!-- ─── Step 3: AI Insight ──────────────────────── -->
+          <template v-else-if="currentStep === 3">
             <div class="flex-1 flex flex-col items-center justify-center text-center">
               <div class="w-12 h-12 rounded-2xl bg-accent-alt/10 flex items-center justify-center mb-5">
                 <Sparkles :size="24" class="text-accent-alt" />
@@ -326,8 +440,8 @@ function finish(tab?: string) {
             </div>
           </template>
 
-          <!-- ─── Step 3: Your toolkit ────────────────────── -->
-          <template v-else-if="currentStep === 3">
+          <!-- ─── Step 4: Your toolkit ────────────────────── -->
+          <template v-else-if="currentStep === 4">
             <div class="flex-1 flex flex-col">
               <h2 class="text-lg font-bold text-txt-primary mb-1 text-center">Your toolkit</h2>
               <p class="text-xs text-txt-muted text-center mb-4">Pick where you want to start. We pre-selected one based on your goal.</p>
@@ -364,8 +478,8 @@ function finish(tab?: string) {
             </div>
           </template>
 
-          <!-- ─── Step 4: Done ────────────────────────────── -->
-          <template v-else-if="currentStep === 4">
+          <!-- ─── Step 5: Done ────────────────────────────── -->
+          <template v-else-if="currentStep === 5">
             <div class="flex-1 flex flex-col items-center justify-center text-center relative">
               <ZugaConfetti :trigger="confettiTrigger" intensity="heavy" />
               <ZugaCompanion :expression="companionExpression" :size="80" class="mb-5" />
@@ -410,6 +524,15 @@ function finish(tab?: string) {
 
           <button
             v-if="currentStep === 0"
+            @click="submitConsent"
+            :disabled="!consentReady || consentSubmitting"
+            class="flex items-center gap-1.5 text-sm font-medium transition-colors px-3 py-2"
+            :class="consentReady && !consentSubmitting ? 'text-accent hover:text-accent/80' : 'text-txt-muted cursor-not-allowed'"
+          >
+            {{ consentSubmitting ? 'Saving…' : 'Agree & continue' }} <ArrowRight :size="14" />
+          </button>
+          <button
+            v-else-if="currentStep === 1"
             @click="next"
             :disabled="!selectedGoal"
             class="flex items-center gap-1.5 text-sm font-medium transition-colors px-3 py-2"
@@ -418,7 +541,7 @@ function finish(tab?: string) {
             Next <ArrowRight :size="14" />
           </button>
           <button
-            v-else-if="currentStep === 1"
+            v-else-if="currentStep === 2"
             @click="logFirstMood"
             :disabled="!selectedMood || moodLogging"
             class="flex items-center gap-1.5 text-sm font-medium transition-colors px-3 py-2"
@@ -427,7 +550,7 @@ function finish(tab?: string) {
             {{ moodLogging ? 'Saving…' : 'Next' }} <ArrowRight :size="14" />
           </button>
           <button
-            v-else-if="currentStep > 1 && currentStep < TOTAL_STEPS - 1"
+            v-else-if="currentStep > 2 && currentStep < TOTAL_STEPS - 1"
             @click="next"
             class="flex items-center gap-1.5 text-sm font-medium text-accent hover:text-accent/80 transition-colors px-3 py-2"
           >
