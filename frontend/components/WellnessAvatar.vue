@@ -81,6 +81,11 @@ let visorBaseEmissiveIntensity = 1.0
 let eyeL: THREE.Object3D | null = null
 let eyeR: THREE.Object3D | null = null
 const eyeBaseScale = { L: new THREE.Vector3(1,1,1), R: new THREE.Vector3(1,1,1) }
+// Photoreceptor material — captured during VRM load. The cyan emission
+// strength is driven by the audio amplitude each frame so the eyes light
+// up while talking and go dark while silent (R2-D2 vibe).
+let photoMat: (THREE.Material & { emissiveIntensity?: number; emissive?: THREE.Color }) | null = null
+let photoBaseEmissiveIntensity = 0
 
 // Blink schedule — closes the eyes briefly every few seconds. Stored as a
 // running cycle so animate() can interpolate without allocating per frame.
@@ -172,7 +177,7 @@ onMounted(async () => {
   // Cache-bust query string forces SW + CF + browser to fetch the latest VRM
   // whenever its bytes change (avatar revisions). The version tag bumps with
   // each material/geometry edit on the asset.
-  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=841-unified-coral'
+  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=842-black-glow-eyes'
   try {
     const gltf = await loader.loadAsync(url)
     vrm = gltf.userData.vrm as VRM
@@ -212,10 +217,31 @@ onMounted(async () => {
     }
 
     // Capture eye meshes by name for the independent droid-zoom animation.
-    eyeL = vrm.scene.getObjectByName('mesh_eye_big_l') ?? null
-    eyeR = vrm.scene.getObjectByName('mesh_eye_big_r') ?? null
+    // The new logo build uses bezel meshes; fall back to the older names.
+    eyeL = vrm.scene.getObjectByName('mesh_eye_bezel_l')
+        ?? vrm.scene.getObjectByName('mesh_eye_big_l') ?? null
+    eyeR = vrm.scene.getObjectByName('mesh_eye_bezel_r')
+        ?? vrm.scene.getObjectByName('mesh_eye_big_r') ?? null
     if (eyeL) eyeBaseScale.L.copy(eyeL.scale)
     if (eyeR) eyeBaseScale.R.copy(eyeR.scale)
+
+    // Capture the photoreceptor material once. JS will drive emissiveIntensity
+    // off the same RMS signal that drives mouth-open, so the eyes glow cyan
+    // while talking and go dark while silent.
+    vrm.scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh
+      if (!mesh.isMesh || photoMat) return
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+      for (const mat of mats) {
+        if (mat && mat.name === 'mat_eye_photoreceptor') {
+          photoMat = mat as typeof photoMat
+          if (photoMat && 'emissiveIntensity' in photoMat) {
+            photoBaseEmissiveIntensity = photoMat.emissiveIntensity ?? 0
+          }
+          return
+        }
+      }
+    })
 
     // Capture the visor material so mood can drive its emissive color.
     // MToon materials (VRMC_materials_mtoon) get re-keyed by three-vrm; we
@@ -384,6 +410,15 @@ onMounted(async () => {
         rHand.rotation.z = Math.sin(t * 0.6 + 1.0) * 0.05
       }
 
+      // Eye glow — drive photoreceptor emission strength from the audio
+      // amplitude (mouthOpenSmoothed). Idle = dark, talking = bright cyan.
+      // Curve: x^0.6 lifts low signals so a soft voice still lights the eyes.
+      if (photoMat && 'emissiveIntensity' in photoMat) {
+        const amp = isFinite(mouthOpenSmoothed) ? mouthOpenSmoothed : 0
+        const lit = Math.pow(Math.min(1, Math.max(0, amp)), 0.6)
+        photoMat.emissiveIntensity = 0.1 + lit * 9.0  // 0.1 idle dim, up to ~9 bright
+      }
+
       // Droid eye-zoom — each eye scales independently on a slow sine. Left
       // and right use different frequencies + phase offsets so they look
       // like a Star Wars astromech recalibrating its lens (one widens
@@ -459,6 +494,7 @@ onBeforeUnmount(() => {
   visorMaterial = null
   eyeL = null
   eyeR = null
+  photoMat = null
 })
 </script>
 
