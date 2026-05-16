@@ -436,7 +436,10 @@ async def record_consent(
     )
 
 
-router.include_router(_consent_router)
+# NOTE: _consent_router has its own absolute prefix /api/life/consent —
+# mounting it under `router` (prefix=/api/life/data) would double-prefix
+# the path. Plugin loader picks it up via module attribute.
+# router.include_router(_consent_router)  # see plugin.py
 
 
 # ---------------------------------------------------------------------------
@@ -554,4 +557,6 @@ async def delete_me(user: CurrentUser = Depends(get_current_user)) -> DeleteResp
     )
 
 
-router.include_router(_user_router)
+# Same as _consent_router — absolute prefix /api/life/users, must be
+# mounted at root by plugin.py to avoid double-prefix.
+# router.include_router(_user_router)  # see plugin.py

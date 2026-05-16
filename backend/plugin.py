@@ -173,6 +173,11 @@ _combined_router.include_router(_f_routes.router)
 _combined_router.include_router(_gam_routes.router, dependencies=_health_dep)
 _combined_router.include_router(_gam_notif_routes.router)
 _combined_router.include_router(_data_mgmt.router)
+# Consent + user-deletion routers have absolute prefixes (/api/life/consent,
+# /api/life/users) and are NOT mounted under data_management.router. Mount
+# them here at combined-router root so the public paths stay clean.
+_combined_router.include_router(_data_mgmt._consent_router)
+_combined_router.include_router(_data_mgmt._user_router)
 _combined_router.include_router(_dashboard.router)
 _combined_router.include_router(_commands.router)
 
