@@ -812,8 +812,15 @@ defineExpose({ therapistSessionActive, therapistMessages })
           <User :size="14" />
           Show avatar
         </button>
-        <!-- Messages -->
-        <div class="flex-1 overflow-y-auto space-y-4 mb-4 pr-1" ref="chatContainer">
+        <!-- Messages — aria-live=polite so SR auto-announces new replies. -->
+        <div
+          class="flex-1 overflow-y-auto space-y-4 mb-4 pr-1"
+          ref="chatContainer"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-label="Wellness companion conversation"
+        >
           <div
             v-for="(msg, i) in therapistMessages"
             :key="i"
