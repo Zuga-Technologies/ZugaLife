@@ -112,15 +112,23 @@ onMounted(async () => {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setSize(canvasEl.value.clientWidth || 320, height, false)
 
-  // Soft three-point lighting — ambient fill + key from camera-right + rim
-  // from behind/above on the opposite side. Gives the model gentle depth
-  // without making it look like a video game.
-  const ambient = new THREE.AmbientLight(0xfff5e8, 0.55)
-  const key = new THREE.DirectionalLight(0xfff1da, 0.85)
-  key.position.set(2, 2.5, 2)
-  const rim = new THREE.DirectionalLight(0xc9d4ff, 0.45)
-  rim.position.set(-2, 3, -1.5)
-  scene.add(ambient, key, rim)
+  // AAA stylized lighting — low ambient + warm key + strong cool rim from
+  // behind. The hard rim highlight is what reads as "video-game render" on a
+  // cel-shaded MToon model. Bounce light from below picks up the floor and
+  // softens the underside without flattening contrast.
+  const ambient = new THREE.AmbientLight(0xdce6ff, 0.32)
+  const key = new THREE.DirectionalLight(0xfff1da, 1.15)
+  key.position.set(2.4, 2.8, 2.2)
+  // Rim placed BEHIND the avatar (-Z) and high (+Y) so it carves a bright
+  // outline on shoulders/head from the camera's POV. Cyan-tinted for cool
+  // contrast against the warm key.
+  const rim = new THREE.DirectionalLight(0x88c8ff, 2.6)
+  rim.position.set(-1.5, 3.0, -2.5)
+  // Soft bounce light from below — picks up coral chest + brand color, lifts
+  // shadows on the underside of the chassis. Subtle: 0.35 intensity.
+  const bounce = new THREE.DirectionalLight(0xff9aa6, 0.35)
+  bounce.position.set(0, -1.5, 1.5)
+  scene.add(ambient, key, rim, bounce)
 
   // Floor disc — soft round shadow catcher so the robot doesn't appear to
   // float. Removed below if the garage GLB loads successfully (the garage
@@ -155,7 +163,7 @@ onMounted(async () => {
   // Cache-bust query string forces SW + CF + browser to fetch the latest VRM
   // whenever its bytes change (avatar revisions). The version tag bumps with
   // each material/geometry edit on the asset.
-  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=820-bevel-panels-details'
+  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=830-aaa-stylized'
   try {
     const gltf = await loader.loadAsync(url)
     vrm = gltf.userData.vrm as VRM
@@ -213,6 +221,39 @@ onMounted(async () => {
         }
       }
     })
+    // AAA cel-shading pass — walk every material the VRM ships with and
+    // crank MToon's shading parameters. shadingToonyFactor at 1.0 produces
+    // hard cel bands (no gradient between lit/shadow). shadingShiftFactor
+    // lifts the shadow line up the model so the lit area dominates.
+    // matcapFactor and rimColor pump in the cyan rim highlight even when
+    // the scene's rim light is occluded by geometry. Non-MToon materials
+    // are skipped silently.
+    vrm.scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh
+      if (!mesh.isMesh) return
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+      for (const mat of mats) {
+        if (!mat) continue
+        const m = mat as THREE.Material & {
+          shadingToonyFactor?: number
+          shadingShiftFactor?: number
+          rimColorFactor?: THREE.Color
+          rimLightingMixFactor?: number
+          parametricRimColorFactor?: THREE.Color
+          parametricRimFresnelPowerFactor?: number
+          parametricRimLiftFactor?: number
+        }
+        if ('shadingToonyFactor' in m) m.shadingToonyFactor = 0.95
+        if ('shadingShiftFactor' in m) m.shadingShiftFactor = -0.15
+        if ('parametricRimColorFactor' in m) {
+          m.parametricRimColorFactor = new THREE.Color(0x88c8ff)
+        }
+        if ('parametricRimFresnelPowerFactor' in m) m.parametricRimFresnelPowerFactor = 3.0
+        if ('parametricRimLiftFactor' in m) m.parametricRimLiftFactor = 0.0
+        if ('rimLightingMixFactor' in m) m.rimLightingMixFactor = 0.6
+      }
+    })
+
     scene.add(vrm.scene)
     status.value = 'ready'
   } catch (e) {
