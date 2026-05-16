@@ -582,9 +582,9 @@ onMounted(async () => {
             class="flex flex-col items-center gap-2 py-4 rounded-xl bg-surface-2/50 border border-accent/10 transition-all active:scale-95 hover:bg-accent/10 hover:border-accent/50 hover:-translate-y-0.5"
             :aria-label="m.label"
           >
-            <component :is="moodIcons[m.emoji]" :size="26" class="text-accent" v-if="moodIcons[m.emoji]" />
-            <Meh v-else :size="26" class="text-accent" />
-            <span class="text-[11px] font-medium text-txt-secondary">{{ m.label }}</span>
+            <component :is="moodIcons[m.emoji]" :size="26" class="text-accent" aria-hidden="true" v-if="moodIcons[m.emoji]" />
+            <Meh v-else :size="26" class="text-accent" aria-hidden="true" />
+            <span class="text-[11px] font-medium text-txt-secondary" aria-hidden="true">{{ m.label }}</span>
           </button>
         </div>
 
