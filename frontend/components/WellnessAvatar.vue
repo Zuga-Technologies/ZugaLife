@@ -130,19 +130,15 @@ onMounted(async () => {
   // behind. The hard rim highlight is what reads as "video-game render" on a
   // cel-shaded MToon model. Bounce light from below picks up the floor and
   // softens the underside without flattening contrast.
-  const ambient = new THREE.AmbientLight(0xdce6ff, 0.32)
-  const key = new THREE.DirectionalLight(0xfff1da, 1.15)
+  // Neutral white lighting — cyan rim was tinting acid-lime body to lavender.
+  // Now: neutral warm-ish ambient + warm key + neutral white rim (still
+  // bright for the AAA cel feel, just doesn't color-shift the body).
+  const ambient = new THREE.AmbientLight(0xffffff, 0.55)
+  const key = new THREE.DirectionalLight(0xfff1da, 1.1)
   key.position.set(2.4, 2.8, 2.2)
-  // Rim placed BEHIND the avatar (-Z) and high (+Y) so it carves a bright
-  // outline on shoulders/head from the camera's POV. Cyan-tinted for cool
-  // contrast against the warm key.
-  const rim = new THREE.DirectionalLight(0x88c8ff, 2.6)
+  const rim = new THREE.DirectionalLight(0xffffff, 1.4)
   rim.position.set(-1.5, 3.0, -2.5)
-  // Soft bounce light from below — picks up coral chest + brand color, lifts
-  // shadows on the underside of the chassis. Subtle: 0.35 intensity.
-  const bounce = new THREE.DirectionalLight(0xff9aa6, 0.35)
-  bounce.position.set(0, -1.5, 1.5)
-  scene.add(ambient, key, rim, bounce)
+  scene.add(ambient, key, rim)
 
   // Floor disc — soft round shadow catcher so the robot doesn't appear to
   // float. Removed below if the garage GLB loads successfully (the garage
@@ -177,7 +173,7 @@ onMounted(async () => {
   // Cache-bust query string forces SW + CF + browser to fetch the latest VRM
   // whenever its bytes change (avatar revisions). The version tag bumps with
   // each material/geometry edit on the asset.
-  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=844-acid-lime'
+  const url = props.vrmUrl ?? '/avatars/wellness-robot.vrm?v=845-neutral-lights'
   try {
     const gltf = await loader.loadAsync(url)
     vrm = gltf.userData.vrm as VRM
