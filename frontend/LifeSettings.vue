@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { api, getToken } from '@core/api/client'
 import {
   Smile, Target, Trophy, BookOpen, Headphones,
@@ -186,12 +186,21 @@ const modalResetInput = ref('')
 const modalLoading = ref(false)
 const modalSuccess = ref(false)
 
+const modalDialogRef = ref<HTMLElement | null>(null)
+const modalInputRef = ref<HTMLInputElement | null>(null)
+
 function openModal(item: ResetItem) {
   modalItem.value = item
   modalResetInput.value = ''
   modalLoading.value = false
   modalSuccess.value = false
   modalVisible.value = true
+  // Focus the type-to-confirm input if present, else the dialog itself so
+  // NVDA announces the dialog title + description.
+  nextTick(() => {
+    if (modalInputRef.value) modalInputRef.value.focus()
+    else if (modalDialogRef.value) modalDialogRef.value.focus()
+  })
 }
 
 function closeModal() {
@@ -199,6 +208,18 @@ function closeModal() {
   modalVisible.value = false
   modalItem.value = null
 }
+
+function onModalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && modalVisible.value && !modalLoading.value) {
+    e.preventDefault()
+    closeModal()
+  }
+}
+
+watch(modalVisible, (open) => {
+  if (open) window.addEventListener('keydown', onModalKeydown)
+  else window.removeEventListener('keydown', onModalKeydown)
+})
 
 const confirmEnabled = computed(() => {
   if (!modalItem.value) return false
@@ -534,7 +555,13 @@ function exportJournal() {
         >
           <div
             v-if="modalVisible"
-            class="bg-surface-1 rounded-xl border border-bdr p-6 w-full max-w-md shadow-2xl"
+            ref="modalDialogRef"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lifeModalTitle"
+            aria-describedby="lifeModalDesc"
+            tabindex="-1"
+            class="bg-surface-1 rounded-xl border border-bdr p-6 w-full max-w-md shadow-2xl focus:outline-none"
             @click.stop
           >
             <!-- Success state -->
@@ -558,7 +585,7 @@ function exportJournal() {
                   <AlertTriangle :size="18" class="text-red-400" />
                 </div>
                 <div>
-                  <h3 class="text-base font-semibold text-txt-primary">
+                  <h3 id="lifeModalTitle" class="text-base font-semibold text-txt-primary">
                     <template v-if="modalItem.isDeleteAccount">
                       Delete your ZugaLife account?
                     </template>
@@ -566,7 +593,7 @@ function exportJournal() {
                       Reset {{ modalItem.label }}?
                     </template>
                   </h3>
-                  <p class="text-sm text-txt-muted mt-1">
+                  <p id="lifeModalDesc" class="text-sm text-txt-muted mt-1">
                     <template v-if="modalItem.isDeleteAccount">
                       This revokes all consents and purges every ZugaLife record
                       tied to your account. We then have 30 days to scrub backups,
@@ -581,7 +608,7 @@ function exportJournal() {
 
               <!-- Type-to-confirm gate (RESET or DELETE) -->
               <div v-if="modalItem.isAll || modalItem.isDeleteAccount" class="mb-5">
-                <label class="block text-sm font-medium text-txt-secondary mb-1.5">
+                <label for="lifeModalConfirmInput" class="block text-sm font-medium text-txt-secondary mb-1.5">
                   Type
                   <span class="font-mono text-red-400">
                     {{ modalItem.isDeleteAccount ? 'DELETE' : 'RESET' }}
@@ -589,9 +616,12 @@ function exportJournal() {
                   to confirm
                 </label>
                 <input
+                  id="lifeModalConfirmInput"
+                  ref="modalInputRef"
                   v-model="modalResetInput"
                   type="text"
                   :placeholder="modalItem.isDeleteAccount ? 'DELETE' : 'RESET'"
+                  :aria-label="modalItem.isDeleteAccount ? 'Type DELETE to confirm account deletion' : 'Type RESET to confirm'"
                   autocomplete="off"
                   class="w-full bg-surface-2 border border-bdr rounded-lg px-3 py-2 text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-1 focus:ring-red-500/50 focus:border-red-500/50 transition-colors font-mono"
                 />
