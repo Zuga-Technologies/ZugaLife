@@ -15,6 +15,18 @@ logger = logging.getLogger(__name__)
 _plugin_dir = Path(__file__).parent
 
 
+# Register a synthetic 'zugalife' package so relative imports
+# (e.g. `from .consent_constants` inside data_management.py) resolve.
+# Without this, importlib.spec_from_file_location loads modules with
+# no parent package, and any `from .X import Y` raises
+# ModuleNotFoundError: No module named 'zugalife'.
+import types as _types
+if "zugalife" not in sys.modules:
+    _pkg = _types.ModuleType("zugalife")
+    _pkg.__path__ = [str(_plugin_dir)]
+    sys.modules["zugalife"] = _pkg
+
+
 def _load_sibling(name: str):
     """Load a sibling module from this plugin's directory.
 
