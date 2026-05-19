@@ -1,0 +1,863 @@
+{
+  "tabs": [
+    {
+      "label": "tab-dashboard",
+      "focused": [
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "brand",
+          "label": "Zugabot",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "nav-btn",
+          "label": "Studios",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "token-pill",
+          "label": "149",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "user-btn",
+          "label": "User menu — Antonio",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "lg:col-span-5 dash-card glass-card p-6 md:p-8 text",
+          "label": "Habits · this week0%0/56 done  Sleep 0/7",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex flex-col items-center gap-2 py-4 rounded-xl b",
+          "label": "Happy",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex flex-col items-center gap-2 py-4 rounded-xl b",
+          "label": "Sad",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex flex-col items-center gap-2 py-4 rounded-xl b",
+          "label": "Angry",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex flex-col items-center gap-2 py-4 rounded-xl b",
+          "label": "Anxious",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex flex-col items-center gap-2 py-4 rounded-xl b",
+          "label": "Tired",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex flex-col items-center gap-2 py-4 rounded-xl b",
+          "label": "Excited",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex flex-col items-center gap-2 py-4 rounded-xl b",
+          "label": "Neutral",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex flex-col items-center gap-2 py-4 rounded-xl b",
+          "label": "Loved",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex flex-col items-center gap-2 py-4 rounded-xl b",
+          "label": "Frustrated",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex flex-col items-center gap-2 py-4 rounded-xl b",
+          "label": "Thoughtful",
+          "visible": true,
+          "ringVisible": true
+        }
+      ]
+    },
+    {
+      "label": "tab-journal",
+      "focused": [
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "brand",
+          "label": "Zugabot",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "nav-btn",
+          "label": "Studios",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "token-pill",
+          "label": "149",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "user-btn",
+          "label": "User menu — Antonio",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "text-xs text-txt-muted hover:text-accent transitio",
+          "label": "Export All",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "btn-primary px-5 py-2 text-sm",
+          "label": "New Entry",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex-1 flex flex-col items-center justify-center g",
+          "label": "Home",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex-1 flex flex-col items-center justify-center g",
+          "label": "Journal",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex-1 flex flex-col items-center justify-center g",
+          "label": "Habits",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex-1 flex flex-col items-center justify-center g",
+          "label": "Meditate",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex-1 flex flex-col items-center justify-center g",
+          "label": "Companion",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "chat-fab",
+          "label": "Open Zugabot chat",
+          "visible": true,
+          "ringVisible": true
+        },
+        null,
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "skip-to-content",
+          "label": "Skip to content",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "brand",
+          "label": "Zugabot",
+          "visible": true,
+          "ringVisible": true
+        }
+      ]
+    },
+    {
+      "label": "tab-habits",
+      "focused": [
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "brand",
+          "label": "Zugabot",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "nav-btn",
+          "label": "Studios",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "token-pill",
+          "label": "149",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "user-btn",
+          "label": "User menu — Antonio",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "tab-btn-active",
+          "label": "Check-in",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "tab-btn",
+          "label": "History",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "tab-btn",
+          "label": "Manage",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "w-6 h-6 rounded-md border-2 flex items-center just",
+          "label": "Mark Sleep done",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "cls": "w-14 px-1.5 py-1 text-sm text-right rounded-md bg-",
+          "label": "",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "w-6 h-6 rounded-md border-2 flex items-center just",
+          "label": "Mark Exercise done",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "cls": "w-14 px-1.5 py-1 text-sm text-right rounded-md bg-",
+          "label": "",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "w-6 h-6 rounded-md border-2 flex items-center just",
+          "label": "Mark Water done",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "cls": "w-14 px-1.5 py-1 text-sm text-right rounded-md bg-",
+          "label": "",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "w-6 h-6 rounded-md border-2 flex items-center just",
+          "label": "Mark Meditation done",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "input",
+          "type": "text",
+          "cls": "w-14 px-1.5 py-1 text-sm text-right rounded-md bg-",
+          "label": "",
+          "visible": true,
+          "ringVisible": true
+        }
+      ]
+    },
+    {
+      "label": "tab-meditate",
+      "focused": [
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "brand",
+          "label": "Zugabot",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "nav-btn",
+          "label": "Studios",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "token-pill",
+          "label": "149",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "user-btn",
+          "label": "User menu — Antonio",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "tab-btn-active",
+          "label": "New Session",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "tab-btn",
+          "label": "History",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "glass-card px-4 py-3 text-left transition-all dura",
+          "label": "BreathingFocus on your breath",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "glass-card px-4 py-3 text-left transition-all dura",
+          "label": "Body ScanProgressive body awareness",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "glass-card px-4 py-3 text-left transition-all dura",
+          "label": "Loving KindnessCompassion for self & oth",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "glass-card px-4 py-3 text-left transition-all dura",
+          "label": "VisualizationGuided mental imagery",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "glass-card px-4 py-3 text-left transition-all dura",
+          "label": "GratitudeAppreciate what matters",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "glass-card px-4 py-3 text-left transition-all dura",
+          "label": "Stress ReliefRelease tension mindfully",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex-1 py-2 rounded-lg font-medium transition-all ",
+          "label": "Quick~2 min",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex-1 py-2 rounded-lg font-medium transition-all ",
+          "label": "Short~5 min",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex-1 py-2 rounded-lg font-medium transition-all ",
+          "label": "Medium~10 min",
+          "visible": true,
+          "ringVisible": true
+        }
+      ]
+    },
+    {
+      "label": "tab-therapist",
+      "focused": [
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "chat-clear",
+          "label": "New chat",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "chat-clear",
+          "label": "",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "chat-close",
+          "label": "×",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "cls": "tagline-react-btn",
+          "label": "funny",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "cls": "tagline-react-btn",
+          "label": "not me",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "cls": "tagline-react-btn",
+          "label": "save",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "input",
+          "type": "file",
+          "cls": "file-input-hidden",
+          "label": "Attach image files",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "cls": "btn-attach",
+          "label": "+",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "textarea",
+          "type": "",
+          "cls": "",
+          "label": "",
+          "visible": true,
+          "ringVisible": false
+        },
+        null,
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "skip-to-content",
+          "label": "Skip to content",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "brand",
+          "label": "Zugabot",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "nav-btn",
+          "label": "Studios",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "token-pill",
+          "label": "149",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "user-btn",
+          "label": "User menu — Antonio",
+          "visible": true,
+          "ringVisible": true
+        }
+      ]
+    },
+    {
+      "label": "tab-goals",
+      "focused": [
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "brand",
+          "label": "Zugabot",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "nav-btn",
+          "label": "Studios",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "token-pill",
+          "label": "149",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "user-btn",
+          "label": "User menu — Antonio",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex items-center gap-1.5 px-3 py-1.5 rounded-lg t",
+          "label": "Back",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "inline-flex items-center gap-1 text-sm text-accent",
+          "label": "New Goal",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "chat-fab",
+          "label": "Open Zugabot chat",
+          "visible": true,
+          "ringVisible": true
+        },
+        null,
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "skip-to-content",
+          "label": "Skip to content",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "brand",
+          "label": "Zugabot",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "nav-btn",
+          "label": "Studios",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "token-pill",
+          "label": "149",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "user-btn",
+          "label": "User menu — Antonio",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex items-center gap-1.5 px-3 py-1.5 rounded-lg t",
+          "label": "Back",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "inline-flex items-center gap-1 text-sm text-accent",
+          "label": "New Goal",
+          "visible": true,
+          "ringVisible": true
+        }
+      ]
+    },
+    {
+      "label": "tab-settings",
+      "focused": [
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "brand",
+          "label": "Zugabot",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "nav-btn",
+          "label": "Studios",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "token-pill",
+          "label": "149",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "user-btn",
+          "label": "User menu — Antonio",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex items-center gap-1.5 px-3 py-1.5 rounded-lg t",
+          "label": "Back",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "inline-flex items-center gap-1 text-sm text-accent",
+          "label": "New Goal",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "chat-fab",
+          "label": "Open Zugabot chat",
+          "visible": true,
+          "ringVisible": true
+        },
+        null,
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "skip-to-content",
+          "label": "Skip to content",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "brand",
+          "label": "Zugabot",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "nav-btn",
+          "label": "Studios",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "a",
+          "type": "",
+          "cls": "token-pill",
+          "label": "149",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "user-btn",
+          "label": "User menu — Antonio",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "flex items-center gap-1.5 px-3 py-1.5 rounded-lg t",
+          "label": "Back",
+          "visible": true,
+          "ringVisible": true
+        },
+        {
+          "tag": "button",
+          "type": "",
+          "cls": "inline-flex items-center gap-1 text-sm text-accent",
+          "label": "New Goal",
+          "visible": true,
+          "ringVisible": true
+        }
+      ]
+    }
+  ],
+  "modals": [
+    {
+      "name": "SettingsPanel",
+      "escCloses": true,
+      "stillOpenCount": 0
+    },
+    {
+      "name": "ChatWindow",
+      "opensViaKeyboard": false,
+      "escCloses": false
+    }
+  ]
+}
